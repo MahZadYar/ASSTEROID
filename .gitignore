@@ -1,0 +1,43 @@
+# ==============================================================================
+# ASSTEROID - .gitignore
+# ==============================================================================
+
+# MATLAB Autosave & Crash Dumps
+*.asv
+*.m~
+*.slxc
+*.mat.bak
+*.mex*
+*.log
+mangled/
+
+# Operating System & MATLAB Drive Sync Artifacts
+.MATLABDriveTag
+desktop.ini
+Thumbs.db
+ehthumbs.db
+.DS_Store
+.Spotlight-V100
+.Trashes
+
+# Runtime Databases & Local Data Exports
+database.mat
+*.mat.tmp
+test_output.mat
+*_checkpoint_*.mat
+net_checkpoint_*
+
+# Local Cache & Analysis Folders
+scratch/
+graphify-out/
+tmp/
+temp/
+_backup_*
+*.bak
+*.tmp
+
+# IDE & Editor Specific Files
+.vscode/
+.idea/
+*.swp
+*~

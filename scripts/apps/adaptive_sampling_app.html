@@ -1,0 +1,1770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adaptive Parameter Sampling</title>
+    <style>
+        :root {
+            --bg-primary: #0d1419;
+            --bg-secondary: #0f1b2e;
+            --bg-tertiary: #132b42;
+            --text-primary: #f0f8fa;
+            --text-secondary: #7fa8b0;
+            --accent: #00e8ff;
+            --accent-hover: #33f5ff;
+            --success: #1fb8a8;
+            --warning: #ffb74d;
+            --error: #ff6b6b;
+            --border: #1b5055;
+            --input-bg: #0f1f2a;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Left Panel - Controls */
+        .control-panel {
+            width: 420px;
+            min-width: 420px;
+            background: var(--bg-primary);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .panel-header h1 {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 4px;
+        }
+
+        .panel-header p {
+            font-size: 12px;
+            color: var(--text-secondary);
+            opacity: 1;
+        }
+
+        .controls-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+        }
+
+        .controls-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .controls-scroll::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        .controls-scroll::-webkit-scrollbar-thumb {
+            background: var(--text-secondary);
+            border-radius: 3px;
+        }
+
+        /* Category Sections */
+        .category {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        .category-header {
+            padding: 12px 16px;
+            background: rgba(255,255,255,0.05);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+            transition: background 0.2s;
+        }
+
+        .category-header:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .category-header h2 {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .category-icon {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--accent);
+            border-radius: 4px;
+            font-size: 11px;
+        }
+
+        .category-toggle {
+            font-size: 12px;
+            color: var(--text-secondary);
+            transition: transform 0.3s;
+        }
+
+        .category.collapsed .category-toggle {
+            transform: rotate(-90deg);
+        }
+
+        .category.collapsed .category-content {
+            display: none;
+        }
+
+        .category-content {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border);
+        }
+
+        /* Form Controls */
+        .form-group {
+            margin-bottom: 14px;
+        }
+
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 3px;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .form-row .form-group {
+            flex: 1;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 6px 8px;
+            background: var(--input-bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-primary);
+            font-size: 12px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(0, 232, 255, 0.2);
+        }
+
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+
+        input[type="number"]::-webkit-inner-spin-button {
+            opacity: 1;
+        }
+
+        /* File Input Group */
+        .file-input-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .file-input-group input {
+            flex: 1;
+        }
+
+        .file-input-group button {
+            padding: 6px 10px;
+            white-space: nowrap;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        .file-input-group button:hover {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        /* Toggle Switch */
+        .toggle-group {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 0;
+        }
+
+        .toggle-label {
+            font-size: 13px;
+            color: var(--text-primary);
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--input-bg);
+            border-radius: 24px;
+            transition: 0.3s;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background: white;
+            border-radius: 50%;
+            transition: 0.3s;
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background: var(--accent);
+        }
+
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+
+        /* Range Slider */
+        .range-group {
+            margin-bottom: 14px;
+        }
+
+        .range-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .range-header label {
+            margin-bottom: 0;
+        }
+
+        .range-value {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent);
+            background: rgba(0, 232, 255, 0.2);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            background: var(--input-bg);
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        /* Metric Table */
+        .metric-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        .metric-table th {
+            text-align: left;
+            padding: 8px 6px;
+            background: rgba(255,255,255,0.05);
+            font-weight: 500;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            font-size: 10px;
+        }
+
+        .metric-table td {
+            padding: 6px;
+            border-top: 1px solid var(--border);
+        }
+
+        .metric-table input,
+        .metric-table select {
+            padding: 6px 8px;
+            font-size: 12px;
+        }
+
+        .metric-row-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .btn-icon {
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .btn-add-metric {
+            width: 100%;
+            margin-top: 8px;
+            padding: 8px;
+            font-size: 12px;
+        }
+
+        /* Buttons */
+        button {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #000 !important;
+            font-weight: 700;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        input[type="number"], .stat-value, .status-badge {
+            font-variant-numeric: tabular-nums;
+        }
+        button:focus-visible, input:focus-visible, select:focus-visible {
+            outline: 2px solid var(--accent) !important;
+            outline-offset: 2px !important;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+        }
+
+        .btn-danger {
+            background: var(--error);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-stop {
+            background: #c62828 !important;
+            color: #ffffff !important;
+            border: 1px solid #e53935 !important;
+            box-shadow: 0 2px 5px rgba(198, 40, 40, 0.4);
+        }
+
+        .btn-stop:hover {
+            background: #e53935 !important;
+            box-shadow: 0 3px 8px rgba(229, 57, 53, 0.6);
+        }
+
+        .btn-stop:active {
+            background: #b71c1c !important;
+        }
+
+        .btn-stop:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Action Buttons */
+        .action-buttons {
+            padding: 16px 12px;
+            background: rgba(0,0,0,0.2);
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .action-buttons .btn-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .action-buttons button {
+            flex: 1;
+        }
+
+        /* Status Bar */
+        .status-bar {
+            padding: 10px 16px;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border);
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+        }
+
+        .status-indicator.warning {
+            background: var(--warning);
+        }
+
+        .status-indicator.error {
+            background: var(--danger);
+        }
+
+        .status-indicator.loading {
+            background: var(--accent);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            display: none;
+            padding: 12px 16px;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border);
+        }
+
+        .progress-container.active {
+            display: block;
+        }
+
+        .progress-label {
+            font-size: 12px;
+            margin-bottom: 6px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .progress-bar {
+            height: 6px;
+            background: var(--input-bg);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 3px;
+            transition: width 0.3s;
+        }
+
+        /* Right Panel - Visualization */
+        .viz-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-primary);
+            overflow: hidden;
+        }
+
+        .viz-header {
+            padding: 12px 20px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .viz-header h2 {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .viz-stats {
+            display: flex;
+            gap: 20px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .stat-label {
+            font-size: 10px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        .viz-content {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            position: relative;
+        }
+
+        .viz-placeholder {
+            text-align: center;
+            color: var(--text-secondary);
+        }
+
+        .viz-placeholder-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .viz-placeholder h3 {
+            font-size: 16px;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .viz-placeholder p {
+            font-size: 13px;
+        }
+
+        /* Color Picker */
+        .color-picker-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .color-picker-group input[type="color"] {
+            width: 40px;
+            height: 32px;
+            padding: 2px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--input-bg);
+            cursor: pointer;
+        }
+
+        .color-picker-group span {
+            font-size: 13px;
+        }
+
+        /* Disabled state */
+        .disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        /* Tooltip */
+        [data-tooltip] {
+            position: relative;
+        }
+
+        [data-tooltip]:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 6px 10px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 11px;
+            white-space: nowrap;
+            z-index: 100;
+            margin-bottom: 4px;
+        }
+
+        /* Alert Banner */
+        .alert-banner {
+            display: none;
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-size: 13px;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .alert-banner.active {
+            display: flex;
+        }
+
+        .alert-banner.error {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid var(--error);
+            color: #fca5a5;
+        }
+
+        .alert-banner.success {
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid var(--success);
+            color: #6ee7b7;
+        }
+
+        .alert-banner.warning {
+            background: rgba(245, 158, 11, 0.2);
+            border: 1px solid var(--warning);
+            color: #fcd34d;
+        }
+
+        .alert-close {
+            margin-left: auto;
+            cursor: pointer;
+            opacity: 0.7;
+        }
+
+        .alert-close:hover {
+            opacity: 1;
+        }
+        .req-badge { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 8px; }
+        .req-ok { color: #66bb6a; }
+        .req-missing { color: #ef5350; }
+        .req-optional { color: var(--text-muted, #888); }
+    </style>
+</head>
+<body>
+    <div id="dbStatusBanner" style="display:none;background:#132b42;border:1px solid #1b5055;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:11px;color:#7fa8b0;"></div>
+    <div class="app-container">
+        <!-- Left Panel: Controls -->
+        <div class="control-panel">
+            <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between;">
+                <div>
+                    <h1>Adaptive Parameter Sampling</h1>
+                    <p>Generate optimized COMSOL sweep points</p>
+                </div>
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <button style="padding:4px 10px;font-size:11px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer;" onclick="htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
+                    <button style="padding:4px 10px;font-size:11px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer;" onclick="htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
+                    <button class="btn-stop" style="padding:4px 10px;font-size:11px;" id="btnStopHeader" onclick="stopProcess()">&#9632; Stop</button>
+                </div>
+            </div>
+
+            <div class="controls-scroll">
+                <!-- Alert Banner -->
+                <div id="alertBanner" class="alert-banner">
+                    <span id="alertIcon">⚠</span>
+                    <span id="alertMessage"></span>
+                    <span class="alert-close" onclick="hideAlert()">✕</span>
+                </div>
+
+                <!-- 1. Data Requirements -->
+                <div class="category" id="catDataSource">
+                    <div class="category-header" onclick="toggleCategory('catDataSource')">
+                        <h2><span class="category-icon">📁</span> Data Requirements</h2>
+                        <span class="category-toggle">▼</span>
+                    </div>
+                    <div class="category-content">
+                        <div class="toggle-group">
+                            <span class="toggle-label">Inference Mode</span>
+                            <div style="display:flex; gap:12px; padding:4px 0;">
+                                <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+                                    <input type="radio" name="dataSourceGroup" value="interpolation" checked onchange="toggleDataSourceMode()">
+                                    Raw Data (Makima)
+                                </label>
+                                <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+                                    <input type="radio" name="dataSourceGroup" value="model" onchange="toggleDataSourceMode()">
+                                    DNN Model
+                                </label>
+                            </div>
+                        </div>
+                        <table style="width:100%;font-size:11px;border-collapse:collapse;margin-top:4px;">
+                            <tr id="reqSampSimRow">
+                                <td style="padding:3px 6px;color:var(--text-muted, #aaa);">Simulation Data (db.Sim)</td>
+                                <td style="padding:3px 6px;text-align:right;"><span id="reqSampSimStatus" class="req-badge req-missing">✗ Not loaded</span></td>
+                            </tr>
+                            <tr id="reqSampModelRow" style="display:none;">
+                                <td style="padding:3px 6px;color:var(--text-muted, #aaa);">Model (db.Model.Net)</td>
+                                <td style="padding:3px 6px;text-align:right;"><span id="reqSampModelStatus" class="req-badge req-missing">✗ Not loaded</span></td>
+                            </tr>
+                            <tr id="reqSampRIRow" style="display:none;">
+                                <td style="padding:3px 6px;color:var(--text-muted, #aaa);">Refractive Index (db.RI)</td>
+                                <td style="padding:3px 6px;text-align:right;"><span id="reqSampRIStatus" class="req-badge req-missing">✗ Not loaded</span></td>
+                            </tr>
+                        </table>
+                        <div style="font-size:10px;color:var(--text-muted, #888);margin-top:4px;padding:0 6px;">Load data in the Database tab.</div>
+                        <button class="btn-primary" style="width:100%; margin-top:8px;" onclick="loadData()">
+                            Load Data from DB
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 2. Sampling Parameters -->
+                <div class="category" id="catSampling">
+                    <div class="category-header" onclick="toggleCategory('catSampling')">
+                        <h2><span class="category-icon">🎯</span> Sampling Parameters</h2>
+                        <span class="category-toggle">▼</span>
+                    </div>
+                    <div class="category-content">
+                        <div class="form-group">
+                            <label>Number of Points</label>
+                            <input type="number" id="numPoints" min="1" max="5000" step="10" value="100">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Max Attempts</label>
+                            <input type="number" id="maxAttempts" min="100" max="10000000" step="1000" value="1000000">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Minimum Separation</label>
+                            <input type="number" id="minSeparation" min="0" max="50" step="0.1" value="5">
+                        </div>
+
+                        <div class="form-group">
+                            <label>R/P Threshold</label>
+                            <input type="number" id="rtpThreshold" min="0" max="1" step="0.01" value="0.49">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Density Threshold</label>
+                            <input type="number" id="densityThreshold" min="0" max="1" step="0.01" value="0">
+                        </div>
+
+                        <div class="toggle-group">
+                            <span class="toggle-label">Uniform Sampling (ignore metrics)</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="uniformSampling" onchange="toggleUniformMode()">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="toggle-group">
+                            <span class="toggle-label">Enforce Original Spacing</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="enforceOriginalSpacing" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Parameter Ranges (Dynamic from Schema) -->
+                <div class="category" id="catRanges">
+                    <div class="category-header" onclick="toggleCategory('catRanges')">
+                        <h2><span class="category-icon">📐</span> Parameter Ranges</h2>
+                        <span class="category-toggle">▼</span>
+                    </div>
+                    <div class="category-content">
+                        <div style="margin-bottom:10px;">
+                            <div class="form-row" style="gap:8px;margin-bottom:8px;">
+                                <div class="form-group" style="flex:1;">
+                                    <label>X Axis</label>
+                                    <select id="xAxisParam" onchange="onAxisChange()">
+                                        <option value="">-- Load data first --</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="flex:1;">
+                                    <label>Y Axis</label>
+                                    <select id="yAxisParam" onchange="onAxisChange()">
+                                        <option value="">-- Load data first --</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="toggle-group">
+                            <span class="toggle-label">Auto-detect from Data</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="autoDetectRanges" checked onchange="toggleAutoRanges()">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+
+                        <div id="manualRangesGroup" class="disabled">
+                            <div id="dynamicParamRanges">
+                                <!-- Will be populated dynamically by handleDataLoaded -->
+                            </div>
+                        </div>
+
+                        <div id="detectedRangesInfo" style="margin-top:10px; font-size:12px; color:var(--text-secondary);">
+                            <div id="detectedRangesContent">
+                                <p>No data loaded yet.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. Metric Configuration -->
+                <div class="category" id="catMetrics">
+                    <div class="category-header" onclick="toggleCategory('catMetrics')">
+                        <h2><span class="category-icon">📊</span> Metric Configuration</h2>
+                        <span class="category-toggle">▼</span>
+                    </div>
+                    <div class="category-content" id="metricContent">
+                        <table class="metric-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:40%">Metric</th>
+                                    <th style="width:22%">Weight</th>
+                                    <th style="width:22%">Alpha</th>
+                                    <th style="width:16%"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="metricTableBody">
+                                <tr data-metric-id="0">
+                                    <td>
+                                        <select class="metric-name">
+                                            <option value="">-- Select metric --</option>
+                                        </select>
+                                    </td>
+                                    <td><input type="number" class="metric-weight" value="1" step="0.1" min="0"></td>
+                                    <td><input type="number" class="metric-alpha" value="1" step="0.1"></td>
+                                    <td class="metric-row-actions">
+                                        <button class="btn-danger btn-icon" onclick="removeMetricRow(this)">✕</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <button class="btn-secondary btn-add-metric" onclick="addMetricRow()">+ Add Metric</button>
+
+                        <div class="form-row" style="margin-top:14px;">
+                            <div class="form-group">
+                                <label>Overall Exponent</label>
+                                <input type="number" id="overallExponent" value="1" step="0.1">
+                            </div>
+                            <div class="form-group">
+                                <label>Blur Sigma</label>
+                                <input type="number" id="blurSigma" value="0" step="0.1" min="0">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5. Output Settings -->
+                <div class="category" id="catOutput">
+                    <div class="category-header" onclick="toggleCategory('catOutput')">
+                        <h2><span class="category-icon">💾</span> Output Settings</h2>
+                        <span class="category-toggle">▼</span>
+                    </div>
+                    <div class="category-content">
+                        <div class="form-group">
+                            <label>Output Filename</label>
+                            <input type="text" id="outputFile" value="adaptive_sweep_points.txt">
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Param 1 Name</label>
+                                <input type="text" id="paramName1" value="period">
+                            </div>
+                            <div class="form-group">
+                                <label>Unit</label>
+                                <input type="text" id="paramUnit1" value="[nm]">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Param 2 Name</label>
+                                <input type="text" id="paramName2" value="particle_r">
+                            </div>
+                            <div class="form-group">
+                                <label>Unit</label>
+                                <input type="text" id="paramUnit2" value="[nm]">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Precision (decimal places)</label>
+                            <input type="number" id="precision" value="6" min="1" max="15" step="1">
+                        </div>
+
+                        <div class="toggle-group">
+                            <span class="toggle-label">Include Original Points</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="includeOriginal">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 6. Visualization Settings -->
+                <div class="category" id="catVisualization">
+                    <div class="category-header" onclick="toggleCategory('catVisualization')">
+                        <h2><span class="category-icon">🎨</span> Visualization</h2>
+                        <span class="category-toggle">▼</span>
+                    </div>
+                    <div class="category-content">
+                        <div class="form-group">
+                            <label>Colormap</label>
+                            <select id="colormap">
+                                <option value="parula">Parula</option>
+                                <option value="jet">Jet</option>
+                                <option value="hot">Hot</option>
+                                <option value="cool">Cool</option>
+                                <option value="turbo">Turbo</option>
+                                <option value="viridis">Viridis</option>
+                                <option value="custom" selected>Aurora Australis (Custom)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Grid Resolution</label>
+                            <input type="number" id="gridResolution" value="500" min="50" max="2000" step="50">
+                        </div>
+
+                        <div class="toggle-group">
+                            <span class="toggle-label">Show Original Points</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="showOriginal" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="toggle-group">
+                            <span class="toggle-label">Show Generated Points</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="showGenerated" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Original Color</label>
+                                <div class="color-picker-group">
+                                    <input type="color" id="originalColor" value="#ef4444">
+                                    <span>Red</span>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Generated Color</label>
+                                <div class="color-picker-group">
+                                    <input type="color" id="generatedColor" value="#10b981">
+                                    <span>Green</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Point Size</label>
+                            <input type="number" id="pointSize" value="10" min="1" max="50" step="1">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-label">
+                    <span id="progressText">Generating samples...</span>
+                    <span id="progressPercent">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="action-buttons">
+                <div class="btn-row">
+                    <button class="btn-primary" onclick="runSampling()" id="btnRun">
+                        ▶ Run Sampling
+                    </button>
+                    <button class="btn-secondary" onclick="previewDensity()" id="btnPreview">
+                        👁 Preview Density
+                    </button>
+                    <button class="btn-stop" onclick="stopProcess()" id="btnStopAction">
+                        &#9632; Stop
+                    </button>
+                </div>
+                <div class="btn-row">
+                    <button class="btn-success" onclick="exportResults()" id="btnExport" disabled>
+                        💾 Export to COMSOL
+                    </button>
+                    <button class="btn-secondary" onclick="resetAll()">
+                        🔄 Reset
+                    </button>
+                </div>
+            </div>
+
+            <!-- Status Bar -->
+            <div class="status-bar">
+                <span class="status-indicator" id="statusIndicator"></span>
+                <span id="statusText">Ready</span>
+            </div>
+        </div>
+
+        <!-- Right Panel: Visualization -->
+        <div class="viz-panel">
+            <div class="viz-header">
+                <h2>Sampling Density & Generated Points</h2>
+                <div class="viz-stats">
+                    <div class="stat-item">
+                        <div class="stat-value" id="statPoints">0</div>
+                        <div class="stat-label">Generated</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="statAcceptance">0%</div>
+                        <div class="stat-label">Acceptance</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="statOriginal">0</div>
+                        <div class="stat-label">Original</div>
+                    </div>
+                </div>
+            </div>
+            <div class="viz-content" id="vizContent">
+                <div class="viz-placeholder">
+                    <div class="viz-placeholder-icon">📊</div>
+                    <h3>No Data Loaded</h3>
+                    <p>Load data and run sampling to visualize results</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        // Global state
+        let metricRowId = 1;
+        let htmlComponent = null;
+
+        function normalizeArray(val) {
+            if (!val) return [];
+            if (Array.isArray(val)) return val;
+            return [val];
+        }
+
+        // Initialize when loaded by MATLAB
+        function setup(component) {
+            htmlComponent = component;
+
+            // Listen for events from MATLAB
+            htmlComponent.addEventListener("DataLoaded", handleDataLoaded);
+            htmlComponent.addEventListener("SamplingProgress", handleProgress);
+            htmlComponent.addEventListener("SamplingComplete", handleSamplingComplete);
+            htmlComponent.addEventListener("DensityPreview", handleDensityPreview);
+            htmlComponent.addEventListener("ExportComplete", handleExportComplete);
+            htmlComponent.addEventListener("Error", handleError);
+            htmlComponent.addEventListener("Warning", handleWarning);
+            htmlComponent.addEventListener("StatusUpdate", handleStatusUpdate);
+            htmlComponent.addEventListener("ConfigLoaded", handleConfigLoaded);
+            htmlComponent.addEventListener("DbStatus", function(event) {
+                dbUpdateBanner(event.Data);
+                updateSamplingRequirements(event.Data);
+                if (event.Data && event.Data.hasSimData) {
+                    const dbId = (event.Data.dbFile || "mem") + "_" + (event.Data.simEntries || 0);
+                    if (window._lastLoadedDbId !== dbId) {
+                        window._lastLoadedDbId = dbId;
+                        loadData();
+                    }
+                }
+            });
+            htmlComponent.addEventListener("SaveComplete", function(event) {
+                showAlert(event.Data || "Database saved.", "success");
+            });
+            htmlComponent.addEventListener("ProcessStopAck", function(event) {
+                const msg = (typeof event.Data === "string") ? event.Data : ((event.Data && event.Data.message) ? event.Data.message : "Stopping process...");
+                showAlert(msg, "warning");
+                updateProgress(null, "Stopping...", null);
+            });
+            htmlComponent.addEventListener("ProcessStopped", function(event) {
+                const msg = (typeof event.Data === "string") ? event.Data : ((event.Data && event.Data.message) ? event.Data.message : "Process terminated by user.");
+                showAlert(msg, "info");
+                resetSamplingUI();
+                resetStopButtons();
+            });
+            htmlComponent.addEventListener("SamplingStopped", function(event) {
+                const msg = (typeof event.Data === "string") ? event.Data : "Sampling process terminated by user.";
+                showAlert(msg, "info");
+                resetSamplingUI();
+                resetStopButtons();
+            });
+
+            console.log("Adaptive Sampling App initialized");
+            try {
+                htmlComponent.sendEventToMATLAB("RefreshDbState", {});
+            } catch (e) {
+                console.warn("Could not request initial DB state", e);
+            }
+        }
+
+        function stopProcess() {
+            const stopBtns = document.querySelectorAll(".btn-stop");
+            stopBtns.forEach(btn => {
+                btn.innerHTML = "&#9632; Stopping...";
+                btn.disabled = true;
+            });
+            showAlert("Stop requested. Terminating process...", "warning");
+            if (htmlComponent) {
+                htmlComponent.sendEventToMATLAB("StopProcess", {});
+            }
+        }
+
+        function resetStopButtons() {
+            const stopBtns = document.querySelectorAll(".btn-stop");
+            stopBtns.forEach(btn => {
+                btn.innerHTML = "&#9632; Stop";
+                btn.disabled = false;
+            });
+        }
+
+        function resetSamplingUI() {
+            const btnRun = document.getElementById("btnRun");
+            const btnPreview = document.getElementById("btnPreview");
+            if (btnRun) {
+                btnRun.disabled = false;
+                btnRun.innerHTML = "▶ Run Sampling";
+            }
+            if (btnPreview) {
+                btnPreview.disabled = false;
+            }
+            updateProgress(0, "Process terminated", null);
+        }
+
+        // Category toggle
+        function toggleCategory(catId) {
+            const cat = document.getElementById(catId);
+            cat.classList.toggle("collapsed");
+        }
+
+        // Toggle prediction mode
+        function toggleDataSourceMode() {
+            const radios = document.querySelectorAll('input[name="dataSourceGroup"]');
+            let source = "interpolation";
+            for (let r of radios) {
+                if (r.checked) {
+                    source = r.value;
+                    break;
+                }
+            }
+
+            var simRow = document.getElementById("reqSampSimRow");
+            var modelRow = document.getElementById("reqSampModelRow");
+            var riRow = document.getElementById("reqSampRIRow");
+
+            if (source === "model") {
+                if (simRow) simRow.style.display = "none";
+                if (modelRow) modelRow.style.display = "";
+                if (riRow) riRow.style.display = "";
+            } else {
+                if (simRow) simRow.style.display = "";
+                if (modelRow) modelRow.style.display = "none";
+                if (riRow) riRow.style.display = "none";
+            }
+        }
+
+        function getDataSource() {
+            const radios = document.querySelectorAll('input[name="dataSourceGroup"]');
+            for (let r of radios) {
+                if (r.checked) {
+                    return r.value;
+                }
+            }
+            return "interpolation";
+        }
+
+        // Toggle uniform mode (disables metric config)
+        function toggleUniformMode() {
+            const uniform = document.getElementById("uniformSampling").checked;
+            const metricContent = document.getElementById("metricContent");
+
+            if (uniform) {
+                metricContent.classList.add("disabled");
+            } else {
+                metricContent.classList.remove("disabled");
+            }
+        }
+
+        // Toggle auto-detect ranges
+        function toggleAutoRanges() {
+            const auto = document.getElementById("autoDetectRanges").checked;
+            const manual = document.getElementById("manualRangesGroup");
+
+            if (auto) {
+                manual.classList.add("disabled");
+            } else {
+                manual.classList.remove("disabled");
+            }
+        }
+
+        // Add metric row
+        function addMetricRow() {
+            const tbody = document.getElementById("metricTableBody");
+            const row = document.createElement("tr");
+            row.setAttribute("data-metric-id", metricRowId++);
+            
+            // Build select options from available metrics
+            let optionsHtml = '<option value="">-- Select metric --</option>';
+            let avail = normalizeArray(window.availableMetrics);
+            const currentSelected = Array.from(document.querySelectorAll("#metricTableBody .metric-name")).map(s => s.value);
+            const nextMetric = (avail && avail.length > 0) ? (avail.find(m => !currentSelected.includes(m)) || avail[0]) : "";
+
+            if (avail && avail.length > 0) {
+                avail.forEach(metric => {
+                    const sel = (metric === nextMetric) ? ' selected' : '';
+                    optionsHtml += `<option value="${metric}"${sel}>${metric}</option>`;
+                });
+            }
+            
+            row.innerHTML = `
+                <td>
+                    <select class="metric-name">
+                        ${optionsHtml}
+                    </select>
+                </td>
+                <td><input type="number" class="metric-weight" value="1" step="0.1" min="0"></td>
+                <td><input type="number" class="metric-alpha" value="1" step="0.1"></td>
+                <td class="metric-row-actions">
+                    <button class="btn-danger btn-icon" onclick="removeMetricRow(this)">✕</button>
+                </td>
+            `;
+            tbody.appendChild(row);
+        }
+
+        // Remove metric row
+        function removeMetricRow(btn) {
+            const row = btn.closest("tr");
+            const tbody = document.getElementById("metricTableBody");
+            if (tbody.children.length > 1) {
+                row.remove();
+            } else {
+                showAlert("At least one metric is required", "warning");
+            }
+        }
+
+        // Collect all configuration
+        function collectConfig() {
+            // Collect metrics - filter out empty names
+            const metricRows = document.querySelectorAll("#metricTableBody tr");
+            const metricNames = [];
+            const metricWeights = [];
+            const metricAlphas = [];
+
+            metricRows.forEach(row => {
+                const name = row.querySelector(".metric-name").value.trim();
+                // Only include non-empty metric names
+                if (name && name !== "") {
+                    const weightVal = parseFloat(row.querySelector(".metric-weight").value);
+                    const weight = isNaN(weightVal) ? 1 : weightVal;
+                    const alphaVal = parseFloat(row.querySelector(".metric-alpha").value);
+                    const alpha = isNaN(alphaVal) ? 1 : alphaVal;
+                    metricNames.push(name);
+                    metricWeights.push(weight);
+                    metricAlphas.push(alpha);
+                }
+            });
+
+            // Collect dynamic parameter ranges
+            var paramRanges = {};
+            if (window.inputParams) {
+                window.inputParams.forEach(function(p) {
+                    var minEl = document.getElementById("param_" + p.name + "_min");
+                    var maxEl = document.getElementById("param_" + p.name + "_max");
+                    paramRanges[p.name] = {
+                        min: minEl ? parseFloat(minEl.value) || NaN : NaN,
+                        max: maxEl ? parseFloat(maxEl.value) || NaN : NaN
+                    };
+                });
+            }
+
+            // Get axis selections
+            var xAxis = "";
+            var yAxis = "";
+            var xSel = document.getElementById("xAxisParam");
+            var ySel = document.getElementById("yAxisParam");
+            if (xSel) xAxis = xSel.value;
+            if (ySel) yAxis = ySel.value;
+
+            // Backward compat: also send periodMin/Max and radiusMin/Max
+            var periodMin = NaN, periodMax = NaN, radiusMin = NaN, radiusMax = NaN;
+            if (paramRanges.period) {
+                periodMin = paramRanges.period.min;
+                periodMax = paramRanges.period.max;
+            }
+            if (paramRanges.radius) {
+                radiusMin = paramRanges.radius.min;
+                radiusMax = paramRanges.radius.max;
+            }
+
+            const densVal = parseFloat(document.getElementById("densityThreshold").value);
+            const expVal = parseFloat(document.getElementById("overallExponent").value);
+            const blurVal = parseFloat(document.getElementById("blurSigma").value);
+
+            return {
+                // Data Source
+                dataSource: getDataSource(),
+
+                // Sampling
+                numPoints: parseInt(document.getElementById("numPoints").value),
+                maxAttempts: parseInt(document.getElementById("maxAttempts").value),
+                minSeparation: parseFloat(document.getElementById("minSeparation").value),
+                rtpThreshold: parseFloat(document.getElementById("rtpThreshold").value),
+                densityThreshold: isNaN(densVal) ? 0 : densVal,
+                uniformSampling: document.getElementById("uniformSampling").checked,
+                enforceOriginalSpacing: document.getElementById("enforceOriginalSpacing").checked,
+
+                // Dynamic parameter ranges
+                autoDetectRanges: document.getElementById("autoDetectRanges").checked,
+                paramRanges: paramRanges,
+                xAxisParam: xAxis,
+                yAxisParam: yAxis,
+
+                // Backward compat (hardcoded names)
+                periodMin: periodMin,
+                periodMax: periodMax,
+                radiusMin: radiusMin,
+                radiusMax: radiusMax,
+
+                // Metrics
+                metricNames: metricNames,
+                metricWeights: metricWeights,
+                metricAlphas: metricAlphas,
+                overallExponent: isNaN(expVal) ? 1 : expVal,
+                blurSigma: isNaN(blurVal) ? 0 : blurVal,
+
+                // Output
+                outputFile: document.getElementById("outputFile").value,
+                paramName1: document.getElementById("paramName1").value,
+                paramUnit1: document.getElementById("paramUnit1").value,
+                paramName2: document.getElementById("paramName2").value,
+                paramUnit2: document.getElementById("paramUnit2").value,
+                precision: parseInt(document.getElementById("precision").value) || 6,
+                includeOriginal: document.getElementById("includeOriginal").checked,
+
+                // Visualization
+                colormap: document.getElementById("colormap").value,
+                gridResolution: parseInt(document.getElementById("gridResolution").value) || 500,
+                showOriginal: document.getElementById("showOriginal").checked,
+                showGenerated: document.getElementById("showGenerated").checked,
+                originalColor: document.getElementById("originalColor").value,
+                generatedColor: document.getElementById("generatedColor").value,
+                pointSize: parseInt(document.getElementById("pointSize").value) || 10
+            };
+        }
+
+        // Main actions
+        function loadData() {
+            if (!htmlComponent) return;
+            setStatus("loading", "Loading data...");
+            htmlComponent.sendEventToMATLAB("LoadData", collectConfig());
+        }
+
+        function runSampling() {
+            if (!htmlComponent) return;
+            setStatus("loading", "Running adaptive sampling...");
+            showProgress(true);
+            document.getElementById("btnRun").disabled = true;
+            htmlComponent.sendEventToMATLAB("RunSampling", collectConfig());
+        }
+
+        function previewDensity() {
+            if (!htmlComponent) return;
+            setStatus("loading", "Generating density preview...");
+            htmlComponent.sendEventToMATLAB("PreviewDensity", collectConfig());
+        }
+
+        function exportResults() {
+            if (!htmlComponent) return;
+            setStatus("loading", "Exporting results...");
+            htmlComponent.sendEventToMATLAB("ExportResults", collectConfig());
+        }
+
+        function resetAll() {
+            if (htmlComponent) {
+                htmlComponent.sendEventToMATLAB("Reset", {});
+            }
+            // Reset UI
+            document.getElementById("numPoints").value = 100;
+            document.getElementById("maxAttempts").value = 1000000;
+            document.getElementById("minSeparation").value = 5;
+            document.getElementById("rtpThreshold").value = 0.49;
+            document.getElementById("densityThreshold").value = 0;
+
+            document.getElementById("btnExport").disabled = true;
+            document.getElementById("statPoints").textContent = "0";
+            document.getElementById("statAcceptance").textContent = "0%";
+            document.getElementById("statOriginal").textContent = "0";
+
+            setStatus("ready", "Ready");
+        }
+
+        // Event handlers from MATLAB
+        function handleDataLoaded(event) {
+            const data = event.Data;
+            if (!data) return;
+            setStatus("ready", "Data loaded: " + (data.numPoints || 0) + " points");
+            window._dataLoaded = true;
+
+            const statEl = document.getElementById("statOriginal");
+            if (statEl) statEl.textContent = data.numPoints || 0;
+
+            // Handle dynamic input parameters from schema
+            let rawParams = normalizeArray(data.inputParams);
+            if (rawParams && rawParams.length > 0) {
+                window.inputParams = rawParams;
+            } else {
+                const pMin = (data.periodMin !== undefined && !isNaN(data.periodMin)) ? data.periodMin : 400;
+                const pMax = (data.periodMax !== undefined && !isNaN(data.periodMax)) ? data.periodMax : 1400;
+                const rMin = (data.radiusMin !== undefined && !isNaN(data.radiusMin)) ? data.radiusMin : 0;
+                const rMax = (data.radiusMax !== undefined && !isNaN(data.radiusMax)) ? data.radiusMax : 50;
+                window.inputParams = [
+                    { name: "period", min: pMin, max: pMax },
+                    { name: "radius", min: rMin, max: rMax }
+                ];
+            }
+            buildDynamicParamRanges(window.inputParams);
+            buildAxisSelectors(window.inputParams);
+
+            // Update available metrics from MATLAB
+            let rawMetrics = normalizeArray(data.availableMetrics);
+            if (rawMetrics && rawMetrics.length > 0) {
+                window.availableMetrics = rawMetrics;
+                updateMetricDropdowns(rawMetrics);
+            }
+
+            showAlert("Data loaded successfully: " + (data.numPoints || 0) + " points", "success");
+        }
+
+        function buildDynamicParamRanges(params) {
+            params = normalizeArray(params);
+            const container = document.getElementById("dynamicParamRanges");
+            if (!container) return;
+
+            let html = '';
+            params.forEach(function(p) {
+                const pMin = (p.min !== undefined && p.min !== null && !isNaN(p.min)) ? Number(p.min).toFixed(1) : "0.0";
+                const pMax = (p.max !== undefined && p.max !== null && !isNaN(p.max)) ? Number(p.max).toFixed(1) : "100.0";
+                html += `<div class="form-group">
+                    <label>${p.name} Range</label>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <input type="number" id="param_${p.name}_min" placeholder="Min" step="1" value="${pMin}">
+                        </div>
+                        <div class="form-group">
+                            <input type="number" id="param_${p.name}_max" placeholder="Max" step="1" value="${pMax}">
+                        </div>
+                    </div>
+                </div>`;
+            });
+            container.innerHTML = html;
+
+            // Build detected ranges info
+            const infoContainer = document.getElementById("detectedRangesContent");
+            if (infoContainer) {
+                let infoHtml = '';
+                params.forEach(function(p) {
+                    const pMin = (p.min !== undefined && p.min !== null && !isNaN(p.min)) ? Number(p.min).toFixed(1) : "0.0";
+                    const pMax = (p.max !== undefined && p.max !== null && !isNaN(p.max)) ? Number(p.max).toFixed(1) : "100.0";
+                    infoHtml += `<p>${p.name}: ${pMin} – ${pMax}</p>`;
+                });
+                infoContainer.innerHTML = infoHtml;
+            }
+        }
+
+        function buildAxisSelectors(params) {
+            params = normalizeArray(params);
+            const xSelect = document.getElementById("xAxisParam");
+            const ySelect = document.getElementById("yAxisParam");
+            if (!xSelect || !ySelect) return;
+
+            const curX = xSelect.value;
+            const curY = ySelect.value;
+
+            let html = '';
+            params.forEach(function(p) {
+                html += `<option value="${p.name}">${p.name}</option>`;
+            });
+            xSelect.innerHTML = html;
+            ySelect.innerHTML = html;
+
+            if (curX && params.some(p => p.name === curX)) {
+                xSelect.value = curX;
+            } else if (params.length >= 1) {
+                xSelect.value = params[0].name;
+            }
+
+            if (curY && params.some(p => p.name === curY)) {
+                ySelect.value = curY;
+            } else if (params.length >= 2) {
+                ySelect.value = params[1].name;
+            } else if (params.length >= 1) {
+                ySelect.value = params[0].name;
+            }
+        }
+
+        function onAxisChange() {
+            // The axis selection is used when collecting config
+        }
+
+        // Update all metric dropdown options with available metrics
+        function updateMetricDropdowns(metrics) {
+            metrics = normalizeArray(metrics);
+            let optionsHtml = '<option value="">-- Select metric --</option>';
+            metrics.forEach(metric => {
+                optionsHtml += `<option value="${metric}">${metric}</option>`;
+            });
+
+            // Update all existing select elements
+            const selects = document.querySelectorAll(".metric-name");
+            selects.forEach((select, idx) => {
+                const currentValue = select.value;
+                select.innerHTML = optionsHtml;
+                if (currentValue && metrics.includes(currentValue)) {
+                    select.value = currentValue;  // Restore previous selection if it still exists
+                } else if (metrics.length > 0) {
+                    // Auto-select sensible metric default
+                    const pref = metrics.find(m => m === "EF_vol_avg" || m === "EF_vol" || m.toLowerCase().includes("ef")) || metrics[0];
+                    select.value = pref;
+                }
+            });
+        }
+
+        function handleProgress(event) {
+            const data = event.Data;
+            updateProgress(data.percent, data.message);
+        }
+
+        function handleSamplingComplete(event) {
+            const data = event.Data;
+            showProgress(false);
+            document.getElementById("btnRun").disabled = false;
+            document.getElementById("btnExport").disabled = false;
+
+            document.getElementById("statPoints").textContent = data.count;
+            document.getElementById("statAcceptance").textContent =
+                (data.acceptanceRate * 100).toFixed(2) + "%";
+
+            setStatus("ready", "Sampling complete: " + data.count + " points generated");
+            showAlert("Generated " + data.count + " points with " +
+                (data.acceptanceRate * 100).toFixed(2) + "% acceptance rate", "success");
+        }
+
+        function handleDensityPreview(event) {
+            setStatus("ready", "Density preview updated");
+        }
+
+        function handleExportComplete(event) {
+            const data = event.Data;
+            setStatus("ready", "Exported to " + data.filename);
+            showAlert("Results exported to " + data.filename, "success");
+        }
+
+        function handleError(event) {
+            showProgress(false);
+            document.getElementById("btnRun").disabled = false;
+            setStatus("error", "Error: " + event.Data);
+            showAlert(event.Data, "error");
+        }
+
+        function handleWarning(event) {
+            showAlert(event.Data, "warning");
+        }
+
+        function handleStatusUpdate(event) {
+            setStatus("ready", event.Data);
+        }
+
+        function handleConfigLoaded(event) {
+            const cfg = event.Data;
+            // Config loaded event is handled by MATLAB backend
+        }
+
+        // UI helpers
+        function setStatus(type, message) {
+            const indicator = document.getElementById("statusIndicator");
+            const text = document.getElementById("statusText");
+
+            indicator.className = "status-indicator";
+            if (type === "loading") indicator.classList.add("loading");
+            else if (type === "error") indicator.classList.add("error");
+            else if (type === "warning") indicator.classList.add("warning");
+
+            text.textContent = message;
+        }
+
+        function showProgress(show) {
+            const container = document.getElementById("progressContainer");
+            if (show) {
+                container.classList.add("active");
+            } else {
+                container.classList.remove("active");
+            }
+        }
+
+        function dbUpdateBanner(d) {
+            var banner = document.getElementById("dbStatusBanner");
+            if (!banner || !d) return;
+            if (!d.hasSimData && !d.hasModel) { banner.style.display = "none"; return; }
+            banner.style.display = "block";
+            var parts = [];
+            if (d.hasSimData) parts.push(d.simEntries + " sim");
+            if (d.hasModel) parts.push("Model \u2713");
+            if (d.hasPredictions) parts.push(d.predEntries + " pred");
+            banner.textContent = "DB: " + parts.join(" | ");
+        }
+
+        function updateSamplingRequirements(d) {
+            if (!d) return;
+            var src = getDataSource();
+            // Sim data
+            var simEl = document.getElementById("reqSampSimStatus");
+            if (simEl) {
+                if (d.hasSimData) { simEl.textContent = "\u2713 " + (d.simEntries || "") + " entries"; simEl.className = "req-badge req-ok"; }
+                else { simEl.textContent = "\u2717 Not loaded"; simEl.className = "req-badge req-missing"; }
+            }
+            // Model
+            var modelEl = document.getElementById("reqSampModelStatus");
+            if (modelEl) {
+                if (d.hasModel) { modelEl.textContent = "\u2713 Loaded"; modelEl.className = "req-badge req-ok"; }
+                else { modelEl.textContent = "\u2717 Not loaded"; modelEl.className = "req-badge req-missing"; }
+            }
+            // RI
+            var riEl = document.getElementById("reqSampRIStatus");
+            if (riEl) {
+                if (d.hasRI) { riEl.textContent = "\u2713 Loaded"; riEl.className = "req-badge req-ok"; }
+                else { riEl.textContent = "\u2717 Not loaded"; riEl.className = "req-badge req-missing"; }
+            }
+        }
+
+        function updateProgress(percent, message) {
+            document.getElementById("progressFill").style.width = percent + "%";
+            document.getElementById("progressPercent").textContent = percent.toFixed(0) + "%";
+            if (message) {
+                document.getElementById("progressText").textContent = message;
+            }
+        }
+
+        function showAlert(message, type) {
+            const banner = document.getElementById("alertBanner");
+            const icon = document.getElementById("alertIcon");
+            const msg = document.getElementById("alertMessage");
+
+            banner.className = "alert-banner active " + type;
+            msg.textContent = message;
+
+            if (type === "error") icon.textContent = "❌";
+            else if (type === "warning") icon.textContent = "⚠";
+            else if (type === "success") icon.textContent = "✓";
+
+            // Auto-hide after 5 seconds for success/warning
+            if (type !== "error") {
+                setTimeout(hideAlert, 5000);
+            }
+        }
+
+        function hideAlert() {
+            document.getElementById("alertBanner").classList.remove("active");
+        }
+
+        // Initialize on load (if not called by MATLAB setup)
+        document.addEventListener("DOMContentLoaded", function() {
+            toggleUniformMode(); // Apply initial state
+        });
+    </script>
+</body>
+</html>

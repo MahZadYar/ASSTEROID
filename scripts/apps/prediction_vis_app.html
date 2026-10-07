@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SERS Prediction Visualizer</title>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-tertiary: #0f3460;
+            --accent-primary: #e94560;
+            --accent-secondary: #00d9ff;
+            --accent-success: #00ff88;
+            --accent-warning: #ffcc00;
+            --text-primary: #ffffff;
+            --text-secondary: #b0b0b0;
+            --text-muted: #707070;
+            --border-color: #2a2a4a;
+            --shadow-color: rgba(0, 0, 0, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow-y: auto;
+            overflow-x: hidden;
+            margin: 0;
+            padding: 0;
+        }
+
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            min-height: 100%;
+            padding: 12px;
+            gap: 12px;
+        }
+
+        /* Header Section */
+        .header {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 4px 15px var(--shadow-color);
+            border: 1px solid var(--border-color);
+        }
+
+        .header h1 {
+            font-size: 1.4em;
+            font-weight: 600;
+            background: linear-gradient(90deg, var(--accent-secondary), var(--accent-primary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            transition: background 0.3s ease;
+        }
+
+        .status-dot.loaded {
+            background: var(--accent-success);
+            box-shadow: 0 0 10px var(--accent-success);
+        }
+
+        .status-dot.error {
+            background: var(--accent-primary);
+            box-shadow: 0 0 10px var(--accent-primary);
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow-y: auto;
+        }
+
+        /* Section Styles */
+        .section {
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            padding: 12px;
+            box-shadow: 0 4px 15px var(--shadow-color);
+            border: 1px solid var(--border-color);
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .section-title {
+            font-size: 1em;
+            font-weight: 600;
+            color: var(--accent-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-title svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .collapse-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 5px;
+            transition: transform 0.3s ease;
+        }
+
+        .collapse-btn.collapsed {
+            transform: rotate(-90deg);
+        }
+
+        .section-content {
+            display: grid;
+            gap: 12px;
+        }
+
+        .section-content.collapsed {
+            display: none;
+        }
+
+        /* Form Controls */
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .form-group.horizontal {
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .form-group label {
+            font-size: 0.85em;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="number"],
+        .form-group select {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: var(--text-primary);
+            font-size: 0.9em;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--accent-secondary);
+            box-shadow: 0 0 0 2px rgba(0, 217, 255, 0.2);
+        }
+
+        .form-group input[type="number"] {
+            width: 100px;
+        }
+
+        .form-group input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: var(--bg-primary);
+            appearance: none;
+            -webkit-appearance: none;
+        }
+
+        .form-group input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent-secondary);
+            cursor: pointer;
+            box-shadow: 0 2px 6px var(--shadow-color);
+        }
+
+        .form-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--accent-secondary);
+        }
+
+        .range-value {
+            min-width: 60px;
+            text-align: right;
+            font-family: 'Consolas', monospace;
+            color: var(--accent-secondary);
+            font-size: 0.9em;
+        }
+
+        /* File Input Group */
+        .file-input-group {
+            display: flex;
+            gap: 8px;
+        }
+
+        .file-input-group input {
+            flex: 1;
+        }
+
+        .file-input-group button {
+            padding: 8px 12px;
+            white-space: nowrap;
+        }
+
+        /* Buttons */
+        .btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 10px 16px;
+            color: var(--text-primary);
+            font-size: 0.9em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            background: var(--border-color);
+            transform: translateY(-1px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-primary) 0%, #c13850 100%);
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #ff5070 0%, var(--accent-primary) 100%);
+            box-shadow: 0 4px 15px rgba(233, 69, 96, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, var(--accent-success) 0%, #00cc70 100%);
+            border: none;
+            color: var(--bg-primary);
+        }
+
+        .btn-success:hover {
+            background: linear-gradient(135deg, #00ffaa 0%, var(--accent-success) 100%);
+            box-shadow: 0 4px 15px rgba(0, 255, 136, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        /* Grid Layouts */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        @media (max-width: 500px) {
+            .grid-2, .grid-3 {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Metric Chips */
+        .metric-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .metric-chip {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 0.85em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .metric-chip:hover {
+            border-color: var(--accent-secondary);
+        }
+
+        .metric-chip.selected {
+            background: var(--accent-secondary);
+            color: var(--bg-primary);
+            border-color: var(--accent-secondary);
+        }
+
+        .metric-chip.primary {
+            background: var(--accent-primary);
+            color: var(--text-primary);
+            border-color: var(--accent-primary);
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            display: none;
+            margin-top: 15px;
+        }
+
+        .progress-container.visible {
+            display: block;
+        }
+
+        .progress-bar {
+            height: 6px;
+            background: var(--bg-primary);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-secondary), var(--accent-success));
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            font-size: 0.8em;
+            color: var(--text-secondary);
+            margin-top: 5px;
+            text-align: center;
+        }
+
+        /* Toast Notifications */
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .toast {
+            background: var(--bg-secondary);
+            border-left: 4px solid var(--accent-secondary);
+            border-radius: 6px;
+            padding: 12px 16px;
+            box-shadow: 0 4px 15px var(--shadow-color);
+            animation: slideIn 0.3s ease;
+            max-width: 350px;
+        }
+
+        .toast.error {
+            border-left-color: var(--accent-primary);
+        }
+
+        .toast.success {
+            border-left-color: var(--accent-success);
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Interactive Controls Section */
+        .interactive-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        @media (max-width: 600px) {
+            .interactive-controls {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .control-panel {
+            background: var(--bg-primary);
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .control-panel-title {
+            font-size: 0.9em;
+            font-weight: 600;
+            color: var(--accent-secondary);
+            margin-bottom: 10px;
+        }
+
+        /* Coordinate Display */
+        .coordinate-display {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-primary);
+            border-radius: 8px;
+            padding: 10px 15px;
+            font-family: 'Consolas', monospace;
+        }
+
+        .coordinate-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .coordinate-label {
+            font-size: 0.75em;
+            color: var(--text-muted);
+        }
+
+        .coordinate-value {
+            font-size: 1.1em;
+            color: var(--accent-secondary);
+        }
+
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+
+        /* SVG Icons */
+        .icon {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+        }
+    </style>
+
+    <script type="text/javascript">
+        // Application State
+        let appState = {
+            workDir: '',
+            modelFile: '',
+            predictionFile: '',
+            availableMetrics: ['Absorptance', 'M_vol', 'M_surf', 'EF_vol', 'EF_surf'],
+            selectedMetrics: ['Absorptance', 'M_vol', 'M_surf'],
+            primaryMetric: 'Absorptance',
+            resolution: 2,
+            lambdaLaser: 785,
+            pLimits: [400, 1400],
+            rLimits: [10, 500],
+            stokesShiftLimits: [100, 3600],
+            stokesShiftResolution: 5,
+            linkMetricsToGrid: true,
+            metricsShiftLimits: [100, 3600],
+            colormapInverted: true,
+            logScale: false,
+            showGrid: true,
+            interpolation: 'interp',
+            currentSliceStokes: 1000,
+            selectedPoint: { p: 850, r: 100 },
+            modelLoaded: false,
+            predictionsLoaded: false
+        };
+
+        let htmlComponent = null;
+
+        function setup(component) {
+            htmlComponent = component;
+
+            // Listen for events from MATLAB
+            htmlComponent.addEventListener("StateUpdate", function(event) {
+                updateAppState(event.Data);
+            });
+
+            htmlComponent.addEventListener("Status", function(event) {
+                showProgress(event.Data.message, event.Data.progress);
+            });
+
+            htmlComponent.addEventListener("Error", function(event) {
+                showToast(event.Data.message, 'error');
+                hideProgress();
+            });
+
+            htmlComponent.addEventListener("ModelLoaded", function(event) {
+                appState.modelLoaded = true;
+                updateModelStatus(true, event.Data.filePath);
+                if (event.Data.targets) {
+                    appState.availableMetrics = event.Data.targets;
+                    updateMetricChips();
+                }
+                showToast('Model loaded successfully!', 'success');
+                hideProgress();
+            });
+
+            htmlComponent.addEventListener("RILoaded", function(event) {
+                showToast('Refractive index data loaded successfully!', 'success');
+                hideProgress();
+            });
+
+            htmlComponent.addEventListener("PredictionsLoaded", function(event) {
+                appState.predictionsLoaded = true;
+                updatePredictionsStatus(true, event.Data.filePath);
+                if (event.Data.metrics) {
+                    appState.availableMetrics = event.Data.metrics;
+                    updateMetricChips();
+                }
+                if (event.Data.pRange) {
+                    document.getElementById('pMin').value = event.Data.pRange[0];
+                    document.getElementById('pMax').value = event.Data.pRange[1];
+                }
+                if (event.Data.rRange) {
+                    document.getElementById('rMin').value = event.Data.rRange[0];
+                    document.getElementById('rMax').value = event.Data.rRange[1];
+                }
+                if (event.Data.lambdaRange) {
+                    updateSliderRange('sliceWavelength', event.Data.lambdaRange[0], event.Data.lambdaRange[1]);
+                }
+                showToast('Predictions loaded successfully!', 'success');
+                hideProgress();
+            });
+
+            htmlComponent.addEventListener("VisualizationUpdated", function(event) {
+                showToast('Visualization updated', 'success');
+            });
+
+            htmlComponent.addEventListener("SpectrumUpdated", function(event) {
+                updateCoordinateDisplay(event.Data.p, event.Data.r);
+            });
+
+            htmlComponent.addEventListener("FileSelected", function(event) {
+                if (event.Data.type === 'model') {
+                    document.getElementById('modelPath').value = event.Data.path;
+                } else if (event.Data.type === 'predictions') {
+                    document.getElementById('predictionPath').value = event.Data.path;
+                } else if (event.Data.type === 'ri') {
+                    document.getElementById('riPath').value = event.Data.path;
+                } else if (event.Data.type === 'workDir') {
+                    document.getElementById('workDir').value = event.Data.path;
+                }
+            });
+
+            htmlComponent.addEventListener("ExportComplete", function(event) {
+                showToast('Exported to: ' + event.Data.path, 'success');
+            });
+
+            // Request initial state from MATLAB
+            htmlComponent.sendEventToMATLAB("RequestState", {});
+
+            // Initialize UI
+            initializeUI();
+        }
+
+        function initializeUI() {
+            // Setup section collapse toggles
+            document.querySelectorAll('.collapse-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const section = this.closest('.section');
+                    const content = section.querySelector('.section-content');
+                    this.classList.toggle('collapsed');
+                    content.classList.toggle('collapsed');
+                });
+            });
+
+            // Text inputs don't need slider setup
+
+            // Initialize metric chips
+            updateMetricChips();
+        }
+
+        function setupRangeSlider(id, unit) {
+            const slider = document.getElementById(id);
+            const valueDisplay = document.getElementById(id + 'Value');
+            if (slider && valueDisplay) {
+                slider.addEventListener('input', function() {
+                    valueDisplay.textContent = this.value + ' ' + unit;
+                });
+            }
+        }
+
+        function updateSliderRange(id, min, max) {
+            const slider = document.getElementById(id);
+            if (slider) {
+                slider.min = Math.floor(min);
+                slider.max = Math.ceil(max);
+                slider.value = Math.round((min + max) / 2);
+                const valueDisplay = document.getElementById(id + 'Value');
+                if (valueDisplay) {
+                    valueDisplay.textContent = slider.value + ' nm';
+                }
+            }
+        }
+
+        function updateAppState(newState) {
+            Object.assign(appState, newState);
+            syncUIWithState();
+        }
+
+        function syncUIWithState() {
+            // Update file paths
+            if (appState.workDir) document.getElementById('workDir').value = appState.workDir;
+            if (appState.riFile) document.getElementById('riPath').value = appState.riFile;
+            if (appState.modelFile) document.getElementById('modelPath').value = appState.modelFile;
+            if (appState.predictionFile) document.getElementById('predictionPath').value = appState.predictionFile;
+
+            // Update parameters
+            document.getElementById('resolution').value = appState.resolution;
+            document.getElementById('lambdaLaser').value = appState.lambdaLaser;
+            document.getElementById('pMin').value = appState.pLimits[0];
+            document.getElementById('pMax').value = appState.pLimits[1];
+            document.getElementById('rMin').value = appState.rLimits[0];
+            document.getElementById('rMax').value = appState.rLimits[1];
+            document.getElementById('stokesMin').value = appState.stokesShiftLimits[0];
+            document.getElementById('stokesMax').value = appState.stokesShiftLimits[1];
+            document.getElementById('stokesShiftRes').value = appState.stokesShiftResolution;
+
+            // Metrics window controls
+            if (appState.linkMetricsToGrid !== undefined) {
+                document.getElementById('linkMetricsToGrid').checked = appState.linkMetricsToGrid;
+                toggleMetricsWindow();
+            }
+            if (appState.metricsShiftLimits) {
+                document.getElementById('metricsShiftMin').value = appState.metricsShiftLimits[0];
+                document.getElementById('metricsShiftMax').value = appState.metricsShiftLimits[1];
+            }
+
+            // Update visualization options
+            document.getElementById('colormapInverted').checked = appState.colormapInverted;
+            document.getElementById('logScale').checked = appState.logScale;
+            document.getElementById('showGrid').checked = appState.showGrid;
+            document.getElementById('interpolation').value = appState.interpolation;
+
+            // Update interactive controls
+            document.getElementById('sliceStokes').value = appState.currentSliceStokes;
+            document.getElementById('sliceStokesValue').textContent = appState.currentSliceStokes + ' cm⁻¹';
+            document.getElementById('sliceStokes').min = appState.stokesShiftLimits[0];
+            document.getElementById('sliceStokes').max = appState.stokesShiftLimits[1];
+            document.getElementById('pointP').value = appState.selectedPoint.p;
+            document.getElementById('pointR').value = appState.selectedPoint.r;
+
+            // Update status indicators
+            updateModelStatus(appState.modelLoaded);
+            updatePredictionsStatus(appState.predictionsLoaded);
+
+            // Update metric chips
+            updateMetricChips();
+        }
+
+        function updateMetricChips() {
+            const container = document.getElementById('metricChips');
+            container.innerHTML = '';
+
+            appState.availableMetrics.forEach(metric => {
+                const chip = document.createElement('div');
+                chip.className = 'metric-chip';
+                if (metric === appState.primaryMetric) {
+                    chip.classList.add('primary');
+                } else if (appState.selectedMetrics.includes(metric)) {
+                    chip.classList.add('selected');
+                }
+                chip.textContent = metric.replace('_', ' ');
+                chip.onclick = () => selectMetric(metric);
+                container.appendChild(chip);
+            });
+        }
+
+        function selectMetric(metric) {
+            appState.primaryMetric = metric;
+            updateMetricChips();
+
+            if (appState.predictionsLoaded && htmlComponent) {
+                htmlComponent.sendEventToMATLAB("UpdateVisualization", {
+                    metric: metric
+                });
+            }
+        }
+
+        function updateModelStatus(loaded, path) {
+            const dot = document.getElementById('modelStatusDot');
+            const text = document.getElementById('modelStatusText');
+            if (loaded) {
+                dot.classList.add('loaded');
+                text.textContent = 'Model Loaded';
+            } else {
+                dot.classList.remove('loaded');
+                text.textContent = 'No Model';
+            }
+        }
+
+        function updatePredictionsStatus(loaded, path) {
+            const dot = document.getElementById('predStatusDot');
+            const text = document.getElementById('predStatusText');
+            if (loaded) {
+                dot.classList.add('loaded');
+                text.textContent = 'Predictions Ready';
+            } else {
+                dot.classList.remove('loaded');
+                text.textContent = 'No Predictions';
+            }
+        }
+
+        function updateCoordinateDisplay(p, r) {
+            document.getElementById('coordP').textContent = p.toFixed(0);
+            document.getElementById('coordR').textContent = r.toFixed(0);
+        }
+
+        // Event Handlers for MATLAB Communication
+        function browseWorkDir() {
+            if (htmlComponent) {
+                htmlComponent.sendEventToMATLAB("BrowseFile", { type: "workDir" });
+            }
+        }
+
+        function browseModel() {
+            if (htmlComponent) {
+                htmlComponent.sendEventToMATLAB("BrowseFile", { type: "model" });
+            }
+        }
+
+        function browsePredictions() {
+            if (htmlComponent) {
+                htmlComponent.sendEventToMATLAB("BrowseFile", { type: "predictions" });
+            }
+        }
+
+        function browseRI() {
+            if (htmlComponent) {
+                htmlComponent.sendEventToMATLAB("BrowseFile", { type: "ri" });
+            }
+        }
+
+        function loadModel() {
+            if (htmlComponent) {
+                showProgress('Loading model...', 10);
+                htmlComponent.sendEventToMATLAB("LoadModel", {
+                    filePath: document.getElementById('modelPath').value
+                });
+            }
+        }
+
+        function loadPredictions() {
+            if (htmlComponent) {
+                showProgress('Loading predictions...', 10);
+                htmlComponent.sendEventToMATLAB("LoadPredictions", {
+                    filePath: document.getElementById('predictionPath').value
+                });
+            }
+        }
+
+        function toggleMetricsWindow() {
+            const linked = document.getElementById('linkMetricsToGrid').checked;
+            const group = document.getElementById('metricsWindowGroup');
+            const minInput = document.getElementById('metricsShiftMin');
+            const maxInput = document.getElementById('metricsShiftMax');
+            if (linked) {
+                group.style.display = 'none';
+                group.style.opacity = '0.5';
+                minInput.disabled = true;
+                maxInput.disabled = true;
+            } else {
+                group.style.display = '';
+                group.style.opacity = '1';
+                minInput.disabled = false;
+                maxInput.disabled = false;
+                // Seed with current grid values if metrics fields are still at defaults
+                if (parseFloat(minInput.value) === 100 && parseFloat(maxInput.value) === 3600) {
+                    minInput.value = document.getElementById('stokesMin').value;
+                    maxInput.value = document.getElementById('stokesMax').value;
+                }
+            }
+            appState.linkMetricsToGrid = linked;
+        }
+
+        function loadRI() {
+            if (htmlComponent) {
+                showProgress('Loading refractive index data...', 10);
+                htmlComponent.sendEventToMATLAB("LoadRI", {
+                    filePath: document.getElementById('riPath').value
+                });
+            }
+        }
+
+        function generatePredictions() {
+            if (htmlComponent) {
+                const config = collectConfig();
+                showProgress('Generating predictions...', 5);
+                htmlComponent.sendEventToMATLAB("GeneratePredictions", config);
+            }
+        }
+
+        function updateVisualization() {
+            if (htmlComponent && appState.predictionsLoaded) {
+                const visConfig = {
+                    metric: appState.primaryMetric,
+                    logScale: document.getElementById('logScale').checked,
+                    colormapInverted: document.getElementById('colormapInverted').checked,
+                    showGrid: document.getElementById('showGrid').checked,
+                    interpolation: document.getElementById('interpolation').value
+                };
+                htmlComponent.sendEventToMATLAB("UpdateVisualization", visConfig);
+            }
+        }
+
+        function updateSlice() {
+            if (htmlComponent && appState.predictionsLoaded) {
+                const stokesShift = parseFloat(document.getElementById('sliceStokes').value);
+                // Convert stokes shift to wavelength: λ_R = λ_L / (1 - λ_L * Δν * 1e-7)
+                const lambdaLaser = appState.lambdaLaser;
+                const wavelength = lambdaLaser / (1 - lambdaLaser * stokesShift * 1e-7);
+                htmlComponent.sendEventToMATLAB("UpdateSlice", { wavelength: wavelength, stokesShift: stokesShift });
+            }
+        }
+
+        function updateSpectrum() {
+            if (htmlComponent && appState.predictionsLoaded) {
+                const p = parseFloat(document.getElementById('pointP').value);
+                const r = parseFloat(document.getElementById('pointR').value);
+                htmlComponent.sendEventToMATLAB("UpdateSpectrum", { p: p, r: r });
+            }
+        }
+
+        function update3DVolume() {
+            if (htmlComponent && appState.predictionsLoaded) {
+                showProgress('Updating 3D volume...', 50);
+                htmlComponent.sendEventToMATLAB("Update3DVolume", {});
+                setTimeout(hideProgress, 1000);
+            }
+        }
+
+        function exportGraphics(type) {
+            if (htmlComponent) {
+                htmlComponent.sendEventToMATLAB("ExportGraphics", {
+                    type: type,
+                    format: 'png'
+                });
+            }
+        }
+
+        function collectConfig() {
+            return {
+                resolution: parseFloat(document.getElementById('resolution').value),
+                lambdaLaser: parseFloat(document.getElementById('lambdaLaser').value),
+                pLimits: [
+                    parseFloat(document.getElementById('pMin').value),
+                    parseFloat(document.getElementById('pMax').value)
+                ],
+                rLimits: [
+                    parseFloat(document.getElementById('rMin').value),
+                    parseFloat(document.getElementById('rMax').value)
+                ],
+                stokesShiftLimits: [
+                    parseFloat(document.getElementById('stokesMin').value),
+                    parseFloat(document.getElementById('stokesMax').value)
+                ],
+                stokesShiftResolution: parseFloat(document.getElementById('stokesShiftRes').value),
+                linkMetricsToGrid: document.getElementById('linkMetricsToGrid').checked,
+                metricsShiftLimits: document.getElementById('linkMetricsToGrid').checked
+                    ? [
+                        parseFloat(document.getElementById('stokesMin').value),
+                        parseFloat(document.getElementById('stokesMax').value)
+                    ]
+                    : [
+                        parseFloat(document.getElementById('metricsShiftMin').value),
+                        parseFloat(document.getElementById('metricsShiftMax').value)
+                    ]
+            };
+        }
+
+        // Progress and Toast Functions
+        function showProgress(message, percent) {
+            const container = document.getElementById('progressContainer');
+            const fill = document.getElementById('progressFill');
+            const text = document.getElementById('progressText');
+            container.classList.add('visible');
+            fill.style.width = percent + '%';
+            text.textContent = message;
+        }
+
+        function hideProgress() {
+            const container = document.getElementById('progressContainer');
+            container.classList.remove('visible');
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'toast ' + type;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+    </script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <div class="header">
+            <h1>SERS Prediction Visualizer</h1>
+            <div class="status-indicator">
+                <div class="status-dot" id="modelStatusDot"></div>
+                <span id="modelStatusText">No Model</span>
+                <div class="status-dot" id="predStatusDot"></div>
+                <span id="predStatusText">No Predictions</span>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- File Management Section -->
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                        </svg>
+                        File Management
+                    </div>
+                    <button class="collapse-btn">▼</button>
+                </div>
+                <div class="section-content">
+                    <div class="form-group">
+                        <label>Working Directory</label>
+                        <div class="file-input-group">
+                            <input type="text" id="workDir" placeholder="Select working directory...">
+                            <button class="btn" onclick="browseWorkDir()">Browse</button>
+                        </div>
+                    </div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label>Model File (.mat)</label>
+                            <div class="file-input-group">
+                                <input type="text" id="modelPath" placeholder="Select model file...">
+                                <button class="btn" onclick="browseModel()">Browse</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Predictions File (.mat)</label>
+                            <div class="file-input-group">
+                                <input type="text" id="predictionPath" placeholder="Select predictions file...">
+                                <button class="btn" onclick="browsePredictions()">Browse</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Refractive Index File (.csv)</label>
+                        <div class="file-input-group">
+                            <input type="text" id="riPath" placeholder="Select refractive index file (McPeak.csv)...">
+                            <button class="btn" onclick="browseRI()">Browse</button>
+                        </div>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="loadModel()">Load Model</button>
+                        <button class="btn btn-primary" onclick="loadPredictions()">Load Predictions</button>
+                        <button class="btn btn-primary" onclick="loadRI()">Load RI Data</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grid Parameters Section -->
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                            <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                        </svg>
+                        Grid Parameters
+                    </div>
+                    <button class="collapse-btn">▼</button>
+                </div>
+                <div class="section-content">
+                    <div class="grid-3">
+                        <div class="form-group">
+                            <label>Resolution (nm)</label>
+                            <input type="number" id="resolution" min="1" max="50" value="2" step="0.5">
+                        </div>
+                        <div class="form-group">
+                            <label>Laser Wavelength λ₀ (nm)</label>
+                            <input type="number" id="lambdaLaser" min="400" max="1100" value="785" step="1">
+                        </div>
+                        <div class="form-group">
+                            <label>Stokes Shift Res. (cm⁻¹)</label>
+                            <input type="number" id="stokesShiftRes" min="1" max="100" value="5" step="1">
+                        </div>
+                    </div>
+                    <div class="grid-2">
+                        <div class="form-group">
+                            <label>Period Range (nm)</label>
+                            <div class="file-input-group">
+                                <input type="number" id="pMin" value="400" min="100" max="2000">
+                                <span style="color: var(--text-muted);">to</span>
+                                <input type="number" id="pMax" value="1400" min="100" max="2000">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Radius Range (nm)</label>
+                            <div class="file-input-group">
+                                <input type="number" id="rMin" value="10" min="1" max="1000">
+                                <span style="color: var(--text-muted);">to</span>
+                                <input type="number" id="rMax" value="500" min="1" max="1000">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Spectral Grid Range (cm⁻¹)</label>
+                        <div class="file-input-group">
+                            <input type="number" id="stokesMin" value="100" min="-1000" max="10000">
+                            <span style="color: var(--text-muted);">to</span>
+                            <input type="number" id="stokesMax" value="3600" min="0" max="15000">
+                        </div>
+                    </div>
+                    <div class="form-group horizontal" style="margin-top: 4px;">
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="checkbox" id="linkMetricsToGrid" checked onchange="toggleMetricsWindow()">
+                            Metrics window follows grid
+                        </label>
+                    </div>
+                    <div class="form-group" id="metricsWindowGroup" style="display: none; opacity: 0.5; transition: opacity 0.3s ease;">
+                        <label>Metrics Window (cm⁻¹) — for _avg / _analyte</label>
+                        <div class="file-input-group">
+                            <input type="number" id="metricsShiftMin" value="100" min="0" max="10000" disabled>
+                            <span style="color: var(--text-muted);">to</span>
+                            <input type="number" id="metricsShiftMax" value="3600" min="0" max="15000" disabled>
+                        </div>
+                    </div>
+                    <button class="btn btn-success" onclick="generatePredictions()">Generate Predictions</button>
+                </div>
+            </div>
+
+            <!-- Metrics Selection Section -->
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/>
+                        </svg>
+                        Metrics Selection
+                    </div>
+                    <button class="collapse-btn">▼</button>
+                </div>
+                <div class="section-content">
+                    <div class="form-group">
+                        <label>Click to select primary metric (highlighted in red)</label>
+                        <div class="metric-chips" id="metricChips">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 15px; padding: 12px; background: var(--bg-primary); border-radius: 8px;">
+                        <label style="color: var(--accent-secondary); font-weight: 600; margin-bottom: 10px; display: block;">Metric Definitions</label>
+                        <div style="display: grid; gap: 8px; font-size: 0.85em;">
+                            <div><span style="color: var(--accent-warning); font-weight: 500;">Absorptance</span> — Fraction of incident light absorbed by the nanostructure</div>
+                            <div><span style="color: var(--accent-warning); font-weight: 500;">M_vol</span> — Volume-averaged field enhancement |E/E₀|²</div>
+                            <div><span style="color: var(--accent-warning); font-weight: 500;">M_surf</span> — Surface-averaged field enhancement |E/E₀|²</div>
+                            <div><span style="color: var(--accent-warning); font-weight: 500;">EF_vol</span> — SERS Enhancement Factor (volume): ⟨M(λ_L) × M(λ_R)⟩</div>
+                            <div><span style="color: var(--accent-warning); font-weight: 500;">EF_surf</span> — SERS Enhancement Factor (surface): ⟨M(λ_L) × M(λ_R)⟩</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Visualization Options Section -->
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                        </svg>
+                        Visualization Options
+                    </div>
+                    <button class="collapse-btn">▼</button>
+                </div>
+                <div class="section-content">
+                    <div class="grid-3">
+                        <div class="form-group horizontal">
+                            <label>Invert Colormap</label>
+                            <input type="checkbox" id="colormapInverted" checked onchange="updateVisualization()">
+                        </div>
+                        <div class="form-group horizontal">
+                            <label>Log Scale</label>
+                            <input type="checkbox" id="logScale" onchange="updateVisualization()">
+                        </div>
+                        <div class="form-group horizontal">
+                            <label>Show Grid</label>
+                            <input type="checkbox" id="showGrid" checked onchange="updateVisualization()">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Interpolation</label>
+                        <select id="interpolation" onchange="updateVisualization()">
+                            <option value="interp">Interpolated (smooth)</option>
+                            <option value="flat">Flat (discrete)</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" onclick="updateVisualization()">Refresh Visualization</button>
+                </div>
+            </div>
+
+            <!-- Interactive Controls Section -->
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+                            <line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                        Interactive Controls
+                    </div>
+                    <button class="collapse-btn">▼</button>
+                </div>
+                <div class="section-content">
+                    <div class="interactive-controls">
+                        <div class="control-panel">
+                            <div class="control-panel-title">Stokes Shift Slice</div>
+                            <div class="form-group">
+                                <label>Stokes Shift (cm⁻¹)</label>
+                                <input type="range" id="sliceStokes" min="100" max="3600" value="1000" step="10" oninput="document.getElementById('sliceStokesValue').textContent = this.value + ' cm⁻¹'; updateSlice();">
+                                <span class="range-value" id="sliceStokesValue">1000 cm⁻¹</span>
+                            </div>
+                        </div>
+                        <div class="control-panel">
+                            <div class="control-panel-title">Point Spectrum</div>
+                            <div class="form-group">
+                                <label>Period p (nm)</label>
+                                <input type="number" id="pointP" min="100" max="2000" value="500" step="1">
+                            </div>
+                            <div class="form-group">
+                                <label>Radius r (nm)</label>
+                                <input type="number" id="pointR" min="1" max="500" value="100" step="1">
+                            </div>
+                            <button class="btn" onclick="updateSpectrum()">Update Spectrum</button>
+                        </div>
+                    </div>
+                    <div class="btn-group" style="margin-top: 10px;">
+                        <button class="btn btn-primary" onclick="update3DVolume()">Update 3D Volume</button>
+                    </div>
+                    <div class="coordinate-display">
+                        <div class="coordinate-item">
+                            <span class="coordinate-label">Period</span>
+                            <span class="coordinate-value" id="coordP">500</span>
+                            <span class="coordinate-label">nm</span>
+                        </div>
+                        <div class="coordinate-item">
+                            <span class="coordinate-label">Radius</span>
+                            <span class="coordinate-value" id="coordR">100</span>
+                            <span class="coordinate-label">nm</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Export Section -->
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-title">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                        Export Graphics
+                    </div>
+                    <button class="collapse-btn collapsed">▼</button>
+                </div>
+                <div class="section-content collapsed">
+                    <div class="btn-group">
+                        <button class="btn" onclick="exportGraphics('laser')">Export Laser λ Map</button>
+                        <button class="btn" onclick="exportGraphics('avg')">Export Average Map</button>
+                        <button class="btn" onclick="exportGraphics('spectrum')">Export Spectrum</button>
+                        <button class="btn" onclick="exportGraphics('slice')">Export λ Slice</button>
+                        <button class="btn btn-primary" onclick="exportGraphics('all')">Export All</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-text" id="progressText">Processing...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+</body>
+</html>

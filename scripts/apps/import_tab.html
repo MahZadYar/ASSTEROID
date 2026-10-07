@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+    :root {
+        --bg-primary: #0d1419;
+        --bg-secondary: #0f1b2e;
+        --bg-tertiary: #132b42;
+        --text-primary: #f0f8fa;
+        --text-secondary: #7fa8b0;
+        --accent: #00e8ff;
+        --accent-hover: #33f5ff;
+        --success: #1fb8a8;
+        --warning: #ffb74d;
+        --error: #ff6b6b;
+        --border: #1b5055;
+        --input-bg: #0f1f2a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        font-size: 13px;
+        overflow: hidden;
+        height: 100vh;
+        margin: 0;
+        padding: 0;
+    }
+    .app-container {
+        display: flex;
+        height: 100vh;
+        width: 100%;
+    }
+    .control-panel {
+        width: 420px;
+        min-width: 420px;
+        flex-shrink: 0;
+        z-index: 10;
+        background: var(--bg-primary);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        padding: 12px;
+    }
+    .main-panel {
+        flex: 1;
+        min-width: 0;
+        background: var(--bg-primary);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding: 12px;
+    }
+    h2 {
+        font-size: 15px; font-weight: 600; color: var(--accent);
+        margin-bottom: 10px; padding-bottom: 6px;
+        border-bottom: 1px solid var(--border);
+    }
+    .section {
+        background: var(--bg-secondary);
+        border-radius: 8px; padding: 12px;
+        margin-bottom: 10px;
+        border: 1px solid var(--border);
+    }
+    .section-title {
+        font-size: 12px; font-weight: 600; color: var(--accent);
+        text-transform: uppercase; letter-spacing: 0.5px;
+        margin-bottom: 8px; cursor: pointer; user-select: none;
+    }
+    .section-title::before { content: '▸ '; }
+    .section-title.open::before { content: '▾ '; }
+    .field { margin-bottom: 8px; }
+    .field label {
+        display: block; font-size: 11px; color: var(--text-secondary);
+        margin-bottom: 3px; font-weight: 500;
+    }
+    .field input[type="text"], .field input[type="number"], .field select {
+        width: 100%; padding: 6px 8px;
+        background: var(--input-bg); border: 1px solid var(--border);
+        border-radius: 4px; color: var(--text-primary);
+        font-size: 12px; outline: none;
+    }
+    .field input:focus, .field select:focus {
+        border-color: var(--accent);
+    }
+    .field-row {
+        display: flex; gap: 8px; align-items: flex-end;
+    }
+    .field-row .field { flex: 1; }
+    .browse-row {
+        display: flex; gap: 4px;
+    }
+    .browse-row input { flex: 1; }
+    .browse-row button {
+        padding: 6px 10px; background: var(--bg-tertiary);
+        border: 1px solid var(--border); border-radius: 4px;
+        color: var(--text-primary); cursor: pointer; font-size: 11px;
+        white-space: nowrap;
+    }
+    .browse-row button:hover { background: var(--accent); color: #fff; }
+    .toggle-row {
+        display: flex; align-items: center; gap: 8px;
+        padding: 4px 0;
+    }
+    .toggle-row label {
+        font-size: 12px; color: var(--text-primary);
+        cursor: pointer; margin: 0;
+    }
+    input[type="checkbox"] {
+        accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;
+    }
+    .btn-primary {
+        width: 100%; padding: 10px; margin-top: 6px;
+        background: var(--accent); color: #000 !important; border: none;
+        border-radius: 6px; font-size: 13px; font-weight: 700;
+        cursor: pointer; transition: background 0.2s;
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary:disabled {
+        opacity: 0.5; cursor: not-allowed;
+    }
+
+    input[type="number"], .status-badge {
+        font-variant-numeric: tabular-nums;
+    }
+    button:focus-visible, input:focus-visible, select:focus-visible {
+        outline: 2px solid var(--accent) !important;
+        outline-offset: 2px !important;
+    }
+    button:active {
+        transform: scale(0.98);
+    }
+    .btn-secondary {
+        width: 100%; padding: 8px; margin-top: 4px;
+        background: var(--bg-tertiary); color: var(--text-primary);
+        border: 1px solid var(--border); border-radius: 6px;
+        font-size: 12px; cursor: pointer; transition: background 0.2s;
+    }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-preview {
+        padding: 6px 12px; margin-top: 0;
+        background: #1b5e20; color: #a5d6a7; border: 1px solid #2e7d32;
+        border-radius: 4px; font-size: 11px; font-weight: 600;
+        cursor: pointer; transition: background 0.2s; white-space: nowrap;
+    }
+    .btn-preview:hover { background: #2e7d32; color: #fff; }
+    .btn-stop {
+        background: #c62828 !important;
+        color: #ffffff !important;
+        border: 1px solid #e53935 !important;
+        border-radius: 6px;
+        padding: 6px 12px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 5px rgba(198, 40, 40, 0.4);
+    }
+    .btn-stop:hover {
+        background: #e53935 !important;
+        box-shadow: 0 3px 8px rgba(229, 57, 53, 0.6);
+    }
+    .btn-stop:active {
+        background: #b71c1c !important;
+    }
+    .btn-stop:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        box-shadow: none;
+    }
+    #progressArea {
+        background: var(--bg-secondary); border: 1px solid var(--border);
+        border-radius: 6px; padding: 8px; margin-top: 8px;
+        font-family: 'Cascadia Code', 'Consolas', monospace;
+        font-size: 11px; color: var(--text-secondary);
+        max-height: 160px; overflow-y: auto;
+        white-space: pre-wrap; word-break: break-all;
+    }
+    .progress-bar-container {
+        width: 100%; height: 4px; background: var(--bg-tertiary);
+        border-radius: 2px; margin-top: 6px; overflow: hidden;
+    }
+    .progress-bar {
+        height: 100%; background: var(--accent);
+        border-radius: 2px; width: 0%;
+        transition: width 0.3s ease;
+    }
+    .status-badge {
+        display: inline-block; padding: 2px 8px;
+        border-radius: 10px; font-size: 10px; font-weight: 600;
+    }
+    .status-idle { background: var(--bg-tertiary); color: var(--text-secondary); }
+    .status-running { background: #1b5e20; color: #a5d6a7; }
+    .status-done { background: #0d47a1; color: #90caf9; }
+    .status-error { background: #b71c1c; color: #ef9a9a; }
+
+    /* Preview table */
+    .preview-table-wrapper {
+        max-height: 340px; overflow: auto;
+        border: 1px solid var(--border); border-radius: 6px;
+        margin-top: 8px;
+    }
+    .preview-table {
+        width: 100%; border-collapse: collapse; font-size: 11px;
+        font-family: 'Cascadia Code', 'Consolas', monospace;
+    }
+    .preview-table th {
+        position: sticky; top: 0; z-index: 2;
+        background: var(--bg-tertiary); color: var(--accent);
+        padding: 6px 8px; text-align: left; font-weight: 600;
+        border-bottom: 2px solid var(--accent);
+        font-size: 11px; white-space: nowrap;
+    }
+    .preview-table .role-row th {
+        position: sticky; top: 28px; z-index: 1;
+        background: var(--bg-secondary); padding: 3px 4px;
+        border-bottom: 1px solid var(--border);
+    }
+    .preview-table .role-row select {
+        width: 100%; padding: 2px 4px;
+        background: var(--input-bg); border: 1px solid var(--border);
+        border-radius: 3px; color: var(--text-primary);
+        font-size: 10px; outline: none;
+    }
+    .preview-table .role-row select:focus { border-color: var(--accent); }
+    .preview-table .role-row select.role-input { border-color: #4caf50; color: #81c784; }
+    .preview-table .role-row select.role-spectral { border-color: #ff9800; color: #ffcc02; }
+    .preview-table .role-row select.role-metric { border-color: #2196f3; color: #90caf9; }
+    .preview-table .role-row select.role-ignore { border-color: #666; color: #888; }
+    .preview-table td {
+        padding: 3px 8px; border-bottom: 1px solid rgba(27,80,85,0.2);
+        white-space: nowrap; color: var(--text-secondary);
+    }
+    .preview-table tr:hover td { background: rgba(27,80,85,0.15); }
+    .preview-table .name-input {
+        width: 100%; padding: 2px 4px;
+        background: transparent; border: 1px solid transparent;
+        border-radius: 3px; color: var(--accent);
+        font-size: 11px; font-weight: 600; outline: none;
+        font-family: 'Cascadia Code', 'Consolas', monospace;
+    }
+    .preview-table .name-input:hover { border-color: var(--border); }
+    .preview-table .name-input:focus { border-color: var(--accent); background: var(--input-bg); }
+
+    /* Metric variants table */
+    .metric-table {
+        width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 4px;
+    }
+    .metric-table th {
+        color: var(--text-secondary); text-align: center;
+        padding: 5px 6px; border-bottom: 1px solid var(--border);
+        font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px;
+    }
+    .metric-table th:first-child { text-align: left; }
+    .metric-table td {
+        text-align: center; padding: 3px 6px;
+        border-bottom: 1px solid rgba(27, 80, 85, 0.25);
+    }
+    .metric-table td:first-child {
+        text-align: left; color: var(--text-primary);
+        font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 11px;
+    }
+    .metric-table tr:hover td { background: rgba(27, 80, 85, 0.2); }
+    .col-toggle-btn {
+        display: block; background: none; border: none; color: var(--accent);
+        cursor: pointer; font-size: 9px; font-weight: 600; padding: 1px 0;
+        text-transform: lowercase; letter-spacing: 0;
+    }
+    .col-toggle-btn:hover { color: var(--accent-hover); text-decoration: underline; }
+
+    /* Schema summary badge */
+    .schema-summary {
+        display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px;
+    }
+    .schema-badge {
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600;
+    }
+    .schema-badge.input { background: rgba(76,175,80,0.2); color: #81c784; }
+    .schema-badge.spectral { background: rgba(255,152,0,0.2); color: #ffcc02; }
+    .schema-badge.metric { background: rgba(33,150,243,0.2); color: #90caf9; }
+</style>
+<script type="text/javascript">
+
+var previewSchema = []; // [{name, role, originalName}]
+var previewData = null;
+var VARIANTS = ['laser', 'avg', 'analyte'];
+
+function setup(htmlComponent) {
+    window.htmlComponent = htmlComponent;
+
+    htmlComponent.addEventListener("Progress", function(event) {
+        handleProgress(event.Data);
+    });
+    htmlComponent.addEventListener("ImportComplete", function(event) {
+        setStatus("done", "Complete");
+        appendLog("Import complete. " + (event.Data || ""));
+        enableRun(true);
+    });
+    htmlComponent.addEventListener("RecalculateComplete", function(event) {
+        setStatus("done", "Complete");
+        appendLog("Derived metric recalculation complete. " + (event.Data || ""));
+        enableRun(true);
+    });
+    htmlComponent.addEventListener("ImportError", function(event) {
+        setStatus("error", "Error");
+        appendLog("ERROR: " + (event.Data || "Unknown error"));
+        enableRun(true);
+    });
+    htmlComponent.addEventListener("BrowseResult", function(event) {
+        if (event.Data && event.Data.field && event.Data.path) {
+            var el = document.getElementById(event.Data.field);
+            if (el) el.value = event.Data.path;
+        }
+    });
+    htmlComponent.addEventListener("PreviewResult", function(event) {
+        handlePreviewResult(event.Data);
+    });
+    htmlComponent.addEventListener("DbStatus", function(event) {
+        updateDbBanner(event.Data);
+    });
+    htmlComponent.addEventListener("ProcessStopAck", function(event) {
+        var msg = (typeof event.Data === "string") ? event.Data : ((event.Data && event.Data.message) ? event.Data.message : "Stopping ongoing process...");
+        setStatus("running", "Stopping...");
+        appendLog(msg);
+    });
+    htmlComponent.addEventListener("ProcessStopped", function(event) {
+        var msg = (typeof event.Data === "string") ? event.Data : ((event.Data && event.Data.message) ? event.Data.message : "Process terminated by user.");
+        setStatus("idle", "Terminated");
+        appendLog(msg);
+        enableRun(true);
+        resetStopButtons();
+    });
+    htmlComponent.addEventListener("ImportStopped", function(event) {
+        var msg = (typeof event.Data === "string") ? event.Data : "Import terminated by user.";
+        setStatus("idle", "Terminated");
+        appendLog(msg);
+        enableRun(true);
+        resetStopButtons();
+    });
+}
+
+function stopProcess() {
+    var stopBtns = document.querySelectorAll(".btn-stop");
+    stopBtns.forEach(function(b) {
+        b.innerHTML = "&#9632; Stopping...";
+        b.disabled = true;
+    });
+    appendLog("Stop requested by user. Terminating process...");
+    if (window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("StopProcess", {});
+    }
+}
+
+function resetStopButtons() {
+    var stopBtns = document.querySelectorAll(".btn-stop");
+    stopBtns.forEach(function(b) {
+        b.innerHTML = "&#9632; Stop";
+        b.disabled = false;
+    });
+}
+
+// ============================================================
+// Preview & Schema
+// ============================================================
+
+function previewFile() {
+    var inputFile = val("inputFile");
+    if (!inputFile) {
+        appendLog("ERROR: No input file specified.");
+        return;
+    }
+    setStatus("running", "Previewing...");
+    clearLog();
+    appendLog("Previewing file: " + inputFile);
+    window.htmlComponent.sendEventToMATLAB("PreviewFile", { inputFile: inputFile });
+}
+
+function handlePreviewResult(data) {
+    if (!data || !data.columns || !data.rows) {
+        setStatus("error", "Preview failed");
+        appendLog("ERROR: Could not parse file.");
+        return;
+    }
+
+    setStatus("done", "Preview ready");
+    appendLog("Parsed " + data.numRows + " rows, " + data.columns.length + " columns.");
+
+    // Build schema from auto-detected roles
+    previewSchema = [];
+    for (var i = 0; i < data.columns.length; i++) {
+        previewSchema.push({
+            name: data.columns[i],
+            originalName: data.columns[i],
+            role: data.roles[i] || "metric"
+        });
+    }
+    previewData = data;
+
+    // Render the preview table with schema controls below headers
+    renderPreviewTable(data);
+
+    // Build metric variants table from detected metrics
+    buildMetricVariantsTable();
+
+    // Show the right panel content and hide placeholder
+    var placeholder = document.getElementById("rightPanelPlaceholder");
+    if (placeholder) placeholder.style.display = "none";
+    
+    var rightContent = document.getElementById("rightPanelContent");
+    if (rightContent) rightContent.style.display = "flex";
+
+    // Enable the Run Import button
+    enableRun(true);
+
+    updateSchemaSummary();
+}
+
+function renderPreviewTable(data) {
+    var container = document.getElementById("previewTableContainer");
+    if (!container) return;
+
+    var cols = data.columns;
+    var rows = data.rows; // array of arrays
+
+    var html = '<table class="preview-table">';
+
+    // Header row 1: editable column names
+    html += '<thead><tr>';
+    for (var i = 0; i < cols.length; i++) {
+        html += '<th><input class="name-input" type="text" value="' + escapeHtml(previewSchema[i].name) +
+                '" data-col="' + i + '" onchange="onColumnNameChange(this)" title="Edit column name"></th>';
+    }
+    html += '</tr>';
+
+    // Header row 2: role selectors (right below column names)
+    html += '<tr class="role-row">';
+    for (var i = 0; i < cols.length; i++) {
+        var role = previewSchema[i].role;
+        html += '<th><select data-col="' + i + '" class="role-' + role + '" onchange="onRoleChange(this)">';
+        html += '<option value="input"' + (role === "input" ? ' selected' : '') + '>📥 Input</option>';
+        html += '<option value="spectral"' + (role === "spectral" ? ' selected' : '') + '>🌈 Spectral</option>';
+        html += '<option value="metric"' + (role === "metric" ? ' selected' : '') + '>📊 Metric</option>';
+        html += '<option value="ignore"' + (role === "ignore" ? ' selected' : '') + '>⊘ Ignore</option>';
+        html += '</select></th>';
+    }
+    html += '</tr></thead>';
+
+    // Data rows
+    html += '<tbody>';
+    var maxRows = Math.min(rows.length, 15);
+    for (var r = 0; r < maxRows; r++) {
+        html += '<tr>';
+        for (var c = 0; c < cols.length; c++) {
+            var val = rows[r][c];
+            if (typeof val === 'number') {
+                val = val.toPrecision(6);
+            }
+            html += '<td>' + escapeHtml(String(val)) + '</td>';
+        }
+        html += '</tr>';
+    }
+    if (rows.length > maxRows) {
+        html += '<tr><td colspan="' + cols.length + '" style="text-align:center;color:var(--text-secondary);font-style:italic;">... ' +
+                (rows.length - maxRows) + ' more rows</td></tr>';
+    }
+    html += '</tbody></table>';
+
+    container.innerHTML = html;
+}
+
+function onColumnNameChange(el) {
+    var colIdx = parseInt(el.dataset.col);
+    previewSchema[colIdx].name = el.value.trim();
+    buildMetricVariantsTable();
+    updateSchemaSummary();
+}
+
+function onRoleChange(el) {
+    var colIdx = parseInt(el.dataset.col);
+    var newRole = el.value;
+    previewSchema[colIdx].role = newRole;
+
+    // Update select styling
+    el.className = 'role-' + newRole;
+
+    // Rebuild metric variants
+    buildMetricVariantsTable();
+    updateSchemaSummary();
+}
+
+function updateSchemaSummary() {
+    var container = document.getElementById("schemaSummary");
+    if (!container) return;
+
+    var inputs = previewSchema.filter(function(s) { return s.role === "input"; });
+    var spectral = previewSchema.filter(function(s) { return s.role === "spectral"; });
+    var metrics = previewSchema.filter(function(s) { return s.role === "metric"; });
+
+    var html = '';
+    inputs.forEach(function(s) {
+        html += '<span class="schema-badge input">📥 ' + s.name + '</span>';
+    });
+    spectral.forEach(function(s) {
+        html += '<span class="schema-badge spectral">🌈 ' + s.name + '</span>';
+    });
+    metrics.forEach(function(s) {
+        html += '<span class="schema-badge metric">📊 ' + s.name + '</span>';
+    });
+
+    container.innerHTML = html;
+}
+
+function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+}
+
+// ============================================================
+// Metric Variants Table (dynamic from schema)
+// ============================================================
+
+function buildMetricVariantsTable() {
+    var tbody = document.getElementById('metricVariantsBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    var metrics = previewSchema.filter(function(s) { return s.role === "metric"; });
+    if (metrics.length === 0) return;
+
+    metrics.forEach(function(m) {
+        var tr = document.createElement('tr');
+        var tdName = document.createElement('td');
+        tdName.textContent = m.name;
+        tr.appendChild(tdName);
+
+        VARIANTS.forEach(function(variant) {
+            var td = document.createElement('td');
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.id = 'mv_' + m.name + '_' + variant;
+            // Default: laser=true, avg=true for all, analyte=false
+            if (variant === 'laser' || variant === 'avg') {
+                cb.checked = true;
+            } else {
+                cb.checked = false;
+            }
+            td.appendChild(cb);
+            tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+    });
+}
+
+function toggleColumn(variant) {
+    var metrics = previewSchema.filter(function(s) { return s.role === "metric"; });
+    var cbs = metrics.map(function(m) {
+        return document.getElementById('mv_' + m.name + '_' + variant);
+    }).filter(Boolean);
+    var allChecked = cbs.every(function(cb) { return cb.checked; });
+    cbs.forEach(function(cb) { cb.checked = !allChecked; });
+}
+
+function collectMetricVariants() {
+    var result = {};
+    var metrics = previewSchema.filter(function(s) { return s.role === "metric"; });
+    metrics.forEach(function(m) {
+        VARIANTS.forEach(function(v) {
+            var el = document.getElementById('mv_' + m.name + '_' + v);
+            result[m.name + '_' + v] = el ? el.checked : true;
+        });
+    });
+    return result;
+}
+
+// ============================================================
+// Import & Config
+// ============================================================
+
+function collectConfig() {
+    var cfg = {
+        inputFile: val("inputFile"),
+        laserWavelength: num("laserWavelength"),
+        ramanWindowMin: num("ramanWindowMin"),
+        ramanWindowMax: num("ramanWindowMax"),
+        detectShiftWindow: chk("detectShiftWindow"),
+        interpResolution: num("interpResolution"),
+        spectralInterpMethod: val("spectralInterpMethod"),
+        mode: val("mode"),
+        recalculateExisting: chk("recalculateExisting"),
+        metricVariants: collectMetricVariants()
+    };
+
+    // Include the column schema
+    if (previewSchema.length > 0) {
+        cfg.columnSchema = previewSchema.map(function(s) {
+            return { name: s.name, originalName: s.originalName, role: s.role };
+        });
+    }
+
+    return cfg;
+}
+
+function runImport() {
+    if (previewSchema.length === 0) {
+        appendLog("ERROR: Preview the file first to configure columns.");
+        return;
+    }
+    enableRun(false);
+    clearLog();
+    setStatus("running", "Running...");
+    window.htmlComponent.sendEventToMATLAB("RunImport", collectConfig());
+}
+
+function recalculateDerived() {
+    enableRun(false);
+    clearLog();
+    setStatus("running", "Recalculating...");
+    window.htmlComponent.sendEventToMATLAB("RecalculateDerived", collectConfig());
+}
+
+function browse(fieldId, type) {
+    window.htmlComponent.sendEventToMATLAB("BrowseFile", {field: fieldId, type: type});
+}
+
+function handleProgress(data) {
+    if (!data) return;
+    if (data.message) appendLog(data.message);
+    if (data.fraction !== undefined && data.fraction !== null) {
+        var pct = Math.round(data.fraction * 100);
+        document.getElementById("progressBar").style.width = pct + "%";
+    }
+}
+
+function val(id) { return document.getElementById(id).value; }
+function num(id) { return parseFloat(document.getElementById(id).value) || 0; }
+function chk(id) { return document.getElementById(id).checked; }
+
+function enableRun(state) {
+    document.getElementById("btnRun").disabled = !state;
+    var btnRecalc = document.getElementById("btnRecalc");
+    if (btnRecalc) btnRecalc.disabled = !state;
+}
+function updateDbBanner(d) {
+    var banner = document.getElementById("dbStatusBanner");
+    if (!banner || !d) return;
+    if (!d.hasSimData && !d.hasModel) { banner.style.display = "none"; return; }
+    banner.style.display = "block";
+    var parts = [];
+    if (d.hasSimData) parts.push(d.simEntries + " sim");
+    if (d.hasModel) parts.push("Model \u2713");
+    if (d.hasPredictions) parts.push(d.predEntries + " pred");
+    banner.textContent = "DB: " + parts.join(" | ");
+}
+
+function setStatus(cls, text) {
+    var el = document.getElementById("statusBadge");
+    el.className = "status-badge status-" + cls;
+    el.textContent = text;
+}
+
+function appendLog(msg) {
+    var el = document.getElementById("progressLog");
+    el.textContent += msg + "\n";
+    el.scrollTop = el.scrollHeight;
+}
+
+function clearLog() {
+    document.getElementById("progressLog").textContent = "";
+    document.getElementById("progressBar").style.width = "0%";
+}
+
+function toggleSection(el) {
+    el.classList.toggle("open");
+    var content = el.nextElementSibling;
+    content.style.display = content.style.display === "none" ? "block" : "none";
+}
+</script>
+</head>
+<body>
+<div class="app-container">
+    <!-- LEFT PANEL: Controls -->
+    <div class="control-panel">
+        <div id="dbStatusBanner" style="display:none;background:#132b42;border:1px solid #1b5055;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:11px;color:#7fa8b0;"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);">
+            <h2 style="margin:0;padding:0;border:none;">Stage 1 — Import & Database</h2>
+            <div style="display:flex;gap:6px;align-items:center;">
+                <button class="btn-secondary" style="padding:4px 10px;font-size:11px;margin-top:0;" onclick="window.htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
+                <button class="btn-secondary" style="padding:4px 10px;font-size:11px;margin-top:0;" onclick="window.htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
+                <button class="btn-stop" id="btnStopHeader" onclick="stopProcess()">&#9632; Stop</button>
+            </div>
+        </div>
+
+        <!-- File Paths -->
+        <div class="section">
+            <div class="section-title open" onclick="toggleSection(this)">File Paths</div>
+            <div>
+                <div class="field">
+                    <label>Input Sweep File (.dat / .csv)</label>
+                    <div class="browse-row">
+                        <input type="text" id="inputFile" value="SweepPropeTable.dat">
+                        <button onclick="browse('inputFile','file')">...</button>
+                        <button class="btn-preview" onclick="previewFile()">👁 Preview</button>
+                    </div>
+                </div>
+                <div class="field">
+                    <label>Analyte Raman Spectrum <span style="color:var(--text-secondary);font-size:10px;">(from DB; fallback: codebase default)</span></label>
+                    <input type="text" value="Managed by Database tab (Global.AnalyteSpectrumFile)" readonly>
+                </div>
+            </div>
+        </div>
+
+        <!-- Physical Parameters -->
+        <div class="section">
+            <div class="section-title open" onclick="toggleSection(this)">Physical Parameters</div>
+            <div>
+                <div class="field">
+                    <label>Laser Wavelength (nm)</label>
+                    <input type="number" id="laserWavelength" value="785" step="0.1">
+                </div>
+                <div class="field-row">
+                    <div class="field">
+                        <label>Raman Window Min (cm⁻¹)</label>
+                        <input type="number" id="ramanWindowMin" value="100" step="1">
+                    </div>
+                    <div class="field">
+                        <label>Max (cm⁻¹)</label>
+                        <input type="number" id="ramanWindowMax" value="3600" step="1">
+                    </div>
+                </div>
+                <div class="toggle-row">
+                    <input type="checkbox" id="detectShiftWindow">
+                    <label for="detectShiftWindow">Auto-detect shift window from data</label>
+                </div>
+                <div class="field">
+                    <label>Interpolation Resolution (cm⁻¹)</label>
+                    <input type="number" id="interpResolution" value="1" step="0.1" min="0.1">
+                </div>
+                <div class="field">
+                    <label>Spectral Interpolation Function</label>
+                    <select id="spectralInterpMethod">
+                        <option value="makima" selected>makima</option>
+                        <option value="pchip">pchip</option>
+                        <option value="linear">linear</option>
+                        <option value="spline">spline</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Import Options -->
+        <div class="section">
+            <div class="section-title open" onclick="toggleSection(this)">Import Options</div>
+            <div>
+                <div class="field">
+                    <label>Import Mode</label>
+                    <select id="mode">
+                        <option value="merge">Merge / Append</option>
+                        <option value="rebuild">Rebuild (Clean)</option>
+                    </select>
+                </div>
+                <div class="toggle-row">
+                    <input type="checkbox" id="recalculateExisting" checked>
+                    <label for="recalculateExisting">Recalculate existing entries</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <button id="btnRecalc" class="btn-secondary" onclick="recalculateDerived()">Recalculate Derived Metrics</button>
+        <button id="btnRun" class="btn-primary" onclick="runImport()" disabled>▶ Run Import (Preview first)</button>
+        <button id="btnStopAction" class="btn-stop" style="width:100%;margin-top:6px;padding:9px;" onclick="stopProcess()">&#9632; Stop Process</button>
+
+        <!-- Progress -->
+        <div id="progressArea">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                <span style="font-weight:600; color:var(--text-primary);">Progress</span>
+                <span id="statusBadge" class="status-badge status-idle">Idle</span>
+            </div>
+            <div class="progress-bar-container">
+                <div id="progressBar" class="progress-bar"></div>
+            </div>
+            <pre id="progressLog" style="margin-top:6px; min-height:40px;"></pre>
+        </div>
+    </div> <!-- /control-panel -->
+
+    <!-- RIGHT PANEL: Main / Preview -->
+    <div class="main-panel">
+        <div id="rightPanelPlaceholder" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--text-secondary);">
+            <div style="font-size:48px; opacity:0.5; margin-bottom:16px;">👁️</div>
+            <h3 style="font-size:16px; margin-bottom:8px; color:var(--text-primary);">No Data Loaded</h3>
+            <p>Click "Preview" to inspect the sweep file</p>
+        </div>
+
+        <div id="rightPanelContent" style="display:none; flex:1; flex-direction:column; overflow:hidden;">
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border);">
+                Assign each column a role. Edit names by clicking headers. Roles:
+                <span style="color:#81c784;font-weight:600;margin-left:4px;">📥 Input</span> (geometry params)
+                <span style="color:#ffcc02;font-weight:600;margin-left:4px;">🌈 Spectral</span> (wavelength/freq)
+                <span style="color:#90caf9;font-weight:600;margin-left:4px;">📊 Metric</span> (output quantities)
+                <span style="color:#888;font-weight:600;margin-left:4px;">⊘ Ignore</span>
+            </div>
+            
+            <!-- Table area takes up available space -->
+            <div id="previewTableContainer" style="flex:1; overflow:auto; border:1px solid var(--border); border-radius:6px; background:var(--bg-secondary);"></div>
+            
+            <div class="schema-summary" id="schemaSummary" style="margin-top:8px; margin-bottom:16px; min-height:24px;"></div>
+
+            <!-- Metric Variants pinned to bottom -->
+            <div style="flex:none; background:var(--bg-secondary); border:1px solid var(--border); border-radius:6px; padding:10px;">
+                <h3 style="font-size:12px; font-weight:600; color:var(--accent); margin-bottom:4px;">Metric Variants to Compute</h3>
+                <div style="font-size:10px;color:var(--text-secondary);margin-bottom:8px;">Select which scalar variants to compute for each metric during import.</div>
+                <div style="overflow-y:auto; max-height:180px;">
+                    <table class="metric-table" style="margin-top:0;">
+                        <thead>
+                            <tr>
+                                <th>Metric</th>
+                                <th>
+                                    _laser
+                                    <button class="col-toggle-btn" onclick="toggleColumn('laser')">toggle all</button>
+                                </th>
+                                <th>
+                                    _avg
+                                    <button class="col-toggle-btn" onclick="toggleColumn('avg')">toggle all</button>
+                                </th>
+                                <th>
+                                    _analyte
+                                    <button class="col-toggle-btn" onclick="toggleColumn('analyte')">toggle all</button>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="metricVariantsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div> <!-- /main-panel -->
+</div> <!-- /app-container -->
+</body>
+</html>

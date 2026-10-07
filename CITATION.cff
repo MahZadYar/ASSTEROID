@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: "If you use ASSTEROID or its inverse design methodology, please cite it as below."
+authors:
+  - family-names: "Moussavi"
+    given-names: "Maziar"
+    affiliation: "Institute of Materials Science, Kaunas University of Technology, Kaunas, Lithuania"
+  - family-names: "Tamulevičius"
+    given-names: "Sigitas"
+    affiliation: "Institute of Materials Science, Kaunas University of Technology, Kaunas, Lithuania"
+title: "ASSTEROID: Adaptive Sampling, Surrogate Training, Exploration and Refinement for Optimal Inverse Design"
+version: 1.0.0
+date-released: 2026-10-07
+url: "https://github.com/MahZadYar/ASSTEROID"
+repository-code: "https://github.com/MahZadYar/ASSTEROID"
+keywords:
+  - "plasmonics"
+  - "inverse-design"
+  - "surrogate-modeling"
+  - "deep-learning"
+  - "resnet"
+  - "surface-enhanced-raman-scattering"
+  - "nanophotonics"
+  - "matlab"
+preferred-citation:
+  type: article
+  authors:
+    - family-names: "Moussavi"
+      given-names: "Maziar"
+    - family-names: "Tamulevičius"
+      given-names: "Sigitas"
+  title: "Rational Design of Plasmonic Gas Sensors by Optimizing Spectrally-Resolved Volumetric Raman Enhancement Factor"
+  journal: "ACS Nano"
+  year: 2026

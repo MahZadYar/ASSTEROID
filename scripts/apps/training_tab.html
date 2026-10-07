@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+    :root {
+        --bg-primary: #0d1419;
+        --bg-secondary: #0f1b2e;
+        --bg-tertiary: #132b42;
+        --text-primary: #f0f8fa;
+        --text-secondary: #7fa8b0;
+        --accent: #00e8ff;
+        --accent-hover: #33f5ff;
+        --success: #1fb8a8;
+        --warning: #ffb74d;
+        --error: #ff6b6b;
+        --border: #1b5055;
+        --input-bg: #0f1f2a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        font-size: 13px;
+        padding: 12px;
+        overflow-y: auto;
+        height: 100vh;
+    }
+    h2 {
+        font-size: 15px; font-weight: 600; color: var(--accent);
+        margin-bottom: 10px; padding-bottom: 6px;
+        border-bottom: 1px solid var(--border);
+    }
+    .section {
+        background: var(--bg-secondary);
+        border-radius: 8px; padding: 12px;
+        margin-bottom: 10px;
+        border: 1px solid var(--border);
+    }
+    .section-title {
+        font-size: 12px; font-weight: 600; color: var(--accent);
+        text-transform: uppercase; letter-spacing: 0.5px;
+        margin-bottom: 8px; cursor: pointer; user-select: none;
+    }
+    .section-title::before { content: '▸ '; }
+    .section-title.open::before { content: '▾ '; }
+    .field { margin-bottom: 8px; }
+    .field label {
+        display: block; font-size: 11px; color: var(--text-secondary);
+        margin-bottom: 3px; font-weight: 500;
+    }
+    .field input[type="text"], .field input[type="number"], .field select {
+        width: 100%; padding: 6px 8px;
+        background: var(--input-bg); border: 1px solid var(--border);
+        border-radius: 4px; color: var(--text-primary);
+        font-size: 12px; outline: none;
+    }
+    .field input:focus, .field select:focus { border-color: var(--accent); }
+    .field-row { display: flex; gap: 8px; align-items: flex-end; }
+    .field-row .field { flex: 1; }
+    .browse-row { display: flex; gap: 4px; }
+    .browse-row input { flex: 1; }
+    .browse-row button {
+        padding: 6px 10px; background: var(--bg-tertiary);
+        border: 1px solid var(--border); border-radius: 4px;
+        color: var(--text-primary); cursor: pointer; font-size: 11px;
+        white-space: nowrap;
+    }
+    .browse-row button:hover { background: var(--accent); color: #fff; }
+    .toggle-row {
+        display: flex; align-items: center; gap: 8px; padding: 4px 0;
+    }
+    .toggle-row label {
+        font-size: 12px; color: var(--text-primary);
+        cursor: pointer; margin: 0;
+    }
+    input[type="checkbox"] {
+        accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;
+    }
+    .metrics-grid {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px;
+    }
+    .btn-primary {
+        width: 100%; padding: 10px; margin-top: 6px;
+        background: var(--accent); color: #000 !important; border: none;
+        border-radius: 6px; font-size: 13px; font-weight: 700;
+        cursor: pointer; transition: background 0.2s;
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    input[type="number"], .status-badge {
+        font-variant-numeric: tabular-nums;
+    }
+    button:focus-visible, input:focus-visible, select:focus-visible {
+        outline: 2px solid var(--accent) !important;
+        outline-offset: 2px !important;
+    }
+    button:active {
+        transform: scale(0.98);
+    }
+    .btn-stop {
+        background: #c62828 !important;
+        color: #ffffff !important;
+        border: 1px solid #e53935 !important;
+        border-radius: 6px;
+        padding: 6px 12px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 5px rgba(198, 40, 40, 0.4);
+    }
+    .btn-stop:hover {
+        background: #e53935 !important;
+        box-shadow: 0 3px 8px rgba(229, 57, 53, 0.6);
+    }
+    .btn-stop:active {
+        background: #b71c1c !important;
+    }
+    .btn-stop:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        box-shadow: none;
+    }
+    .btn-secondary {
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 5px 10px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .btn-secondary:hover {
+        background: var(--accent);
+        color: #000;
+        border-color: var(--accent);
+    }
+    .btn-link {
+        background: none;
+        border: none;
+        color: var(--accent);
+        font-size: 11px;
+        cursor: pointer;
+        text-decoration: underline;
+        padding: 0;
+    }
+    .btn-link:hover {
+        color: var(--accent-hover);
+    }
+    #progressArea {
+        background: var(--bg-secondary); border: 1px solid var(--border);
+        border-radius: 6px; padding: 8px; margin-top: 8px;
+        font-family: 'Cascadia Code', 'Consolas', monospace;
+        font-size: 11px; color: var(--text-secondary);
+        max-height: 160px; overflow-y: auto;
+        white-space: pre-wrap; word-break: break-all;
+    }
+    .progress-bar-container {
+        width: 100%; height: 4px; background: var(--bg-tertiary);
+        border-radius: 2px; margin-top: 6px; overflow: hidden;
+    }
+    .progress-bar {
+        height: 100%; background: var(--accent);
+        border-radius: 2px; width: 0%; transition: width 0.3s ease;
+    }
+    .status-badge {
+        display: inline-block; padding: 2px 8px;
+        border-radius: 10px; font-size: 10px; font-weight: 600;
+    }
+    .status-idle { background: var(--bg-tertiary); color: var(--text-secondary); }
+    .status-running { background: #1b5e20; color: #a5d6a7; }
+    .status-done { background: #0d47a1; color: #90caf9; }
+    .status-error { background: #b71c1c; color: #ef9a9a; }
+</style>
+<script type="text/javascript">
+function setup(htmlComponent) {
+    window.htmlComponent = htmlComponent;
+
+    htmlComponent.addEventListener("Progress", function(event) {
+        handleProgress(event.Data);
+    });
+    htmlComponent.addEventListener("TrainComplete", function(event) {
+        setStatus("done", "Complete");
+        appendLog("Training complete. " + (event.Data || ""));
+        enableRun(true);
+    });
+    htmlComponent.addEventListener("TrainError", function(event) {
+        setStatus("error", "Error");
+        appendLog("ERROR: " + (event.Data || "Unknown error"));
+        enableRun(true);
+    });
+
+    htmlComponent.addEventListener("DbAutoFill", function(event) {
+        var d = event.Data || {};
+    });
+    htmlComponent.addEventListener("DbStatus", function(event) {
+        updateDbBanner(event.Data);
+        updateRequirements(event.Data);
+    });
+    htmlComponent.addEventListener("SaveComplete", function(event) {
+        appendLog(event.Data || "Database saved.");
+    });
+    htmlComponent.addEventListener("TrainStopAck", function(event) {
+        setStatus("running", "Stopping...");
+        appendLog(event.Data || "Stop requested. Waiting for current iteration to finish...");
+    });
+    htmlComponent.addEventListener("ProcessStopAck", function(event) {
+        var msg = (typeof event.Data === "string") ? event.Data : ((event.Data && event.Data.message) ? event.Data.message : "Stopping process...");
+        setStatus("running", "Stopping...");
+        appendLog(msg);
+    });
+    htmlComponent.addEventListener("TrainStopped", function(event) {
+        setStatus("idle", "Terminated");
+        appendLog("Training stopped: " + (event.Data || "Terminated by user."));
+        enableRun(true);
+        resetStopButtons();
+    });
+    htmlComponent.addEventListener("ProcessStopped", function(event) {
+        var msg = (typeof event.Data === "string") ? event.Data : ((event.Data && event.Data.message) ? event.Data.message : "Process terminated by user.");
+        setStatus("idle", "Terminated");
+        appendLog(msg);
+        enableRun(true);
+        resetStopButtons();
+    });
+
+    htmlComponent.addEventListener("CheckpointFileSelected", function(event) {
+        var d = event.Data || {};
+        var fp = d.filePath || "";
+        var fn = d.fileName || "";
+        if (fp) {
+            var input = document.getElementById("customPretrainedFile");
+            if (input) input.value = fp;
+            var srcFile = document.getElementById("srcFile");
+            if (srcFile) {
+                srcFile.checked = true;
+                togglePretrainedSource();
+            }
+            var badge = document.getElementById("checkpointFileBadge");
+            if (badge) {
+                badge.innerHTML = "&#10003; Selected: " + (fn || fp);
+                badge.style.color = "var(--success)";
+            }
+            appendLog("Selected model/checkpoint file: " + fp);
+        }
+    });
+
+    htmlComponent.addEventListener("CheckpointDirSelected", function(event) {
+        var d = event.Data || {};
+        var dp = d.dirPath || "";
+        if (dp) {
+            var input = document.getElementById("checkpointPath");
+            if (input) input.value = dp;
+            appendLog("Selected checkpoint folder: " + dp);
+        }
+    });
+
+    htmlComponent.addEventListener("LatestCheckpointFound", function(event) {
+        var d = event.Data || {};
+        var badge = document.getElementById("checkpointFileBadge");
+        if (d.found && d.filePath) {
+            var input = document.getElementById("customPretrainedFile");
+            if (input) input.value = d.filePath;
+            var srcFile = document.getElementById("srcFile");
+            if (srcFile) {
+                srcFile.checked = true;
+                togglePretrainedSource();
+            }
+            if (badge) {
+                var extra = d.infoStr ? " (" + d.infoStr + ")" : (d.dateStr ? " (" + d.dateStr + ")" : "");
+                badge.innerHTML = "&#10003; Latest: " + (d.fileName || d.filePath) + extra;
+                badge.style.color = "var(--success)";
+            }
+            appendLog("Found latest checkpoint: " + d.filePath + (d.infoStr ? " [" + d.infoStr + "]" : ""));
+        } else {
+            appendLog("No recent checkpoints found on disk in C:\\tmp\\DNNCheckPoints\\ or project DNNCheckpoints/.");
+            if (badge) {
+                badge.innerHTML = "&#10007; No checkpoints found on disk";
+                badge.style.color = "var(--error)";
+            }
+        }
+    });
+
+    // Show/hide pretrained options when checkbox changes
+    var ctEl = document.getElementById("continueTraining");
+    if (ctEl) {
+        ctEl.addEventListener("change", function() {
+            var container = document.getElementById("continueOptionsContainer");
+            if (container) container.style.display = this.checked ? "block" : "none";
+        });
+    }
+}
+
+function togglePretrainedSource() {
+    var srcDb = document.getElementById("srcDb");
+    var isDb = srcDb && srcDb.checked;
+    var dbRow = document.getElementById("dbModelStatusRow");
+    var fileRow = document.getElementById("fileModelRow");
+    if (dbRow) dbRow.style.display = isDb ? "block" : "none";
+    if (fileRow) fileRow.style.display = isDb ? "none" : "flex";
+}
+
+function browseCheckpointFile() {
+    if (window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("BrowseCheckpointFile", {});
+    }
+}
+
+function browseCheckpointDir() {
+    if (window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("BrowseCheckpointDir", {});
+    }
+}
+
+function findLatestCheckpoint() {
+    appendLog("Searching disk for recent checkpoints...");
+    if (window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("FindLatestCheckpoint", {});
+    }
+}
+
+function stopProcess() {
+    var stopBtns = document.querySelectorAll(".btn-stop");
+    stopBtns.forEach(function(b) {
+        b.innerHTML = "&#9632; Stopping...";
+        b.disabled = true;
+    });
+    appendLog("Stop requested by user. Terminating process...");
+    if (window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("StopProcess", {});
+    }
+}
+
+function resetStopButtons() {
+    var stopBtns = document.querySelectorAll(".btn-stop");
+    stopBtns.forEach(function(b) {
+        b.innerHTML = "&#9632; Stop";
+        b.disabled = false;
+    });
+}
+
+function collectConfig() {
+    var metrics = [];
+    document.querySelectorAll('.metric-cb:checked').forEach(function(cb) {
+        metrics.push(cb.value);
+    });
+    
+    var fc1b = num("fc1b");
+    var headSizes = val("headHiddenSizes");
+    var isPretrainedFile = document.getElementById("srcFile") && document.getElementById("srcFile").checked;
+    var customPretrainedFile = val("customPretrainedFile");
+    
+    return {
+        continueTraining: chk("continueTraining"),
+        pretrainedSource: isPretrainedFile ? "file" : "db",
+        customPretrainedFile: customPretrainedFile,
+        ratioLimitMin: num("ratioLimitMin"),
+        ratioLimitMax: num("ratioLimitMax"),
+        metricsToTrain: metrics,
+        maxEpochs: num("maxEpochs"),
+        miniBatchSize: num("miniBatchSize"),
+        learningRate: num("learningRate"),
+        optimizer: val("optimizer"),
+        lossFunction: val("lossFunction"),
+        learnRateSchedule: val("learnRateSchedule"),
+        learnRateDropFactor: num("learnRateDropFactor"),
+        learnRateDropPeriod: num("learnRateDropPeriod"),
+        gradientThreshold: val("gradientThreshold") === "" ? Infinity : num("gradientThreshold"),
+        gradientThresholdMethod: val("gradientThresholdMethod"),
+        l2Regularization: num("l2Regularization"),
+        momentum: num("momentum"),
+        gradientDecayFactor: num("gradientDecayFactor"),
+        squaredGradientDecayFactor: num("squaredGradientDecayFactor"),
+        epsilon: num("epsilon"),
+        shuffle: val("shuffle"),
+        validationFrequency: numOrNaN("validationFrequency"),
+        validationPatience: numOrNaN("validationPatience"),
+        verboseFrequency: numOrNaN("verboseFrequency"),
+        plots: val("plots"),
+        objectiveMetricName: val("objectiveMetricName"),
+        progressDisplayMode: val("progressDisplayMode"),
+        outputNetwork: val("outputNetwork"),
+        executionEnvironment: val("executionEnvironment"),
+        preprocessingEnvironment: val("preprocessingEnvironment"),
+        acceleration: val("acceleration"),
+        checkpointPath: val("checkpointPath"),
+        checkpointFrequency: numOrNaN("checkpointFrequency"),
+        checkpointFrequencyUnit: val("checkpointFrequencyUnit"),
+        resetInputNormalization: chk("resetInputNormalization"),
+        batchNormalizationStatistics: val("batchNormalizationStatistics"),
+        sequenceLength: val("sequenceLength"),
+        sequencePaddingDirection: val("sequencePaddingDirection"),
+        sequencePaddingValue: numOrNaN("sequencePaddingValue"),
+        inputDataFormats: val("inputDataFormats"),
+        targetDataFormats: val("targetDataFormats"),
+        categoricalInputEncoding: val("categoricalInputEncoding"),
+        categoricalTargetEncoding: val("categoricalTargetEncoding"),
+        extraTrainingOptions: val("extraTrainingOptions"),
+        verbose: chk("verbose"),
+        holdout: num("holdout"),
+        valSplit: num("valSplit"),
+        saveArtifacts: chk("saveArtifacts"),
+        featureLogTransform: chk("featureLogTransform"),
+        includeRatios: chk("includeRatios"),
+        targetLogTransform: chk("targetLogTransform"),
+        useMultiHead: chk("useMultiHead"),
+        fc1a: num("fc1a"),
+        fc1b: fc1b,
+        proj1: fc1b,  // Auto-determined
+        fc2a: num("fc2a"),
+        fc2b: fc1b,   // Auto-determined
+        headHiddenSizes: headSizes,
+        targetLossWeights: val("targetLossWeights")
+    };
+}
+
+function runTraining() {
+    enableRun(false);
+    clearLog();
+    setStatus("running", "Training...");
+    window.htmlComponent.sendEventToMATLAB("RunTraining", collectConfig());
+}
+
+function handleProgress(data) {
+    if (!data) return;
+    if (data.message) appendLog(data.message);
+    if (data.fraction !== undefined && data.fraction !== null) {
+        var pct = Math.round(data.fraction * 100);
+        document.getElementById("progressBar").style.width = pct + "%";
+    }
+}
+
+function val(id) {
+    var el = document.getElementById(id);
+    return el ? el.value : "";
+}
+function num(id) { return parseFloat(val(id)) || 0; }
+function numOrNaN(id) {
+    var raw = val(id);
+    if (raw === "" || raw === null || raw === undefined) return NaN;
+    var parsed = parseFloat(raw);
+    return isNaN(parsed) ? NaN : parsed;
+}
+function chk(id) {
+    var el = document.getElementById(id);
+    return el ? el.checked : false;
+}
+
+function enableRun(state) {
+    document.getElementById("btnRun").disabled = !state;
+}
+function fillIfEmpty(id, value) {
+    if (!value) return;
+    var el = document.getElementById(id);
+    if (el && (el.value === "" || el.value === el.defaultValue)) el.value = value;
+}
+function updateDbBanner(d) {
+    var banner = document.getElementById("dbStatusBanner");
+    if (!banner || !d) return;
+    if (!d.hasSimData && !d.hasModel) { banner.style.display = "none"; return; }
+    banner.style.display = "block";
+    var parts = [];
+    if (d.hasSimData) parts.push(d.simEntries + " sim");
+    if (d.hasModel) parts.push("Model \u2713");
+    if (d.hasPredictions) parts.push(d.predEntries + " pred");
+    banner.textContent = "DB: " + parts.join(" | ");
+}
+
+function updateRequirements(d) {
+    if (!d) return;
+    var simEl = document.getElementById("reqSimData");
+    if (simEl) {
+        if (d.hasSimData) {
+            simEl.innerHTML = "&#10003; " + d.simEntries + " entries";
+            simEl.style.color = "var(--success)";
+        } else {
+            simEl.innerHTML = "&#10007; Not loaded";
+            simEl.style.color = "var(--error)";
+        }
+    }
+    var riEl = document.getElementById("reqRI");
+    if (riEl) {
+        if (d.hasRI) {
+            riEl.innerHTML = "&#10003; Loaded";
+            riEl.style.color = "var(--success)";
+        } else {
+            riEl.innerHTML = "&#8212; Auto (McPeak)";
+            riEl.style.color = "var(--text-secondary)";
+        }
+    }
+    var ptBadge = document.getElementById("pretrainedModelBadge");
+    if (ptBadge) {
+        if (d.hasModel) {
+            ptBadge.innerHTML = "&#10003; Available in db.Model";
+            ptBadge.style.color = "var(--success)";
+        } else {
+            ptBadge.innerHTML = "&#10007; Not in db.Model";
+            ptBadge.style.color = "var(--error)";
+        }
+    }
+    var analyteEl = document.getElementById("reqAnalyte");
+    if (analyteEl) {
+        if (d.hasAnalyte) {
+            analyteEl.innerHTML = "&#10003; Loaded";
+            analyteEl.style.color = "var(--success)";
+        } else {
+            analyteEl.innerHTML = "&#8212; Optional";
+            analyteEl.style.color = "var(--text-secondary)";
+        }
+    }
+}
+
+function setStatus(cls, text) {
+    var el = document.getElementById("statusBadge");
+    el.className = "status-badge status-" + cls;
+    el.textContent = text;
+}
+
+function appendLog(msg) {
+    var el = document.getElementById("progressLog");
+    el.textContent += msg + "\n";
+    el.scrollTop = el.scrollHeight;
+}
+
+function clearLog() {
+    document.getElementById("progressLog").textContent = "";
+    document.getElementById("progressBar").style.width = "0%";
+}
+
+function toggleSection(el) {
+    el.classList.toggle("open");
+    var content = el.nextElementSibling;
+    content.style.display = content.style.display === "none" ? "block" : "none";
+}
+
+
+</script>
+</head>
+<body>
+    <div id="dbStatusBanner" style="display:none;background:#132b42;border:1px solid #1b5055;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:11px;color:#7fa8b0;"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <h2 style="margin:0;border:none;padding:0;">Stage 3 — DNN Training</h2>
+        <div style="display:flex;gap:6px;align-items:center;">
+            <button class="btn-secondary" style="padding:4px 10px;font-size:11px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer;" onclick="window.htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
+            <button class="btn-secondary" style="padding:4px 10px;font-size:11px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer;" onclick="window.htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
+            <button class="btn-stop" id="btnStopHeader" onclick="stopProcess()">&#9632; Stop</button>
+        </div>
+    </div>
+
+    <!-- Data Requirements -->
+    <div class="section">
+        <div class="section-title open" onclick="toggleSection(this)">Data Requirements</div>
+        <div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;">Data is loaded from the Database (Tab 0). Go there to load files into db branches.</div>
+            <div class="status-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                <div class="status-card" style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;padding:8px 10px;">
+                    <div style="font-size:10px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Simulation Data</div>
+                    <div id="reqSimData" style="font-size:13px;font-weight:700;color:var(--error);">&#10007; Not loaded</div>
+                </div>
+                <div class="status-card" style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;padding:8px 10px;">
+                    <div style="font-size:10px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Refractive Index</div>
+                    <div id="reqRI" style="font-size:13px;font-weight:700;color:var(--text-secondary);">&#8212; Optional</div>
+                </div>
+                <div class="status-card" style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;padding:8px 10px;">
+                    <div style="font-size:10px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Analyte Spectrum</div>
+                    <div id="reqAnalyte" style="font-size:13px;font-weight:700;color:var(--text-secondary);">&#8212; Optional</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fine-Tuning & Checkpoints -->
+    <div class="section">
+        <div class="section-title open" onclick="toggleSection(this)">Fine-Tuning & Checkpoints</div>
+        <div>
+            <div class="toggle-row">
+                <input type="checkbox" id="continueTraining">
+                <label for="continueTraining" style="font-weight:600;">Continue / Resume training from pretrained model or checkpoint</label>
+            </div>
+            
+            <div id="continueOptionsContainer" style="display:none; margin-top:8px; padding:10px; background:var(--bg-tertiary); border:1px solid var(--border); border-radius:6px;">
+                <div style="font-size:10px; font-weight:600; color:var(--text-secondary); text-transform:uppercase; margin-bottom:8px; letter-spacing:0.5px;">
+                    Model / Checkpoint Source
+                </div>
+                
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    <!-- Option 1: db.Model -->
+                    <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer;">
+                        <input type="radio" name="pretrainedSource" value="db" id="srcDb" checked onchange="togglePretrainedSource()">
+                        <span>From current database (<code style="font-size:11px;">db.Model</code>)</span>
+                    </label>
+                    <div id="dbModelStatusRow" style="margin-left:22px; font-size:11px; color:var(--text-secondary);">
+                        Status: <span id="pretrainedModelBadge" style="color:var(--error); font-weight:600;">&#10007; Not in db.Model</span>
+                    </div>
+
+                    <!-- Option 2: File from Disk / Checkpoint -->
+                    <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer; margin-top:2px;">
+                        <input type="radio" name="pretrainedSource" value="file" id="srcFile" onchange="togglePretrainedSource()">
+                        <span>Load checkpoint / model file from disk (<code style="font-size:11px;">.mat</code>)</span>
+                    </label>
+                    
+                    <div id="fileModelRow" style="margin-left:22px; display:none; flex-direction:column; gap:6px;">
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            <input type="text" id="customPretrainedFile" placeholder="Path to .mat checkpoint or model file..." style="flex:1; font-size:11px;" oninput="document.getElementById('srcFile').checked=true; togglePretrainedSource();">
+                            <button type="button" class="btn-secondary" onclick="browseCheckpointFile()" style="white-space:nowrap;">&#128194; Browse...</button>
+                        </div>
+                        <div style="display:flex; align-items:center; justify-content:space-between; font-size:11px;">
+                            <span id="checkpointFileBadge" style="color:var(--text-secondary);">Select a saved network snapshot (.mat)</span>
+                            <button type="button" class="btn-link" onclick="findLatestCheckpoint()">
+                                &#128269; Find Latest Checkpoint on Disk
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="margin-top:8px; padding-top:6px; border-top:1px solid var(--border); font-size:10px; color:var(--text-secondary);">
+                    💡 <em>Tip: If a training session was interrupted or froze, select the newest checkpoint file to continue directly from that epoch!</em>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Target Metrics & Filtering -->
+    <div class="section">
+        <div class="section-title open" onclick="toggleSection(this)">Targets & Filtering</div>
+        <div>
+            <div class="field">
+                <label>Metrics to Train</label>
+                <div class="metrics-grid">
+                    <div class="toggle-row">
+                        <input type="checkbox" class="metric-cb" value="Absorptance" id="m_Abs" checked>
+                        <label for="m_Abs">Absorptance</label>
+                    </div>
+                    <div class="toggle-row">
+                        <input type="checkbox" class="metric-cb" value="EF_vol" id="m_EFv" checked>
+                        <label for="m_EFv">EF_vol</label>
+                    </div>
+                    <div class="toggle-row">
+                        <input type="checkbox" class="metric-cb" value="EF_surf" id="m_EFs" checked>
+                        <label for="m_EFs">EF_surf</label>
+                    </div>
+                    <div class="toggle-row">
+                        <input type="checkbox" class="metric-cb" value="M_vol" id="m_Mv">
+                        <label for="m_Mv">M_vol</label>
+                    </div>
+                    <div class="toggle-row">
+                        <input type="checkbox" class="metric-cb" value="M_surf" id="m_Ms">
+                        <label for="m_Ms">M_surf</label>
+                    </div>
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>r/p Ratio Min</label>
+                    <input type="number" id="ratioLimitMin" value="0" step="0.01" min="0" max="1">
+                </div>
+                <div class="field">
+                    <label>r/p Ratio Max</label>
+                    <input type="number" id="ratioLimitMax" value="0.49" step="0.01" min="0" max="1">
+                </div>
+            </div>
+            <div class="field">
+                <label>Loss Weights (comma-separated, matches metrics order)</label>
+                <input type="text" id="targetLossWeights" value="" placeholder="e.g., 1,1,2 (empty = uniform MSE)">
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Engineering -->
+    <div class="section">
+        <div class="section-title open" onclick="toggleSection(this)">Feature Engineering</div>
+        <div>
+            <div class="toggle-row">
+                <input type="checkbox" id="featureLogTransform" checked>
+                <label for="featureLogTransform">Log-transform p, r, λ</label>
+            </div>
+            <div class="toggle-row">
+                <input type="checkbox" id="includeRatios" checked>
+                <label for="includeRatios">Include ratios (p/λ, r/λ, p/r)</label>
+            </div>
+            <div class="toggle-row">
+                <input type="checkbox" id="targetLogTransform" checked>
+                <label for="targetLogTransform">Log1p-transform targets</label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Network Architecture -->
+    <div class="section">
+        <div class="section-title open" onclick="toggleSection(this)">Network Architecture</div>
+        <div>
+            <div class="toggle-row">
+                <input type="checkbox" id="useMultiHead" checked>
+                <label for="useMultiHead">Use multi-head outputs</label>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>FC1a Width</label>
+                    <input type="number" id="fc1a" value="128" step="16" min="1">
+                </div>
+                <div class="field">
+                    <label>FC1b Width <span style="color:var(--text-secondary);font-size:10px;">(skip connections auto-match)</span></label>
+                    <input type="number" id="fc1b" value="256" step="16" min="1">
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>FC2a Width</label>
+                    <input type="number" id="fc2a" value="512" step="16" min="1">
+                </div>
+                <div class="field">
+                    <label>Head Hidden Sizes <span style="color:var(--text-secondary);font-size:10px;">(can be comma-separated)</span></label>
+                    <input type="text" id="headHiddenSizes" value="128" placeholder="e.g., 128 or 128,64">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hyperparameters -->
+    <div class="section">
+        <div class="section-title open" onclick="toggleSection(this)">Hyperparameters</div>
+        <div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Max Epochs</label>
+                    <input type="number" id="maxEpochs" value="200" step="1000" min="1">
+                </div>
+                <div class="field">
+                    <label>Mini-Batch Size</label>
+                    <input type="number" id="miniBatchSize" value="1024" step="64" min="1">
+                </div>
+            </div>
+            <div class="field">
+                <label>Learning Rate</label>
+                <input type="number" id="learningRate" value="0.0001" step="0.000001" min="0">
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Optimizer</label>
+                    <select id="optimizer">
+                        <option value="adam" selected>Adam</option>
+                        <option value="sgdm">SGDM</option>
+                        <option value="rmsprop">RMSProp</option>
+                        <option value="lbfgs">L-BFGS</option>
+                        <option value="lm">Levenberg-Marquardt</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Loss Function</label>
+                    <select id="lossFunction">
+                        <option value="mse" selected>MSE</option>
+                        <option value="mae">MAE</option>
+                        <option value="huber">Huber</option>
+                    </select>
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>LR Schedule</label>
+                    <select id="learnRateSchedule">
+                        <option value="cosine">Cosine</option>
+                        <option value="none">None</option>
+                        <option value="piecewise" selected>Piecewise</option>
+                        <option value="warmup">Warmup</option>
+                        <option value="polynomial">Polynomial</option>
+                        <option value="exponential">Exponential</option>
+                        <option value="cyclical">Cyclical</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>L2 Regularization</label>
+                    <input type="number" id="l2Regularization" value="0.0001" step="0.0001" min="0">
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>LR Drop Factor</label>
+                    <input type="number" id="learnRateDropFactor" value="0.85" step="0.05" min="0">
+                </div>
+                <div class="field">
+                    <label>LR Drop Period</label>
+                    <input type="number" id="learnRateDropPeriod" value="5" step="1" min="1">
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Grad Clip Threshold</label>
+                    <input type="number" id="gradientThreshold" value="" step="0.1" min="0" placeholder="inf">
+                </div>
+                <div class="field">
+                    <label>Grad Clip Method</label>
+                    <select id="gradientThresholdMethod">
+                        <option value="l2norm" selected>L2 Norm</option>
+                        <option value="global-l2norm">Global L2 Norm</option>
+                        <option value="absolute-value">Absolute Value</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Advanced Training Options -->
+    <div class="section">
+        <div class="section-title" onclick="toggleSection(this)">Advanced Training Options</div>
+        <div style="display:none;">
+            <div class="field-row">
+                <div class="field">
+                    <label>Momentum (SGDM)</label>
+                    <input type="number" id="momentum" value="0.9" step="0.01" min="0" max="1">
+                </div>
+                <div class="field">
+                    <label>Gradient Decay (Adam/RMSProp)</label>
+                    <input type="number" id="gradientDecayFactor" value="0.9" step="0.01" min="0" max="1">
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Squared Gradient Decay</label>
+                    <input type="number" id="squaredGradientDecayFactor" value="0.999" step="0.001" min="0" max="1">
+                </div>
+                <div class="field">
+                    <label>Epsilon</label>
+                    <input type="number" id="epsilon" value="1e-8" step="1e-8" min="0">
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Shuffle</label>
+                    <select id="shuffle">
+                        <option value="every-epoch" selected>Every Epoch</option>
+                        <option value="once">Once</option>
+                        <option value="never">Never</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Verbose Frequency</label>
+                    <input type="number" id="verboseFrequency" value="200" step="10" min="1">
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Validation Frequency (iterations)</label>
+                    <input type="number" id="validationFrequency" value="" step="1" min="1" placeholder="Auto (1 epoch)">
+                </div>
+                <div class="field">
+                    <label>Validation Patience (blank = Inf)</label>
+                    <input type="number" id="validationPatience" value="" step="1" min="1" placeholder="inf">
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Plots</label>
+                    <select id="plots">
+                        <option value="none" selected>None (Headless / Anti-Freeze)</option>
+                        <option value="training-progress">Training Progress (External CEF Window)</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Progress Display</label>
+                    <select id="progressDisplayMode">
+                        <option value="app-panel" selected>App Right Panel (Recommended)</option>
+                        <option value="matlab-monitor">MATLAB Default Monitor</option>
+                    </select>
+                </div>
+            </div>
+            <div style="font-size: 10px; color: var(--text-secondary); margin-top: -4px; margin-bottom: 8px;">
+                💡 <em>Note: Using <strong>App Right Panel</strong> + Plots=<strong>None</strong> prevents heavy CEF browser monitor hangs, blank window popups, and memory freezes.</em>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Objective Metric</label>
+                    <input type="text" id="objectiveMetricName" value="loss" placeholder="loss">
+                </div>
+            </div>
+            <div class="field">
+                <label>Output Network</label>
+                <select id="outputNetwork">
+                    <option value="auto" selected>Auto</option>
+                    <option value="last-iteration">Last Iteration</option>
+                    <option value="best-validation">Best Validation</option>
+                </select>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Execution Environment</label>
+                    <select id="executionEnvironment">
+                        <option value="auto" selected>Auto (GPU if available)</option>
+                        <option value="gpu">GPU (CUDA / RTX)</option>
+                        <option value="cpu">CPU</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Preprocessing Environment</label>
+                    <select id="preprocessingEnvironment">
+                        <option value="serial" selected>Serial</option>
+                        <option value="background">Background</option>
+                        <option value="parallel">Parallel</option>
+                    </select>
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Acceleration</label>
+                    <select id="acceleration">
+                        <option value="auto" selected>Auto</option>
+                        <option value="none">None</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Batch Norm Statistics</label>
+                    <select id="batchNormalizationStatistics">
+                        <option value="auto" selected>Auto</option>
+                        <option value="population">Population</option>
+                        <option value="moving">Moving</option>
+                    </select>
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Reset Input Normalization</label>
+                    <div class="toggle-row">
+                        <input type="checkbox" id="resetInputNormalization" checked>
+                        <label for="resetInputNormalization">Enabled</label>
+                    </div>
+                </div>
+                <div class="field">
+                    <label>Sequence Length</label>
+                    <select id="sequenceLength">
+                        <option value="longest" selected>Longest</option>
+                        <option value="shortest">Shortest</option>
+                    </select>
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Sequence Padding Direction</label>
+                    <select id="sequencePaddingDirection">
+                        <option value="right" selected>Right</option>
+                        <option value="left">Left</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Sequence Padding Value</label>
+                    <input type="number" id="sequencePaddingValue" value="0" step="0.1">
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Input Data Formats</label>
+                    <input type="text" id="inputDataFormats" value="auto" placeholder="auto">
+                </div>
+                <div class="field">
+                    <label>Target Data Formats</label>
+                    <input type="text" id="targetDataFormats" value="auto" placeholder="auto">
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Categorical Input Encoding</label>
+                    <select id="categoricalInputEncoding">
+                        <option value="integer" selected>Integer</option>
+                        <option value="one-hot">One-Hot</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Categorical Target Encoding</label>
+                    <select id="categoricalTargetEncoding">
+                        <option value="auto" selected>Auto</option>
+                        <option value="integer">Integer</option>
+                        <option value="one-hot">One-Hot</option>
+                    </select>
+                </div>
+            </div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Checkpoint Path <span style="font-size: 0.85em; color: var(--text-secondary);">(auto-generated if empty)</span></label>
+                    <div style="display:flex; gap:6px;">
+                        <input type="text" id="checkpointPath" value="" placeholder="leave empty for auto: WorkDir/DNNCheckpoints/" style="flex:1;">
+                        <button type="button" class="btn-secondary" onclick="browseCheckpointDir()" style="padding:4px 8px; font-size:11px;" title="Browse directory">&#128194;</button>
+                    </div>
+                </div>
+                <div class="field">
+                    <label>Checkpoint Frequency <span style="font-size: 0.85em; color: var(--text-secondary);">(epochs)</span></label>
+                    <input type="number" id="checkpointFrequency" value="25" step="1" min="1" placeholder="e.g., 25">
+                </div>
+            </div>
+            <div class="field">
+                <label>Checkpoint Frequency Unit</label>
+                <select id="checkpointFrequencyUnit">
+                    <option value="epoch" selected>Epoch</option>
+                    <option value="iteration">Iteration</option>
+                </select>
+            </div>
+            <div style="background-color: var(--bg-tertiary); padding: 8px 10px; border-left: 3px solid var(--accent); margin: 8px 0; font-size: 11px; border-radius: 4px; color: var(--text-secondary);">
+                <strong>💡 Checkpoints:</strong> Snapshots are automatically saved every 25 epochs. If a training session freezes or MATLAB closes, select the snapshot file in <em>Fine-Tuning & Checkpoints</em> above to resume without starting over.
+            </div>
+            <div class="field">
+                <label>Extra trainingOptions (Name=Value; ...)</label>
+                <input type="text" id="extraTrainingOptions" value="" placeholder="e.g., MaxIterations=1000; GradientTolerance=1e-5">
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Split & Output -->
+    <div class="section">
+        <div class="section-title open" onclick="toggleSection(this)">Data Split & Output</div>
+        <div>
+            <div class="field-row">
+                <div class="field">
+                    <label>Holdout Fraction</label>
+                    <input type="number" id="holdout" value="0.2" step="0.01" min="0" max="1">
+                </div>
+                <div class="field">
+                    <label>Validation Share</label>
+                    <input type="number" id="valSplit" value="0.5" step="0.01" min="0" max="1">
+                </div>
+            </div>
+            <div class="toggle-row">
+                <input type="checkbox" id="saveArtifacts" checked>
+                <label for="saveArtifacts">Save model & dataset to disk</label>
+            </div>
+            <div class="toggle-row">
+                <input type="checkbox" id="verbose" checked>
+                <label for="verbose">Verbose training output</label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div style="display:flex;gap:6px;align-items:center;">
+        <button id="btnRun" class="btn-primary" style="flex:1;" onclick="runTraining()">Start Training</button>
+        <button id="btnStopAction" class="btn-stop" style="padding:10px 16px;font-size:12px;margin-top:6px;" onclick="stopProcess()">&#9632; Stop</button>
+    </div>
+
+    <!-- Progress -->
+    <div id="progressArea">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <span style="font-weight:600; color:var(--text-primary);">Progress</span>
+            <span id="statusBadge" class="status-badge status-idle">Idle</span>
+        </div>
+        <div class="progress-bar-container">
+            <div id="progressBar" class="progress-bar"></div>
+        </div>
+        <pre id="progressLog" style="margin-top:6px; min-height:40px;"></pre>
+    </div>
+</body>
+</html>

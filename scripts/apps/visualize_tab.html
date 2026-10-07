@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ASSTEROID — Stage 6 Visualize</title>
+<meta name="description" content="Visualize simulation, interpolation and prediction data stored in the ASSTEROID database as 1D spectra, 2D maps or 3D volumes.">
+<style>
+    :root {
+        --bg-primary: #0d1419;
+        --bg-secondary: #0f1b2e;
+        --bg-tertiary: #132b42;
+        --text-primary: #f0f8fa;
+        --text-secondary: #7fa8b0;
+        --accent: #00e8ff;
+        --accent-hover: #33f5ff;
+        --success: #1fb8a8;
+        --warning: #ffb74d;
+        --error: #ff6b6b;
+        --border: #1b5055;
+        --input-bg: #0f1f2a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        font-size: 13px;
+        overflow: hidden;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+    }
+    h1 {
+        font-size: 15px; font-weight: 600; color: var(--accent);
+        margin: 0; padding: 0; border: none;
+    }
+    .header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 10px 12px 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .header-actions { display: flex; gap: 6px; align-items: center; }
+    #dbStatusBanner {
+        display: none; background: var(--bg-tertiary); border: 1px solid var(--border);
+        border-radius: 6px; padding: 6px 10px; margin: 8px 12px 0 12px;
+        font-size: 11px; color: var(--text-secondary);
+        font-variant-numeric: tabular-nums;
+    }
+    .main-container { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .steps-container { flex: 1; overflow-y: auto; padding: 12px; min-height: 0; }
+    .section {
+        background: var(--bg-secondary);
+        border-radius: 6px; padding: 10px;
+        margin-bottom: 8px;
+        border: 1px solid var(--border);
+    }
+    .section-title {
+        font-size: 11px; font-weight: 600; color: var(--text-secondary);
+        text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;
+    }
+    .field { margin-bottom: 8px; }
+    .field label.lbl {
+        display: block; font-size: 11px; color: var(--text-secondary);
+        margin-bottom: 3px; font-weight: 500;
+    }
+    .field input[type="text"], .field input[type="number"], .field select {
+        width: 100%; padding: 6px 8px;
+        background: var(--input-bg); border: 1px solid var(--border);
+        border-radius: 4px; color: var(--text-primary);
+        font-size: 12px; outline: none;
+    }
+    .field input:focus, .field select:focus { border-color: var(--accent); }
+    .field-row { display: flex; gap: 8px; align-items: flex-end; }
+    .field-row .field { flex: 1; }
+    input[type="checkbox"], input[type="radio"] {
+        accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer;
+    }
+    .check { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 0; cursor: pointer; }
+    .check.disabled { opacity: 0.4; cursor: not-allowed; }
+    .check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; }
+
+    /* Segmented control */
+    .segmented { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .segmented input { position: absolute; opacity: 0; pointer-events: none; }
+    .segmented label {
+        flex: 1; text-align: center; padding: 7px 4px; cursor: pointer;
+        font-size: 12px; font-weight: 600; color: var(--text-secondary);
+        background: var(--input-bg); transition: background 0.15s ease, color 0.15s ease;
+        border-right: 1px solid var(--border); user-select: none;
+    }
+    .segmented label:last-of-type { border-right: none; }
+    .segmented label:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+    .segmented input:checked + label { background: var(--accent); color: #000; }
+    .segmented input:disabled + label { opacity: 0.35; cursor: not-allowed; }
+    .segmented input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .seg-count { font-weight: 400; font-size: 10px; opacity: 0.85; }
+
+    .info-line {
+        font-size: 11px; color: var(--text-secondary); margin-top: 6px;
+        font-variant-numeric: tabular-nums; line-height: 1.45;
+    }
+    .notice {
+        display: none; margin-top: 8px; padding: 8px 10px; border-radius: 6px;
+        border: 1px solid #7a5a1e; background: #2a1f0b; color: var(--warning);
+        font-size: 11px; line-height: 1.45;
+    }
+    .notice.show { display: block; }
+    .snap-info { font-size: 11px; color: var(--success); margin-top: 2px; min-height: 14px; font-variant-numeric: tabular-nums; }
+    .hint { font-size: 10px; color: var(--text-secondary); margin-top: 4px; line-height: 1.4; }
+
+    .btn-primary {
+        padding: 10px 16px; background: var(--accent);
+        color: #000 !important; font-weight: 700;
+        border: none; border-radius: 6px; font-size: 12px;
+        cursor: pointer; transition: background 0.2s;
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-secondary {
+        padding: 8px 12px; background: var(--bg-tertiary); color: var(--text-primary);
+        border: 1px solid var(--border); border-radius: 6px;
+        font-size: 11px; cursor: pointer; transition: background 0.2s;
+    }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-secondary.small { padding: 4px 10px; }
+    .btn-stop {
+        background: #c62828 !important; color: #ffffff !important;
+        border: 1px solid #e53935 !important; border-radius: 6px;
+        padding: 6px 12px; font-size: 11px; font-weight: 700; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+        transition: all 0.2s ease; box-shadow: 0 2px 5px rgba(198, 40, 40, 0.4);
+    }
+    .btn-stop:hover { background: #e53935 !important; }
+    .btn-stop:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+    .btn-row { display: flex; gap: 8px; margin-top: 4px; }
+    .btn-row .btn-primary { flex: 1; }
+    button:focus-visible, input:focus-visible, select:focus-visible {
+        outline: 2px solid var(--accent) !important; outline-offset: 2px !important;
+    }
+    button:active { transform: scale(0.98); }
+    input[type="number"], .status-badge { font-variant-numeric: tabular-nums; }
+
+    .mode-block { display: none; }
+    .mode-block.show { display: block; }
+
+    /* Bottom panel */
+    .bottom-panel { background: var(--bg-secondary); border-top: 1px solid var(--border); padding: 8px 12px; flex-shrink: 0; }
+    #progressArea {
+        background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 8px;
+        font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 11px; color: var(--text-secondary);
+        max-height: 120px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+    }
+    .progress-bar-container { width: 100%; height: 4px; background: var(--bg-tertiary); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+    .progress-bar { height: 100%; background: var(--accent); border-radius: 2px; width: 0%; transition: width 0.3s ease; }
+    .status-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+    .status-idle { background: var(--bg-tertiary); color: var(--text-secondary); }
+    .status-running { background: #1b5e20; color: #a5d6a7; }
+    .status-done { background: #0d47a1; color: #90caf9; }
+    .status-error { background: #b71c1c; color: #ef9a9a; }
+
+    @media (prefers-reduced-motion: reduce) {
+        * { transition: none !important; }
+    }
+</style>
+<script type="text/javascript">
+var VIS = {
+    db: {},              // last DbStatus
+    info: null,          // last VisualizeBranchInfo
+    busy: false
+};
+
+function setup(htmlComponent) {
+    window.htmlComponent = htmlComponent;
+
+    htmlComponent.addEventListener("Progress", function(event) { handleProgress(event.Data); });
+    htmlComponent.addEventListener("VisualizeBranchInfo", function(event) {
+        VIS.info = event.Data || null;
+        refreshAll();
+    });
+    htmlComponent.addEventListener("VisualizeComplete", function(event) {
+        var d = event.Data || {};
+        setStatus("done", "Rendered");
+        appendLog(typeof d === "string" ? d : (d.message || "Render complete."));
+        if (d.warnings) { normalizeArray(d.warnings).forEach(function(w) { appendLog("Note: " + w); }); }
+        setBusy(false);
+    });
+    htmlComponent.addEventListener("VisualizeSnapped", function(event) {
+        var d = event.Data || {};
+        if (isFinite(d.p)) document.getElementById("p1d").value = round2(d.p);
+        if (isFinite(d.r)) document.getElementById("r1d").value = round2(d.r);
+        document.getElementById("snapInfo").textContent =
+            "Snapped to simulated geometry #" + d.index + " (Δ = " + round2(d.distance) + " nm)";
+    });
+    htmlComponent.addEventListener("VisError", function(event) {
+        setStatus("error", "Error");
+        appendLog("ERROR: " + (event.Data || "Unknown error"));
+        setBusy(false);
+    });
+    htmlComponent.addEventListener("PreselectBranch", function(event) {
+        var d = event.Data || {};
+        if (d.mode) setRadio("visMode", d.mode);
+        if (d.branch) setRadio("branch", d.branch);
+        refreshAll();
+        appendLog("Preselected branch db." + (d.branch || "?") + " from Stage 4.");
+    });
+    htmlComponent.addEventListener("DbStatus", function(event) {
+        VIS.db = event.Data || {};
+        updateDbBanner(VIS.db);
+        window.htmlComponent.sendEventToMATLAB("RequestBranchInfo", {});
+    });
+    htmlComponent.addEventListener("SaveComplete", function(event) { appendLog(event.Data || "Database saved."); });
+    htmlComponent.addEventListener("ProcessStopAck", function(event) {
+        var msg = (event.Data && event.Data.message) ? event.Data.message : "Stopping...";
+        setStatus("running", "Stopping...");
+        appendLog(msg);
+    });
+    htmlComponent.addEventListener("ProcessStopped", function(event) {
+        var msg = (event.Data && event.Data.message) ? event.Data.message : "Process terminated by user.";
+        setStatus("idle", "Terminated");
+        appendLog(msg);
+        setBusy(false);
+        resetStopButtons();
+    });
+
+    htmlComponent.sendEventToMATLAB("RequestBranchInfo", {});
+}
+
+/* ---------- helpers ---------- */
+function normalizeArray(x) {
+    if (x === undefined || x === null) return [];
+    return Array.isArray(x) ? x : [x];
+}
+function round2(v) { return Math.round(Number(v) * 100) / 100; }
+function val(id) { var el = document.getElementById(id); return el ? el.value : ""; }
+function numOr(id, fallback) { var v = parseFloat(val(id)); return Number.isFinite(v) ? v : fallback; }
+function chk(id) { var el = document.getElementById(id); return el ? el.checked : false; }
+function getRadio(name, fallback) {
+    var els = document.getElementsByName(name);
+    for (var i = 0; i < els.length; i++) if (els[i].checked) return els[i].value;
+    return fallback;
+}
+function setRadio(name, value) {
+    var els = document.getElementsByName(name);
+    for (var i = 0; i < els.length; i++) if (els[i].value === value && !els[i].disabled) els[i].checked = true;
+}
+function branchInfo(name) {
+    if (!VIS.info || !VIS.info.branches) return null;
+    return VIS.info.branches[name] || null;
+}
+function fmtRange(r, unit) {
+    r = normalizeArray(r);
+    if (r.length < 2 || r[0] === null) return "–";
+    return Math.round(r[0]) + "–" + Math.round(r[1]) + (unit ? " " + unit : "");
+}
+
+/* ---------- UI refresh ---------- */
+function refreshAll() {
+    updateBranchRadios();
+    updateModeBlocks();
+    updateBranchInfo();
+    updateMetricLists();
+    updateSourceAvailability();
+    updateRenderAvailability();
+}
+
+function updateModeBlocks() {
+    var mode = getRadio("visMode", "1d");
+    ["1d", "2d", "3d"].forEach(function(m) {
+        document.getElementById("block" + m).classList.toggle("show", m === mode);
+    });
+    document.getElementById("branchSection").style.display = (mode === "1d") ? "none" : "";
+    document.getElementById("btnClear").style.display = (mode === "1d") ? "" : "none";
+}
+
+function updateBranchRadios() {
+    ["Sim", "Interp", "Pred"].forEach(function(b) {
+        var bi = branchInfo(b);
+        var n = bi ? (bi.n || 0) : 0;
+        var el = document.getElementById("branch" + b);
+        el.disabled = n === 0;
+        document.getElementById("count" + b).textContent = n ? "(" + n.toLocaleString() + ")" : "(empty)";
+    });
+    var cur = getRadio("branch", "");
+    var curEl = document.getElementById("branch" + cur);
+    if (!cur || (curEl && curEl.disabled)) {
+        var pick = ["Interp", "Pred", "Sim"].filter(function(b) { return !document.getElementById("branch" + b).disabled; })[0];
+        if (pick) setRadio("branch", pick);
+    }
+}
+
+function updateBranchInfo() {
+    var b = getRadio("branch", "");
+    var bi = branchInfo(b);
+    var el = document.getElementById("branchInfo");
+    if (!bi || !bi.n) { el.textContent = "No data in this branch."; return; }
+    var layout = bi.isGridded
+        ? "regular grid " + normalizeArray(bi.gridSize).join(" × ") + " (r × p)"
+        : "scattered samples";
+    el.innerHTML = bi.n.toLocaleString() + " rows · " + layout +
+        "<br>p " + fmtRange(bi.pRange, "nm") + " · r " + fmtRange(bi.rRange, "nm") +
+        " · λ " + fmtRange(bi.lambdaRange, "nm");
+    document.getElementById("interp2dRow").style.display = bi.isGridded ? "none" : "";
+}
+
+function fillSelect(sel, groups, keep) {
+    var prev = sel.value;
+    sel.innerHTML = "";
+    groups.forEach(function(g) {
+        var items = normalizeArray(g.items);
+        if (!items.length) return;
+        var og = document.createElement("optgroup");
+        og.label = g.label;
+        items.forEach(function(it) {
+            var o = document.createElement("option");
+            o.value = g.prefix + it;
+            o.textContent = it + (g.suffix || "");
+            og.appendChild(o);
+        });
+        sel.appendChild(og);
+    });
+    if (keep && prev) {
+        for (var i = 0; i < sel.options.length; i++) if (sel.options[i].value === prev) { sel.value = prev; break; }
+    }
+}
+
+function updateMetricLists() {
+    var b = getRadio("branch", "");
+    var bi = branchInfo(b) || {};
+    fillSelect(document.getElementById("metric2d"), [
+        { label: "Scalar variants (laser / avg / analyte)", prefix: "scalar:", items: bi.scalarFields },
+        { label: "Spectral slice at Raman shift", prefix: "slice:", items: bi.spectralFields, suffix: "  @ shift" }
+    ], true);
+    fillSelect(document.getElementById("metric3d"), [
+        { label: "Spectral metrics", prefix: "", items: bi.spectralFields }
+    ], true);
+    onMetric2dChange();
+
+    // 1D metrics depend on the source
+    var src = getRadio("source1d", "sim");
+    var fields = [];
+    if (src === "model") {
+        fields = normalizeArray(VIS.info ? VIS.info.modelTargets : []);
+    } else {
+        var si = branchInfo("Sim");
+        fields = si ? normalizeArray(si.spectralFields) : [];
+    }
+    var box = document.getElementById("metrics1dList");
+    var prevChecked = {};
+    box.querySelectorAll("input:checked").forEach(function(cb) { prevChecked[cb.value] = true; });
+    var hadAny = Object.keys(prevChecked).length > 0;
+    box.innerHTML = "";
+    if (!fields.length) {
+        box.innerHTML = '<span class="hint">No spectral metrics available for this source.</span>';
+        return;
+    }
+    fields.forEach(function(f, i) {
+        var lab = document.createElement("label");
+        lab.className = "check";
+        var cb = document.createElement("input");
+        cb.type = "checkbox"; cb.value = f; cb.id = "m1d_" + f;
+        cb.checked = hadAny ? !!prevChecked[f] : (i === 0);
+        lab.appendChild(cb);
+        lab.appendChild(document.createTextNode(f));
+        box.appendChild(lab);
+    });
+}
+
+function updateSourceAvailability() {
+    var hasSim = !!(branchInfo("Sim") && branchInfo("Sim").n);
+    var hasModel = !!(VIS.info && VIS.info.hasModel);
+    document.getElementById("srcSim").disabled = !hasSim;
+    document.getElementById("srcInterp").disabled = !hasSim;
+    document.getElementById("srcModel").disabled = !hasModel;
+    var src = getRadio("source1d", "");
+    var srcEl = document.getElementById({ sim: "srcSim", interp: "srcInterp", model: "srcModel" }[src] || "srcSim");
+    if (srcEl.disabled) {
+        if (hasSim) setRadio("source1d", "sim"); else if (hasModel) setRadio("source1d", "model");
+    }
+    src = getRadio("source1d", "sim");
+    document.getElementById("modelSpecRow").style.display = (src === "model") ? "" : "none";
+    document.getElementById("interpMethodRow").style.display = (src === "interp") ? "" : "none";
+    var hints = {
+        sim: "Finds the nearest simulated (p, r) and plots its raw samples (dots) with a smoothed line. Input fields are updated to the snapped geometry.",
+        interp: "Interpolates each native simulation wavelength node spatially at the exact (p, r); nodes are shown as dots joined by a smoothed line.",
+        model: "Feeds the exact (p, r) to the trained surrogate and evaluates it on a dense wavelength grid."
+    };
+    document.getElementById("sourceHint").textContent = hints[src] || "";
+    if (VIS.info && VIS.info.laserWl && !document.getElementById("laser1d").dataset.touched) {
+        document.getElementById("laser1d").value = round2(VIS.info.laserWl);
+        document.getElementById("laser2d").value = round2(VIS.info.laserWl);
+    }
+}
+
+function updateRenderAvailability() {
+    var mode = getRadio("visMode", "1d");
+    var notice = document.getElementById("notice3d");
+    var ok = true;
+    notice.classList.remove("show");
+    if (mode === "3d") {
+        var b = getRadio("branch", "");
+        var bi = branchInfo(b);
+        if (!bi || !bi.n) ok = false;
+        else if (!bi.isGridded) {
+            ok = false;
+            notice.innerHTML = "<strong>3D volumes need gridded data.</strong> db." + b +
+                " holds scattered samples. Populate <code>db.Interp</code> via <em>4 Predict → Raw Data (Interpolation)</em> " +
+                "and visualise that branch instead. This avoids recomputing a temporary dense grid for every render.";
+            notice.classList.add("show");
+        } else if (!normalizeArray(bi.spectralFields).length) {
+            ok = false;
+            notice.textContent = "This branch has no spectral [N × L] metrics to render as a volume.";
+            notice.classList.add("show");
+        }
+    } else if (mode === "2d") {
+        var bi2 = branchInfo(getRadio("branch", ""));
+        ok = !!(bi2 && bi2.n) && document.getElementById("metric2d").options.length > 0;
+    } else {
+        ok = document.querySelectorAll("#metrics1dList input").length > 0;
+    }
+    document.getElementById("btnRender").disabled = !ok || VIS.busy;
+}
+
+function onMetric2dChange() {
+    var v = val("metric2d");
+    document.getElementById("sliceRow").style.display = (v.indexOf("slice:") === 0) ? "" : "none";
+}
+
+function onControlChange() { refreshAll(); }
+
+/* ---------- actions ---------- */
+function collectConfig() {
+    var mode = getRadio("visMode", "1d");
+    var cfg = { mode: mode, branch: getRadio("branch", "Sim"), invertColormap: chk("invertCmap") };
+    if (mode === "1d") {
+        var metrics = [];
+        document.querySelectorAll("#metrics1dList input:checked").forEach(function(cb) { metrics.push(cb.value); });
+        cfg.source = getRadio("source1d", "sim");
+        cfg.p = numOr("p1d", NaN);
+        cfg.r = numOr("r1d", NaN);
+        cfg.metrics = metrics;
+        cfg.xAxis = val("xAxis1d");
+        cfg.logY = chk("logY1d");
+        cfg.smoothing = val("smooth1d");
+        cfg.normalize = chk("normalize1d");
+        cfg.hold = chk("hold1d");
+        cfg.laserWavelength = numOr("laser1d", 785);
+        cfg.lambdaMin = numOr("lamMin1d", NaN);
+        cfg.lambdaMax = numOr("lamMax1d", NaN);
+        cfg.lambdaStep = numOr("lamStep1d", 1);
+        cfg.interpMethod = val("interpMethod1d");
+    } else if (mode === "2d") {
+        var sel = val("metric2d");
+        cfg.metricKind = sel.split(":")[0];
+        cfg.metric = sel.substring(sel.indexOf(":") + 1);
+        cfg.sliceShift = numOr("sliceShift", 1000);
+        cfg.laserWavelength = numOr("laser2d", 785);
+        cfg.renderMethod = val("interp2d");
+        cfg.logScale = chk("log2d");
+        cfg.showSimPoints = chk("showSim2d");
+        cfg.showOptima = chk("showOptima2d");
+    } else {
+        cfg.metric = val("metric3d");
+        cfg.logScale = chk("log3d");
+        cfg.showSimColumns = chk("showSim3d");
+        cfg.maxSamples = numOr("maxSamples3d", 256);
+    }
+    return cfg;
+}
+
+function render() {
+    var cfg = collectConfig();
+    if (cfg.mode === "1d") {
+        if (!cfg.metrics.length) { appendLog("Select at least one metric."); return; }
+        if (!isFinite(cfg.p) || !isFinite(cfg.r)) { appendLog("Enter valid period and radius values."); return; }
+        document.getElementById("snapInfo").textContent = "";
+    }
+    setBusy(true);
+    setStatus("running", "Rendering...");
+    document.getElementById("progressBar").style.width = "0%";
+    appendLog("Render " + cfg.mode.toUpperCase() + (cfg.mode === "1d" ? " (" + cfg.source + ")" : " from db." + cfg.branch) + "...");
+    window.htmlComponent.sendEventToMATLAB("Render", cfg);
+}
+
+function clearTraces() {
+    window.htmlComponent.sendEventToMATLAB("ClearTraces", {});
+    appendLog("Held traces cleared.");
+}
+
+function stopProcess() {
+    document.querySelectorAll(".btn-stop").forEach(function(b) { b.innerHTML = "&#9632; Stopping..."; b.disabled = true; });
+    appendLog("Stop requested by user.");
+    window.htmlComponent.sendEventToMATLAB("StopProcess", {});
+}
+function resetStopButtons() {
+    document.querySelectorAll(".btn-stop").forEach(function(b) { b.innerHTML = "&#9632; Stop"; b.disabled = false; });
+}
+
+function setBusy(state) {
+    VIS.busy = state;
+    updateRenderAvailability();
+    if (!state) resetStopButtons();
+}
+
+function handleProgress(data) {
+    if (!data) return;
+    if (data.message) appendLog(data.message);
+    if (data.fraction !== undefined && data.fraction !== null) {
+        document.getElementById("progressBar").style.width = Math.round(data.fraction * 100) + "%";
+    }
+}
+function updateDbBanner(d) {
+    var banner = document.getElementById("dbStatusBanner");
+    if (!d || (!d.hasSimData && !d.hasPredictions && !d.hasInterp)) { banner.style.display = "none"; return; }
+    var parts = [];
+    if (d.hasSimData) parts.push(d.simEntries + " sim");
+    if (d.hasInterp) parts.push(d.interpEntries + " interp");
+    if (d.hasPredictions) parts.push(d.predEntries + " pred");
+    if (d.hasModel) parts.push("Model \u2713");
+    if (d.hasOptima) parts.push(d.optimaCount + " optima");
+    banner.textContent = "DB: " + parts.join(" | ");
+    banner.style.display = "block";
+}
+function setStatus(cls, text) {
+    var el = document.getElementById("statusBadge");
+    el.className = "status-badge status-" + cls;
+    el.textContent = text;
+}
+function appendLog(msg) {
+    var el = document.getElementById("progressLog");
+    el.textContent += msg + "\n";
+    var area = document.getElementById("progressArea");
+    area.scrollTop = area.scrollHeight;
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    document.querySelectorAll('input[name="visMode"], input[name="branch"], input[name="source1d"]').forEach(function(el) {
+        el.addEventListener("change", onControlChange);
+    });
+    document.getElementById("metric2d").addEventListener("change", function() { onMetric2dChange(); updateRenderAvailability(); });
+    ["laser1d", "laser2d"].forEach(function(id) {
+        document.getElementById(id).addEventListener("input", function() { this.dataset.touched = "1"; });
+    });
+    refreshAll();
+});
+</script>
+</head>
+<body>
+    <header class="header">
+        <h1>Stage 6 — Visualize</h1>
+        <div class="header-actions">
+            <button class="btn-secondary small" id="btnRefresh" onclick="window.htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
+            <button class="btn-secondary small" id="btnSaveDb" onclick="window.htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
+            <button class="btn-stop" id="btnStopHeader" onclick="stopProcess()">&#9632; Stop</button>
+        </div>
+    </header>
+    <div id="dbStatusBanner"></div>
+
+    <main class="main-container">
+        <div class="steps-container">
+
+            <!-- Mode -->
+            <section class="section" aria-labelledby="modeTitle">
+                <h2 class="section-title" id="modeTitle">Visualization</h2>
+                <div class="segmented" role="radiogroup" aria-label="Visualization mode">
+                    <input type="radio" name="visMode" id="mode1d" value="1d" checked><label for="mode1d">1D Spectra</label>
+                    <input type="radio" name="visMode" id="mode2d" value="2d"><label for="mode2d">2D Map</label>
+                    <input type="radio" name="visMode" id="mode3d" value="3d"><label for="mode3d">3D Volume</label>
+                </div>
+            </section>
+
+            <!-- Branch (2D / 3D) -->
+            <section class="section" id="branchSection" aria-labelledby="branchTitle">
+                <h2 class="section-title" id="branchTitle">Data Branch</h2>
+                <div class="segmented" role="radiogroup" aria-label="Database branch">
+                    <input type="radio" name="branch" id="branchSim" value="Sim"><label for="branchSim">Sim <span class="seg-count" id="countSim"></span></label>
+                    <input type="radio" name="branch" id="branchInterp" value="Interp"><label for="branchInterp">Interp <span class="seg-count" id="countInterp"></span></label>
+                    <input type="radio" name="branch" id="branchPred" value="Pred"><label for="branchPred">Pred <span class="seg-count" id="countPred"></span></label>
+                </div>
+                <div class="info-line" id="branchInfo">Waiting for database…</div>
+                <div class="notice" id="notice3d" role="status"></div>
+            </section>
+
+            <!-- ===== 1D ===== -->
+            <div class="mode-block show" id="block1d">
+                <section class="section" aria-labelledby="src1dTitle">
+                    <h2 class="section-title" id="src1dTitle">Source &amp; Geometry</h2>
+                    <div class="segmented" role="radiogroup" aria-label="Spectrum source">
+                        <input type="radio" name="source1d" id="srcSim" value="sim" checked><label for="srcSim">Simulation</label>
+                        <input type="radio" name="source1d" id="srcInterp" value="interp"><label for="srcInterp">Interpolation</label>
+                        <input type="radio" name="source1d" id="srcModel" value="model"><label for="srcModel">Model (DNN)</label>
+                    </div>
+                    <p class="hint" id="sourceHint"></p>
+                    <div class="field-row" style="margin-top:8px;">
+                        <div class="field">
+                            <label class="lbl" for="p1d">Period p (nm)</label>
+                            <input type="number" id="p1d" value="800" step="1">
+                        </div>
+                        <div class="field">
+                            <label class="lbl" for="r1d">Radius r (nm)</label>
+                            <input type="number" id="r1d" value="150" step="1">
+                        </div>
+                    </div>
+                    <div class="snap-info" id="snapInfo" aria-live="polite"></div>
+                    <div class="field" id="interpMethodRow" style="display:none;">
+                        <label class="lbl" for="interpMethod1d">Spatial interpolation</label>
+                        <select id="interpMethod1d">
+                            <option value="natural" selected>Natural (barycentric in Delaunay cell)</option>
+                            <option value="linear">Linear</option>
+                            <option value="nearest">Nearest</option>
+                        </select>
+                    </div>
+                    <div id="modelSpecRow" style="display:none;">
+                        <div class="field-row">
+                            <div class="field">
+                                <label class="lbl" for="lamMin1d">λ min (nm)</label>
+                                <input type="number" id="lamMin1d" placeholder="auto" step="1">
+                            </div>
+                            <div class="field">
+                                <label class="lbl" for="lamMax1d">λ max (nm)</label>
+                                <input type="number" id="lamMax1d" placeholder="auto" step="1">
+                            </div>
+                            <div class="field">
+                                <label class="lbl" for="lamStep1d">Step (nm)</label>
+                                <input type="number" id="lamStep1d" value="1" step="0.5" min="0.1">
+                            </div>
+                        </div>
+                        <p class="hint">Blank limits use the simulation λ range, or λ<sub>laser</sub> … +3600 cm⁻¹ when no simulation data are loaded.</p>
+                    </div>
+                </section>
+
+                <section class="section" aria-labelledby="m1dTitle">
+                    <h2 class="section-title" id="m1dTitle">Metrics</h2>
+                    <div class="check-grid" id="metrics1dList"></div>
+                </section>
+
+                <section class="section" aria-labelledby="p1dTitle">
+                    <h2 class="section-title" id="p1dTitle">Plot Options</h2>
+                    <div class="field-row">
+                        <div class="field">
+                            <label class="lbl" for="xAxis1d">X axis</label>
+                            <select id="xAxis1d">
+                                <option value="lambda" selected>Wavelength λ (nm)</option>
+                                <option value="shift">Raman shift (cm⁻¹)</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label class="lbl" for="smooth1d">Smoothing</label>
+                            <select id="smooth1d">
+                                <option value="makima" selected>Makima</option>
+                                <option value="pchip">PCHIP</option>
+                                <option value="spline">Spline</option>
+                                <option value="linear">Linear</option>
+                                <option value="none">None</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label class="lbl" for="laser1d">Laser λ (nm)</label>
+                        <input type="number" id="laser1d" value="785" step="0.1">
+                    </div>
+                    <div class="check-grid">
+                        <label class="check"><input type="checkbox" id="logY1d" checked>Log y-axis</label>
+                        <label class="check"><input type="checkbox" id="normalize1d">Normalize to max</label>
+                        <label class="check"><input type="checkbox" id="hold1d">Hold previous traces</label>
+                    </div>
+                </section>
+            </div>
+
+            <!-- ===== 2D ===== -->
+            <div class="mode-block" id="block2d">
+                <section class="section" aria-labelledby="m2dTitle">
+                    <h2 class="section-title" id="m2dTitle">Metric</h2>
+                    <div class="field">
+                        <label class="lbl" for="metric2d">Metric on the (p, r) plane</label>
+                        <select id="metric2d"></select>
+                    </div>
+                    <div class="field-row" id="sliceRow" style="display:none;">
+                        <div class="field">
+                            <label class="lbl" for="sliceShift">Raman shift (cm⁻¹)</label>
+                            <input type="number" id="sliceShift" value="1000" step="10">
+                        </div>
+                        <div class="field">
+                            <label class="lbl" for="laser2d">Laser λ (nm)</label>
+                            <input type="number" id="laser2d" value="785" step="0.1">
+                        </div>
+                    </div>
+                    <div class="field" id="interp2dRow">
+                        <label class="lbl" for="interp2d">Rendering of scattered samples</label>
+                        <select id="interp2d">
+                            <option value="triangulated" selected>Triangulated (linear shading)</option>
+                            <option value="nearest">Nearest sample (staircase)</option>
+                        </select>
+                    </div>
+                    <div class="check-grid">
+                        <label class="check"><input type="checkbox" id="log2d">Log colour scale</label>
+                        <label class="check"><input type="checkbox" id="showSim2d">Show Sim points</label>
+                        <label class="check"><input type="checkbox" id="showOptima2d">Show saved optima</label>
+                        <label class="check"><input type="checkbox" id="invertCmap">Invert colormap</label>
+                    </div>
+                </section>
+            </div>
+
+            <!-- ===== 3D ===== -->
+            <div class="mode-block" id="block3d">
+                <section class="section" aria-labelledby="m3dTitle">
+                    <h2 class="section-title" id="m3dTitle">Spectral Metric</h2>
+                    <div class="field">
+                        <label class="lbl" for="metric3d">Metric volume (p × r × λ)</label>
+                        <select id="metric3d"></select>
+                    </div>
+                    <div class="field">
+                        <label class="lbl" for="maxSamples3d">Max samples per axis (display decimation)</label>
+                        <input type="number" id="maxSamples3d" value="256" step="16" min="16" max="1024">
+                    </div>
+                    <div class="check-grid">
+                        <label class="check"><input type="checkbox" id="log3d" checked>Log colour scale</label>
+                        <label class="check"><input type="checkbox" id="showSim3d">Sim sample columns</label>
+                    </div>
+                    <p class="hint">Simulation samples are drawn as faint full-height columns at their (p, r) positions.</p>
+                </section>
+            </div>
+
+            <div class="btn-row">
+                <button id="btnRender" class="btn-primary" onclick="render()">Render</button>
+                <button id="btnClear" class="btn-secondary" onclick="clearTraces()">Clear traces</button>
+                <button class="btn-stop" id="btnStopRender" style="padding:10px 14px;" onclick="stopProcess()">&#9632; Stop</button>
+            </div>
+        </div>
+
+        <div class="bottom-panel">
+            <div id="progressArea">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <span style="font-weight:600; color:var(--text-primary);">Progress</span>
+                    <span id="statusBadge" class="status-badge status-idle">Idle</span>
+                </div>
+                <div class="progress-bar-container"><div id="progressBar" class="progress-bar"></div></div>
+                <pre id="progressLog" style="margin-top:6px; min-height:30px; white-space:pre-wrap;"></pre>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

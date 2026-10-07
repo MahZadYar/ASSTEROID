@@ -1,0 +1,1724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+    :root {
+        --bg-primary: #0d1419;
+        --bg-secondary: #0f1b2e;
+        --bg-tertiary: #132b42;
+        --text-primary: #f0f8fa;
+        --text-secondary: #7fa8b0;
+        --accent: #00e8ff;
+        --accent-hover: #33f5ff;
+        --success: #1fb8a8;
+        --warning: #ffb74d;
+        --error: #ff6b6b;
+        --border: #1b5055;
+        --input-bg: #0f1f2a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        font-size: 13px;
+        padding: 0;
+        overflow: hidden;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+    }
+    body.panel-left .bottom-panel { display: none !important; }
+    body.panel-right .steps-container { display: none !important; }
+    body.panel-right .main-container { display: flex; flex-direction: column; }
+    body.panel-right .bottom-panel { display: flex !important; flex: 1; }
+    body.panel-right .bottom-right-section { display: flex !important; border-top: none; }
+    body.panel-right #seedsTableSection { display: flex !important; }
+    body.panel-right .bottom-left-section { flex: 1; border-top: 1px solid var(--border); }
+    h2 {
+        font-size: 15px; font-weight: 600; color: var(--accent);
+        margin: 0; padding: 10px 12px 8px 12px;
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+    }
+    .main-container {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+    .steps-container {
+        flex: 1;
+        overflow-y: auto;
+        padding: 12px;
+        min-height: 0;
+    }
+    .step {
+        background: var(--bg-secondary);
+        border-radius: 8px;
+        margin-bottom: 10px;
+        border: 1px solid var(--border);
+        overflow: hidden;
+    }
+    .step-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        background: var(--bg-tertiary);
+        cursor: pointer;
+        user-select: none;
+    }
+    .step-number {
+        width: 22px; height: 22px;
+        background: var(--accent);
+        color: #000;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 700;
+    }
+    .step-header.completed .step-number { background: var(--success); }
+    .step-header.active .step-number { background: var(--accent); }
+    .step-header.inactive .step-number { background: var(--text-secondary); }
+    .step-title {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-primary);
+        flex: 1;
+    }
+    .step-toggle::before { content: '▾'; color: var(--text-secondary); }
+    .step-header.collapsed .step-toggle::before { content: '▸'; }
+    .step-content {
+        padding: 12px;
+        display: block;
+    }
+    .step-header.collapsed + .step-content { display: none; }
+    .section {
+        background: var(--bg-primary);
+        border-radius: 6px; padding: 10px;
+        margin-bottom: 8px;
+        border: 1px solid var(--border);
+    }
+    .section-title {
+        font-size: 11px; font-weight: 600; color: var(--text-secondary);
+        text-transform: uppercase; letter-spacing: 0.5px;
+        margin-bottom: 8px; cursor: pointer; user-select: none;
+    }
+    .section-title::before { content: '▸ '; }
+    .section-title.open::before { content: '▾ '; }
+    .field { margin-bottom: 8px; }
+    .field label {
+        display: block; font-size: 11px; color: var(--text-secondary);
+        margin-bottom: 3px; font-weight: 500;
+    }
+    .field input[type="text"], .field input[type="number"], .field select {
+        width: 100%; padding: 6px 8px;
+        background: var(--input-bg); border: 1px solid var(--border);
+        border-radius: 4px; color: var(--text-primary);
+        font-size: 12px; outline: none;
+    }
+    .field input:focus, .field select:focus { border-color: var(--accent); }
+    .field-row { display: flex; gap: 8px; align-items: flex-end; }
+    .field-row .field { flex: 1; }
+    .browse-row { display: flex; gap: 4px; }
+    .browse-row input { flex: 1; }
+    .browse-row button {
+        padding: 6px 10px; background: var(--bg-tertiary);
+        border: 1px solid var(--border); border-radius: 4px;
+        color: var(--text-primary); cursor: pointer; font-size: 11px;
+        white-space: nowrap;
+    }
+    .browse-row button:hover { background: var(--accent); color: #fff; }
+    .toggle-row {
+        display: flex; align-items: center; gap: 8px; padding: 4px 0;
+    }
+    .toggle-row label {
+        font-size: 12px; color: var(--text-primary); cursor: pointer; margin: 0;
+    }
+    input[type="checkbox"] {
+        accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;
+    }
+    .btn-primary {
+        padding: 10px 16px;
+        background: var(--accent); color: #000; border: none;
+        border-radius: 6px; font-size: 12px; font-weight: 600;
+        cursor: pointer; transition: background 0.2s;
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-secondary {
+        padding: 8px 12px;
+        background: var(--bg-tertiary); color: var(--text-primary);
+        border: 1px solid var(--border); border-radius: 6px;
+        font-size: 11px; cursor: pointer; transition: background 0.2s;
+    }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-row {
+        display: flex; gap: 8px; margin-top: 10px;
+    }
+    .btn-row .btn-primary { flex: 1; }
+
+    input[type="number"], table td, .status-badge {
+        font-variant-numeric: tabular-nums;
+    }
+    button:focus-visible, input:focus-visible, select:focus-visible {
+        outline: 2px solid var(--accent) !important;
+        outline-offset: 2px !important;
+    }
+    button:active {
+        transform: scale(0.98);
+    }
+    
+    .btn-stop {
+        background: #c62828 !important;
+        color: #ffffff !important;
+        border: 1px solid #e53935 !important;
+        border-radius: 6px;
+        padding: 6px 12px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 5px rgba(198, 40, 40, 0.4);
+    }
+    .btn-stop:hover {
+        background: #e53935 !important;
+        box-shadow: 0 3px 8px rgba(229, 57, 53, 0.6);
+    }
+    .btn-stop:active {
+        background: #b71c1c !important;
+    }
+    .btn-stop:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        box-shadow: none;
+    }
+    
+    /* Bottom Panel - Vertical Stack Layout */
+    .bottom-panel {
+        flex: 1;
+        background: var(--bg-secondary);
+        border-top: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+    .bottom-panel.hidden { display: none; }
+    .bottom-right-section.hidden { display: none; }
+    .bottom-left-section {
+        background: var(--bg-secondary);
+        padding: 8px;
+        overflow-y: auto;
+        flex: 1;
+        min-height: 0;
+    }
+    .bottom-right-section {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        border-top: 1px solid var(--border);
+        overflow: hidden;
+    }
+    .bottom-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 12px;
+        background: var(--bg-tertiary);
+        border-bottom: 1px solid var(--border);
+    }
+    .bottom-header h3 {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--accent);
+        margin: 0;
+    }
+    .bottom-controls { display: flex; gap: 6px; align-items: center; }
+    .seeds-table-container {
+        flex: 1;
+        overflow: auto;
+        padding: 0;
+        min-height: 0;
+    }
+    #panelCurrentResults,
+    #panelDbOptima {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; color: var(--text-primary); }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+    th { 
+        color: var(--text-secondary); font-weight: 600; 
+        position: sticky; top: 0; 
+        background: var(--bg-secondary); z-index: 1; 
+        font-size: 10px;
+    }
+    th.sortable {
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+    }
+    th.sortable:hover { color: var(--accent); }
+    th.sort-asc::after  { content: ' ▲'; color: var(--accent); }
+    th.sort-desc::after { content: ' ▼'; color: var(--accent); }
+    tr:hover { background: var(--bg-tertiary); }
+    td input[type="text"], td input[type="number"] {
+        width: 100%;
+        padding: 3px 5px;
+        background: var(--bg-primary);
+        border: 1px solid var(--border);
+        color: var(--text-primary);
+        font-size: 11px;
+        border-radius: 2px;
+    }
+    td .val-display {
+        display: inline-block;
+        width: 100%;
+        padding: 3px 5px;
+        color: var(--text-primary);
+        font-size: 11px;
+        font-family: 'Cascadia Code', 'Consolas', monospace;
+        text-align: right;
+    }
+    td input:focus { border-color: var(--accent); outline: none; }
+    .seed-checkbox { width: 14px; height: 14px; }
+    .bottom-actions {
+        display: flex;
+        gap: 8px;
+        padding: 8px 12px;
+        background: var(--bg-tertiary);
+        border-top: 1px solid var(--border);
+        align-items: center;
+    }
+    .bottom-actions .spacer { flex: 1; }
+    
+    /* Progress Area */
+    #progressArea {
+        background: var(--bg-secondary); border: 1px solid var(--border);
+        border-radius: 6px; padding: 8px; margin-top: 8px;
+        font-family: 'Cascadia Code', 'Consolas', monospace;
+        font-size: 11px; color: var(--text-secondary);
+        overflow-y: auto;
+        white-space: pre-wrap; word-break: break-all;
+        flex: 1;
+        min-height: 0;
+    }
+    .progress-bar-container {
+        width: 100%; height: 4px; background: var(--bg-tertiary);
+        border-radius: 2px; margin-top: 6px; overflow: hidden;
+    }
+    .progress-bar {
+        height: 100%; background: var(--accent);
+        border-radius: 2px; width: 0%; transition: width 0.3s ease;
+    }
+    .status-badge {
+        display: inline-block; padding: 2px 8px;
+        border-radius: 10px; font-size: 10px; font-weight: 600;
+    }
+    .status-idle { background: var(--bg-tertiary); color: var(--text-secondary); }
+    .status-running { background: #1b5e20; color: #a5d6a7; }
+    .status-done { background: #0d47a1; color: #90caf9; }
+    .status-error { background: #b71c1c; color: #ef9a9a; }
+    .hint { font-size: 10px; color: var(--text-secondary); margin-top: 4px; }
+    .req-badge { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 8px; }
+    .req-ok { color: #66bb6a; }
+    .req-missing { color: #ef5350; }
+    .req-optional { color: var(--text-secondary); }
+</style>
+<script type="text/javascript">
+function setup(htmlComponent) {
+    window.htmlComponent = htmlComponent;
+    window.hasPreview = false;
+    window.panelMode = "left";
+    try {
+        if (htmlComponent.Data && htmlComponent.Data.mode) {
+            window.panelMode = htmlComponent.Data.mode;
+        }
+    } catch (e) {}
+
+    applyPanelMode();
+
+    htmlComponent.addEventListener("Progress", function(event) {
+        handleProgress(event.Data);
+    });
+    htmlComponent.addEventListener("OptimizeComplete", function(event) {
+        setStatus("done", "Complete");
+        appendLog("Optimization complete. " + (event.Data || ""));
+        enableButtons(true);
+    });
+    htmlComponent.addEventListener("OptimizeError", function(event) {
+        setStatus("error", "Error");
+        appendLog("ERROR: " + (event.Data || "Unknown error"));
+        enableButtons(true);
+    });
+    htmlComponent.addEventListener("DbStatus", function(event) {
+        updateDbBanner(event.Data);
+        updateOptRequirements(event.Data);
+    });
+    htmlComponent.addEventListener("SaveComplete", function(event) {
+        appendLog(event.Data || "Database saved.");
+    });
+    htmlComponent.addEventListener("PreviewComplete", function(event) {
+        window.hasPreview = true;
+        if (window._pendingSeeds && window._pendingSeeds.length > 0) {
+            appendLog("Heatmap updated. Re-evaluating " + window._pendingSeeds.length + " seeds with new metric...");
+            setStatus("running", "Re-evaluating...");
+            renderSeedsTable(window._pendingSeeds);
+            document.getElementById("seedsTableSection").classList.remove("hidden");
+            var cfg = collectConfig();
+            cfg.seeds = window._pendingSeeds;
+            window._pendingSeeds = null;
+            window.htmlComponent.sendEventToMATLAB("UpdateSeeds", cfg);
+        } else {
+            setStatus("done", "Preview Ready");
+            appendLog("Heatmap preview rendered.");
+            enableButtons(true);
+        }
+    });
+    htmlComponent.addEventListener("SeedsFound", function(event) {
+        window.hasPreview = true;
+        handleSeedsFound(event.Data);
+    });
+        htmlComponent.addEventListener("SeedsUpdated", function(event) {
+            if (event.Data && event.Data.seeds) {
+                var seeds = event.Data.seeds;
+                // Normalize to array (MATLAB single-element structs may arrive as objects)
+                if (!Array.isArray(seeds)) {
+                    seeds = [seeds];
+                }
+                renderSeedsTable(seeds);
+            }
+            setStatus("done", "Updated");
+            appendLog("Seeds updated on plot.");
+            enableButtons(true);
+        });
+    htmlComponent.addEventListener("SeedsRefined", function(event) {
+        handleSeedsRefined(event.Data);
+    });
+    htmlComponent.addEventListener("ExportComplete", function(event) {
+        setStatus("done", "Exported");
+        appendLog("Results exported to: " + (event.Data.path || "file"));
+        enableButtons(true);
+    });
+    htmlComponent.addEventListener("PredictionsGenerated", function(event) {
+        var d = event.Data || {};
+        setStatus("done", "Predictions Ready");
+        appendLog("Dense predictions generated: " + (d.count || "") + " entries written to db.Pred.");
+        document.getElementById("btnGenPredictions").disabled = false;
+    });
+    htmlComponent.addEventListener("PredictionsError", function(event) {
+        setStatus("error", "Prediction Error");
+        appendLog("ERROR generating predictions: " + (event.Data || "Unknown error"));
+        document.getElementById("btnGenPredictions").disabled = false;
+    });
+    htmlComponent.addEventListener("OptimaSaved", function(event) {
+        var d = event.Data || {};
+        appendLog("Saved " + (d.count || 0) + " optima to DB (" + (d.total || 0) + " total).");
+        setStatus("done", "Saved to DB");
+    });
+    htmlComponent.addEventListener("DbOptimaData", function(event) {
+        var d = event.Data || {};
+        var optima = d.optima || [];
+        if (!Array.isArray(optima)) optima = [optima];
+        renderDbOptimaTable(optima);
+    });
+
+    htmlComponent.addEventListener("PanelMode", function(event) {
+        var d = event.Data || {};
+        if (d.mode) {
+            window.panelMode = d.mode;
+            applyPanelMode();
+        }
+    });
+
+    // Listen to metric/variant changes and sync to MATLAB state
+    var metricSelect = document.getElementById("metric");
+    var variantSelect = document.getElementById("metricVariant");
+    if (metricSelect) {
+        metricSelect.addEventListener("change", function() {
+            notifyMetricChange();
+        });
+    }
+    if (variantSelect) {
+        variantSelect.addEventListener("change", function() {
+            notifyMetricChange();
+        });
+    }
+
+    htmlComponent.addEventListener("ProcessStopAck", function(event) {
+        var msg = (typeof event.Data === "string") ? event.Data : ((event.Data && event.Data.message) ? event.Data.message : "Stopping ongoing process...");
+        setStatus("running", "Stopping...");
+        appendLog(msg);
+    });
+    htmlComponent.addEventListener("ProcessStopped", function(event) {
+        var msg = (typeof event.Data === "string") ? event.Data : ((event.Data && event.Data.message) ? event.Data.message : "Process terminated by user.");
+        setStatus("idle", "Terminated");
+        appendLog(msg);
+        enableButtons(true);
+        resetStopButtons();
+    });
+    htmlComponent.addEventListener("OptimizeStopped", function(event) {
+        var msg = (typeof event.Data === "string") ? event.Data : "Optimization terminated by user.";
+        setStatus("idle", "Terminated");
+        appendLog(msg);
+        enableButtons(true);
+        resetStopButtons();
+    });
+
+    initializeEmptySeedTable();
+}
+
+function stopProcess() {
+    var stopBtns = document.querySelectorAll(".btn-stop");
+    stopBtns.forEach(function(b) {
+        b.innerHTML = "&#9632; Stopping...";
+        b.disabled = true;
+    });
+    appendLog("Stop requested by user. Terminating process...");
+    if (window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("StopProcess", {});
+    }
+}
+
+function resetStopButtons() {
+    var stopBtns = document.querySelectorAll(".btn-stop");
+    stopBtns.forEach(function(b) {
+        b.innerHTML = "&#9632; Stop";
+        b.disabled = false;
+    });
+}
+
+function notifyMetricChange() {
+    var metric = val("metric");
+    var metricVariant = val("metricVariant");
+    window.htmlComponent.sendEventToMATLAB("MetricChanged", {
+        metric: metric,
+        metricVariant: metricVariant
+    });
+}
+
+function applyPanelMode() {
+    if (window.panelMode === "right") {
+        document.body.classList.remove("panel-left");
+        document.body.classList.add("panel-right");
+        var section = document.getElementById("seedsTableSection");
+        if (section) section.classList.remove("hidden");
+        switchBottomTab("current");
+    } else {
+        document.body.classList.remove("panel-right");
+        document.body.classList.add("panel-left");
+    }
+}
+
+function initializeEmptySeedTable() {
+    var tbody = document.querySelector("#seedsTable tbody");
+    if (!tbody) return;
+    if (tbody.children.length > 0) return;
+
+    var tr = document.createElement("tr");
+    tr.innerHTML = '<td colspan="5" style="color:var(--text-secondary);font-size:11px;padding:10px;">No seeds yet. Use Preview + Initialize Seeds, or Add / Import CSV.</td>';
+    tbody.appendChild(tr);
+}
+
+function collectConfig() {
+    var linked = chk("linkMetricsToGrid");
+    return {
+        dataSource: getDataSource(),
+        discreteOnly: chk("discreteOnly"),
+        laserWavelength: num("laserWavelength"),
+        periodMin: num("periodMin"),
+        periodMax: num("periodMax"),
+        radiusMin: num("radiusMin"),
+        radiusMax: num("radiusMax"),
+        stokesShiftMin: num("stokesShiftMin"),
+        stokesShiftMax: num("stokesShiftMax"),
+        spatialResolution: num("spatialResolution"),
+        stokesShiftResolution: num("stokesShiftResolution"),
+        linkMetricsToGrid: linked,
+        metricsShiftMin: linked ? num("stokesShiftMin") : num("metricsShiftMin"),
+        metricsShiftMax: linked ? num("stokesShiftMax") : num("metricsShiftMax"),
+        metric: val("metric"),
+        metricVariant: val("metricVariant"),
+        numStartPoints: num("numStartPoints"),
+        multiStartUseParallel: chk("multiStartUseParallel"),
+        multiStartDisplay: val("multiStartDisplay"),
+        functionTolerance: num("functionTolerance"),
+        stepTolerance: num("stepTolerance"),
+        maxIterations: num("maxIterations"),
+        fminconAlgorithm: val("fminconAlgorithm"),
+        maxFunctionEvaluations: num("maxFunctionEvaluations"),
+        constraintTolerance: num("constraintTolerance"),
+        optimalityTolerance: num("optimalityTolerance"),
+        basinRetryCount: num("basinRetryCount"),
+        basinRetryShrinkFactor: num("basinRetryShrinkFactor"),
+        keepRejectedSeeds: chk("keepRejectedSeeds"),
+        showMultiStartPaths: chk("showMultiStartPaths"),
+        useAnalyticalGradients: chk("useAnalyticalGradients"),
+        useGradientSeedInit: chk("useGradientSeedInit"),
+        gradientSeedCount: num("gradientSeedCount"),
+        gradientSeedGridSize: num("gradientSeedGridSize"),
+        candidateTopN: num("candidateTopN"),
+        prominenceThreshold: num("prominenceThreshold"),
+        refinementRadius: num("refinementRadius")
+    };
+}
+
+function generatePredictions() {
+    document.getElementById("btnGenPredictions").disabled = true;
+    clearLog();
+    setStatus("running", "Generating predictions...");
+    appendLog("Generating dense predictions from current grid settings...");
+    var cfg = collectConfig();
+    window.htmlComponent.sendEventToMATLAB("GeneratePredictions", cfg);
+}
+
+function toggleMetricsWindow() {
+    var linked = document.getElementById("linkMetricsToGrid").checked;
+    var block = document.getElementById("metricsWindowBlock");
+    var minInput = document.getElementById("metricsShiftMin");
+    var maxInput = document.getElementById("metricsShiftMax");
+    if (linked) {
+        block.style.display = "none";
+        block.style.opacity = "0.5";
+        minInput.disabled = true;
+        maxInput.disabled = true;
+    } else {
+        block.style.display = "";
+        block.style.opacity = "1";
+        minInput.disabled = false;
+        maxInput.disabled = false;
+        if (parseFloat(minInput.value) === 100 && parseFloat(maxInput.value) === 3600) {
+            minInput.value = document.getElementById("stokesShiftMin").value;
+            maxInput.value = document.getElementById("stokesShiftMax").value;
+        }
+    }
+}
+
+function toggleDataSource() {
+    var radios = document.getElementsByName("dataSourceGroup");
+    var source = "model";
+    for (var i = 0; i < radios.length; i++) {
+        if (radios[i].checked) {
+            source = radios[i].value;
+            break;
+        }
+    }
+    document.getElementById("modelFields").style.display = source === "model" ? "block" : "none";
+    document.getElementById("interpFields").style.display = source === "interpolation" ? "block" : "none";
+}
+
+function getDataSource() {
+    var radios = document.getElementsByName("dataSourceGroup");
+    for (var i = 0; i < radios.length; i++) {
+        if (radios[i].checked) return radios[i].value;
+    }
+    return "model";
+}
+
+function toggleStep(stepNum) {
+    var header = document.getElementById("step" + stepNum + "Header");
+    header.classList.toggle("collapsed");
+}
+
+// Step 1: Preview Metric Heatmap
+// Reset optimization workflow state (called before starting new preview/detection)
+function resetOptimizationState() {
+    // Clear UI state
+    window.hasPreview = false;
+    var tbody = document.querySelector("#seedsTable tbody");
+    if (tbody) {
+        tbody.innerHTML = '';
+    }
+    appendLog("Workflow state reset. Ready for new optimization.");
+}
+
+function previewMetric() {
+    // Save existing seeds so they survive the metric change
+    var existingSeeds = collectSeeds();
+    window._pendingSeeds = existingSeeds.length > 0 ? existingSeeds : null;
+
+    enableButtons(false);
+    clearLog();
+    window.hasPreview = false;
+    if (existingSeeds.length > 0) {
+        appendLog("Refreshing heatmap with new metric. Will re-evaluate " + existingSeeds.length + " existing seed(s)...");
+    }
+    setStatus("running", "Generating Preview...");
+    var cfg = collectConfig();
+    cfg.mode = "preview";
+    window.htmlComponent.sendEventToMATLAB("PreviewMetric", cfg);
+}
+
+// Step 2: Initialize Seeds
+function initializeSeeds() {
+    enableButtons(false);
+    clearLog();
+    setStatus("running", "Detecting Seeds...");
+    
+    // Clear previous seeds
+    document.getElementById("seedsTableSection").classList.add("hidden");
+    document.querySelector("#seedsTable tbody").innerHTML = "";
+
+    var cfg = collectConfig();
+    cfg.mode = "detect";
+    window.htmlComponent.sendEventToMATLAB("RunOptimize", cfg);
+}
+
+// Handle seeds found from detection
+function handleSeedsFound(candidates) {
+    // Normalize to array (MATLAB single-element structs may arrive as objects)
+    if (!candidates) {
+        appendLog("No candidates found.");
+        enableButtons(true);
+        return;
+    }
+    if (!Array.isArray(candidates)) {
+        candidates = [candidates];
+    }
+    if (candidates.length === 0) {
+        appendLog("No candidates found.");
+        enableButtons(true);
+        return;
+    }
+
+    renderSeedsTable(candidates);
+    
+    document.getElementById("seedsTableSection").classList.remove("hidden");
+    appendLog("Found " + candidates.length + " candidate seeds. Edit coordinates if needed, then Fine Tune.");
+    setStatus("done", "Seeds Found");
+    enableButtons(true);
+    }
+    function renderSeedsTable(seeds) {
+        // Normalize to array (MATLAB single-element structs may arrive as objects)
+        if (!Array.isArray(seeds)) {
+            seeds = [seeds];
+        }
+        
+        var tbody = document.querySelector("#seedsTable tbody");
+        tbody.innerHTML = "";
+        seeds.forEach((s, idx) => {
+            var tr = document.createElement("tr");
+            var tagStr = s.Tag ? s.Tag : `Seed ${idx+1}`;
+            var valStr = isFinite(s.Value) ? s.Value.toFixed(3) : 'N/A';
+            var pVal = isFinite(s.P) ? s.P : 0;
+            var rVal = isFinite(s.R) ? s.R : 0;
+            tr.innerHTML = `
+                <td><input type="checkbox" class="seed-checkbox" checked></td>
+                <td><input type="text" class="tag-input" value="${tagStr}"></td>
+                <td><input type="number" class="p-input" value="${pVal.toFixed(2)}" step="0.1"></td>
+                <td><input type="number" class="r-input" value="${rVal.toFixed(2)}" step="0.1"></td>
+                <td><span class="val-display">${valStr}</span></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+// Collect seeds from editable table
+function collectSeeds() {
+    var rows = Array.from(document.querySelectorAll("#seedsTable tbody tr"));
+    var seeds = [];
+    rows.forEach(row => {
+        var cb = row.querySelector(".seed-checkbox");
+        if (cb && cb.checked) {
+            var pVal = parseFloat(row.querySelector(".p-input").value);
+            var rVal = parseFloat(row.querySelector(".r-input").value);
+            var valDisplay = row.querySelector(".val-display");
+            var valText = valDisplay ? valDisplay.textContent.trim() : 'N/A';
+            
+            // Validate coordinates before adding
+            if (isFinite(pVal) && isFinite(rVal)) {
+                seeds.push({
+                    Tag: row.querySelector(".tag-input").value || ("Point " + (seeds.length + 1)),
+                    P: pVal,
+                    R: rVal,
+                    Value: valText !== 'N/A' ? parseFloat(valText) : NaN
+                });
+            } else {
+                console.warn("[collectSeeds] Skipping row with invalid coordinates: P=" + pVal + ", R=" + rVal);
+            }
+        }
+    });
+    return seeds;
+}
+
+// Validate seeds before sending to MATLAB
+function validateSeeds(seeds) {
+    if (!Array.isArray(seeds)) {
+        console.error("[validateSeeds] Seeds is not an array");
+        return false;
+    }
+    
+    for (let i = 0; i < seeds.length; i++) {
+        var s = seeds[i];
+        if (!isFinite(s.P) || !isFinite(s.R)) {
+            console.error("[validateSeeds] Seed " + i + " has invalid coordinates");
+            return false;
+        }
+    }
+    return true;
+}
+
+// Update seeds on plot (without re-detection)
+function updateSeeds() {
+    var seeds = collectSeeds();
+    if (seeds.length === 0) {
+        alert("No seeds selected.");
+        return;
+    }
+    
+    // Validate seeds before sending
+    if (!validateSeeds(seeds)) {
+        alert("One or more seeds have invalid coordinates. Please correct them.");
+        return;
+    }
+    
+    enableButtons(false);
+    setStatus("running", "Updating...");
+    var cfg = collectConfig();
+    cfg.seeds = seeds;
+    window.htmlComponent.sendEventToMATLAB("UpdateSeeds", cfg);
+}
+
+// Step 3: Fine-Tune Seeds
+function fineTuneSeeds() {
+    var seeds = collectSeeds();
+    if (seeds.length === 0) {
+        alert("Please select at least one seed to refine.");
+        return;
+    }
+    
+    // Validate seeds before refinement
+    if (!validateSeeds(seeds)) {
+        alert("One or more seeds have invalid coordinates. Please correct them.");
+        return;
+    }
+    
+    enableButtons(false);
+    appendLog("Starting fine tuning with " + seeds.length + " seeds...");
+    setStatus("running", "Refining...");
+    
+    var cfg = collectConfig();
+    cfg.mode = "refine";
+    cfg.seeds = seeds;
+    window.htmlComponent.sendEventToMATLAB("RunOptimize", cfg);
+}
+
+// Handle refined seeds (update table with refined values)
+function handleSeedsRefined(refinedData) {
+    if (!refinedData) {
+        enableButtons(true);
+        return;
+    }
+
+    appendLog("[UI] SeedsRefined event received.");
+
+    // Normalize MATLAB payload to JS array robustly
+    var seeds = normalizeMatlabStructArray(refinedData.seeds);
+    if (seeds.length === 0) {
+        appendLog("[UI] SeedsRefined had no seeds in payload.");
+        enableButtons(true);
+        return;
+    }
+    
+    renderSeedsTable(seeds);
+    document.getElementById("seedsTableSection").classList.remove("hidden");
+
+    appendLog("Refined " + seeds.length + " optima. Results updated in table.");
+    setStatus("done", "Refined");
+    enableButtons(true);
+    }
+
+function normalizeMatlabStructArray(data) {
+    if (!data) return [];
+    if (Array.isArray(data)) return data;
+    if (typeof data !== "object") return [];
+
+    // Single struct object
+    if (Object.prototype.hasOwnProperty.call(data, "P") && Object.prototype.hasOwnProperty.call(data, "R")) {
+        return [data];
+    }
+
+    // Field-wise arrays from MATLAB serialization: {P:[...], R:[...], Value:[...], Tag:[...]}
+    if (Array.isArray(data.P) && Array.isArray(data.R)) {
+        var n = Math.min(data.P.length, data.R.length);
+        var arr = [];
+        for (var i = 0; i < n; i++) {
+            arr.push({
+                P: data.P[i],
+                R: data.R[i],
+                Value: Array.isArray(data.Value) ? data.Value[i] : data.Value,
+                Tag: Array.isArray(data.Tag) ? data.Tag[i] : (data.Tag || ("Optimum " + (i + 1)))
+            });
+        }
+        return arr;
+    }
+
+    // Numeric-keyed object: {"0": {...}, "1": {...}}
+    var keys = Object.keys(data);
+    if (keys.length > 0 && keys.every(function(k) { return /^\d+$/.test(k); })) {
+        keys.sort(function(a,b){ return parseInt(a,10) - parseInt(b,10); });
+        return keys.map(function(k){ return data[k]; });
+    }
+
+    return [];
+}
+
+// Export results to MAT file
+function exportResults() {
+    var seeds = collectSeeds();
+    if (seeds.length === 0) {
+        alert("No seeds to export.");
+        return;
+    }
+    enableButtons(false);
+    setStatus("running", "Exporting...");
+    var cfg = collectConfig();
+    cfg.seeds = seeds;
+    
+    // Get selected export format
+    var formatRadios = document.getElementsByName("exportFormat");
+    cfg.exportFormat = "mat";
+    for (var i = 0; i < formatRadios.length; i++) {
+        if (formatRadios[i].checked) {
+            cfg.exportFormat = formatRadios[i].value;
+            break;
+        }
+    }
+    
+    window.htmlComponent.sendEventToMATLAB("ExportResults", cfg);
+}
+
+// Import seeds (Tag, P, R) from CSV
+function importSeedsCsv() {
+    enableButtons(false);
+    setStatus("running", "Importing CSV...");
+    appendLog("Importing seeds from CSV...");
+    var cfg = collectConfig();
+    window.htmlComponent.sendEventToMATLAB("ImportSeedsCsv", cfg);
+}
+
+function toggleAllSeeds(source) {
+    var checkboxes = document.querySelectorAll('#seedsTable tbody .seed-checkbox');
+    checkboxes.forEach(cb => cb.checked = source.checked);
+}
+
+function removeSelectedSeeds() {
+    var tbody = document.querySelector("#seedsTable tbody");
+    var checked = tbody.querySelectorAll('.seed-checkbox:checked');
+    checked.forEach(cb => cb.closest("tr").remove());
+    // Re-number tags
+    var rows = tbody.querySelectorAll("tr");
+    rows.forEach((row, idx) => {
+        var tagInput = row.querySelector(".tag-input");
+        if (tagInput.value.startsWith("Seed ") || tagInput.value.startsWith("Optimum ")) {
+            tagInput.value = "Seed " + (idx + 1);
+        }
+    });
+}
+
+function addSeed() {
+    var tbody = document.querySelector("#seedsTable tbody");
+    var idx = tbody.querySelectorAll("tr").length + 1;
+    var pMin = num("periodMin"), pMax = num("periodMax");
+    var rMin = num("radiusMin"), rMax = num("radiusMax");
+    var pDefault = ((pMin + pMax) / 2).toFixed(1);
+    var rDefault = ((rMin + rMax) / 2).toFixed(1);
+    
+    var tbody = document.querySelector("#seedsTable tbody");
+    if (tbody.children.length === 1) {
+        var c = tbody.children[0];
+        if (c.children.length === 1 && c.children[0].colSpan === 5) {
+            tbody.innerHTML = "";
+        }
+    }
+
+    var tr = document.createElement("tr");
+    tr.innerHTML = `
+        <td><input type="checkbox" class="seed-checkbox" checked></td>
+        <td><input type="text" class="tag-input" value="Seed ${idx}"></td>
+        <td><input type="number" class="p-input" value="${pDefault}" step="0.1"></td>
+        <td><input type="number" class="r-input" value="${rDefault}" step="0.1"></td>
+        <td><span class="val-display">N/A</span></td>
+    `;
+    tbody.appendChild(tr);
+
+    if (window.hasPreview) {
+        updateSeeds();
+    }
+}
+
+function handleProgress(data) {
+    if (!data) return;
+    if (data.message) appendLog(data.message);
+    if (data.fraction !== undefined && data.fraction !== null) {
+        var pct = Math.round(data.fraction * 100);
+        document.getElementById("progressBar").style.width = pct + "%";
+    }
+}
+
+function val(id) { var el = document.getElementById(id); return el ? el.value : ""; }
+function num(id) { return parseFloat(val(id)) || 0; }
+function chk(id) { var el = document.getElementById(id); return el ? el.checked : false; }
+
+function enableButtons(state) {
+    var btnPrev = document.getElementById("btnPreview");
+    if (btnPrev) btnPrev.disabled = !state;
+    var btnInit = document.getElementById("btnInitSeeds");
+    if (btnInit) btnInit.disabled = !state;
+    var btnFine = document.getElementById("btnFineTune");
+    if (btnFine) btnFine.disabled = !state;
+    var btnUpd = document.getElementById("btnUpdate");
+    if (btnUpd) btnUpd.disabled = !state;
+    var btnExp = document.getElementById("btnExport");
+    if (btnExp) btnExp.disabled = !state;
+    var btnGen = document.getElementById("btnGenPredictions");
+    if (btnGen) btnGen.disabled = !state;
+    if (state) {
+        resetStopButtons();
+    }
+}
+function fillIfEmpty(id, value) {
+    if (!value) return;
+    var el = document.getElementById(id);
+    if (el && (el.value === "" || el.value === el.defaultValue)) el.value = value;
+}
+function updateDbBanner(d) {
+    var banner = document.getElementById("dbStatusBanner");
+    if (!banner || !d) return;
+    if (!d.hasSimData && !d.hasModel) { banner.style.display = "none"; return; }
+    banner.style.display = "block";
+    var parts = [];
+    if (d.hasSimData) parts.push(d.simEntries + " sim");
+    if (d.hasModel) parts.push("Model \u2713");
+    if (d.hasPredictions) parts.push(d.predEntries + " pred");
+    banner.textContent = "DB: " + parts.join(" | ");
+}
+
+function updateOptRequirements(d) {
+    if (!d) return;
+    var src = getDataSource();
+    // Model status
+    var modelEl = document.getElementById("reqModelStatus");
+    if (modelEl) {
+        if (d.hasModel) {
+            modelEl.textContent = "\u2713 Loaded";
+            modelEl.className = "req-badge req-ok";
+        } else {
+            modelEl.textContent = "\u2717 Not loaded";
+            modelEl.className = "req-badge req-missing";
+        }
+    }
+    // RI status
+    var riEl = document.getElementById("reqRIStatus");
+    if (riEl) {
+        if (d.hasRI) {
+            riEl.textContent = "\u2713 Loaded";
+            riEl.className = "req-badge req-ok";
+        } else {
+            riEl.textContent = "\u2717 Not loaded";
+            riEl.className = "req-badge req-missing";
+        }
+    }
+    // Sim data status (for interpolation mode)
+    var simEl = document.getElementById("reqSimStatus");
+    if (simEl) {
+        if (d.hasSimData) {
+            simEl.textContent = "\u2713 " + (d.simEntries || "") + " entries";
+            simEl.className = "req-badge req-ok";
+        } else {
+            simEl.textContent = "\u2717 Not loaded";
+            simEl.className = "req-badge req-missing";
+        }
+    }
+    // Show/hide sim row based on data source
+    var simRow = document.getElementById("reqSimRow");
+    if (simRow) simRow.style.display = (src === "interpolation") ? "" : "none";
+    // Analyte status
+    var analyteEl = document.getElementById("reqAnalyteStatus");
+    if (analyteEl) {
+        if (d.hasAnalyte) {
+            analyteEl.textContent = "\u2713 Loaded";
+            analyteEl.className = "req-badge req-ok";
+        } else {
+            analyteEl.textContent = "\u2014 Optional";
+            analyteEl.className = "req-badge req-optional";
+        }
+    }
+    // Predictions status
+    var predEl = document.getElementById("reqPredStatus");
+    if (predEl) {
+        if (d.hasPredictions) {
+            predEl.textContent = "\u2713 " + (d.predEntries || "") + " entries";
+            predEl.className = "req-badge req-ok";
+        } else {
+            predEl.textContent = "\u2014 Not cached";
+            predEl.className = "req-badge req-optional";
+        }
+    }
+    // Optima status
+    var optimaEl = document.getElementById("reqOptimaStatus");
+    if (optimaEl) {
+        if (d.hasOptima) {
+            optimaEl.textContent = "\u2713 " + (d.optimaCount || "") + " saved";
+            optimaEl.className = "req-badge req-ok";
+        } else {
+            optimaEl.textContent = "\u2014 None";
+            optimaEl.className = "req-badge req-optional";
+        }
+    }
+}
+
+function setStatus(cls, text) {
+    var el = document.getElementById("statusBadge");
+    el.className = "status-badge status-" + cls;
+    el.textContent = text;
+}
+
+function appendLog(msg) {
+    var el = document.getElementById("progressLog");
+    el.textContent += msg + "\n";
+    el.scrollTop = el.scrollHeight;
+}
+
+function clearLog() {
+    document.getElementById("progressLog").textContent = "";
+    document.getElementById("progressBar").style.width = "0%";
+}
+
+function toggleSection(el) {
+    el.classList.toggle("open");
+    var content = el.nextElementSibling;
+    content.style.display = content.style.display === "none" ? "block" : "none";
+}
+
+// --- Table sorting ---
+window._sortCol = -1;
+window._sortDir = 1; // 1 = asc, -1 = desc
+
+function sortTable(colIdx) {
+    var table = document.getElementById("seedsTable");
+    var tbody = table.querySelector("tbody");
+    var rows = Array.from(tbody.querySelectorAll("tr"));
+    if (rows.length === 0) return;
+
+    // Toggle direction if same column, else start ascending
+    if (window._sortCol === colIdx) {
+        window._sortDir *= -1;
+    } else {
+        window._sortCol = colIdx;
+        window._sortDir = 1;
+    }
+
+    rows.sort(function(a, b) {
+        var aVal = getCellSortValue(a, colIdx);
+        var bVal = getCellSortValue(b, colIdx);
+        if (typeof aVal === "string" && typeof bVal === "string") {
+            return window._sortDir * aVal.localeCompare(bVal, undefined, {numeric: true, sensitivity: 'base'});
+        }
+        // Push NaN (N/A) to bottom regardless of direction
+        if (isNaN(aVal) && isNaN(bVal)) return 0;
+        if (isNaN(aVal)) return 1;
+        if (isNaN(bVal)) return -1;
+        return window._sortDir * (aVal - bVal);
+    });
+
+    rows.forEach(function(r) { tbody.appendChild(r); });
+
+    // Update header indicators
+    var ths = table.querySelectorAll("th.sortable");
+    ths.forEach(function(th) {
+        th.classList.remove("sort-asc", "sort-desc");
+        if (parseInt(th.dataset.col, 10) === colIdx) {
+            th.classList.add(window._sortDir === 1 ? "sort-asc" : "sort-desc");
+        }
+    });
+}
+
+function getCellSortValue(row, colIdx) {
+    // col 1 = Tag (string), col 2 = P (number), col 3 = R (number), col 4 = Value (number)
+    switch (colIdx) {
+        case 1: {
+            var inp = row.querySelector(".tag-input");
+            return inp ? inp.value : "";
+        }
+        case 2: {
+            var inp = row.querySelector(".p-input");
+            return inp ? parseFloat(inp.value) : NaN;
+        }
+        case 3: {
+            var inp = row.querySelector(".r-input");
+            return inp ? parseFloat(inp.value) : NaN;
+        }
+        case 4: {
+            var disp = row.querySelector(".val-display");
+            if (!disp) return NaN;
+            var txt = disp.textContent.trim();
+            return txt === "N/A" ? NaN : parseFloat(txt);
+        }
+    }
+    return "";
+}
+
+// ===== Dual-Table Panel Functions =====
+function switchBottomTab(tab) {
+    var btnCurrent = document.getElementById("tabCurrentResults");
+    var btnDb = document.getElementById("tabDbOptima");
+    var panCurrent = document.getElementById("panelCurrentResults");
+    var panDb = document.getElementById("panelDbOptima");
+    if (tab === "current") {
+        btnCurrent.style.borderBottomColor = "var(--accent)";
+        btnCurrent.style.color = "var(--accent)";
+        btnDb.style.borderBottomColor = "transparent";
+        btnDb.style.color = "var(--text-secondary)";
+        panCurrent.style.display = "flex";
+        panDb.style.display = "none";
+    } else {
+        btnDb.style.borderBottomColor = "var(--accent)";
+        btnDb.style.color = "var(--accent)";
+        btnCurrent.style.borderBottomColor = "transparent";
+        btnCurrent.style.color = "var(--text-secondary)";
+        panCurrent.style.display = "none";
+        panDb.style.display = "flex";
+        refreshDbOptima();
+    }
+}
+
+function saveOptimaToDb() {
+    var seeds = collectSeeds();
+    if (!seeds || seeds.length === 0) {
+        appendLog("No current optima to save.");
+        return;
+    }
+    var cfg = collectConfig();
+    cfg.seeds = seeds;
+    window.htmlComponent.sendEventToMATLAB("SaveOptimaToDb", cfg);
+}
+
+function refreshDbOptima() {
+    window.htmlComponent.sendEventToMATLAB("GetDbOptima", {});
+}
+
+function renderDbOptimaTable(optima) {
+    var tbody = document.getElementById("dbOptimaTable").querySelector("tbody");
+    tbody.innerHTML = "";
+    if (!optima || optima.length === 0) {
+        document.getElementById("dbOptimaCount").textContent = "0 rows";
+        return;
+    }
+    for (var i = 0; i < optima.length; i++) {
+        var o = optima[i];
+        var tr = document.createElement("tr");
+        tr.dataset.index = i + 1; // 1-based for MATLAB
+        tr.innerHTML =
+            '<td><input type="checkbox" class="db-optima-cb"></td>' +
+            '<td style="font-size:11px;">' + (o.basinTag || "") + '</td>' +
+            '<td style="font-size:11px;">' + (o.metric || "") + '</td>' +
+            '<td style="font-size:11px;">' + (o.period != null ? o.period.toFixed(2) : "") + '</td>' +
+            '<td style="font-size:11px;">' + (o.radius != null ? o.radius.toFixed(2) : "") + '</td>';
+        tbody.appendChild(tr);
+    }
+    document.getElementById("dbOptimaCount").textContent = optima.length + " rows";
+}
+
+function deleteSelectedDbOptima() {
+    var indices = getSelectedDbOptimaIndices();
+    if (indices.length === 0) {
+        appendLog("No DB optima rows selected for deletion.");
+        return;
+    }
+    window.htmlComponent.sendEventToMATLAB("DeleteDbOptima", {indices: indices});
+}
+
+function setSeedsFromDbOptima() {
+    var indices = getSelectedDbOptimaIndices();
+    if (indices.length === 0) {
+        appendLog("No DB optima rows selected to set as seeds.");
+        return;
+    }
+    window.htmlComponent.sendEventToMATLAB("SetSeedsFromDbOptima", {indices: indices});
+    switchBottomTab("current");
+}
+
+function getSelectedDbOptimaIndices() {
+    var cbs = document.querySelectorAll("#dbOptimaTable tbody .db-optima-cb:checked");
+    var indices = [];
+    cbs.forEach(function(cb) {
+        var idx = parseInt(cb.closest("tr").dataset.index, 10);
+        if (!isNaN(idx)) indices.push(idx);
+    });
+    return indices;
+}
+
+function toggleAllDbOptima(masterCb) {
+    var cbs = document.querySelectorAll("#dbOptimaTable tbody .db-optima-cb");
+    cbs.forEach(function(cb) { cb.checked = masterCb.checked; });
+}
+</script>
+</head>
+<body>
+    <div id="dbStatusBanner" style="display:none;background:#132b42;border:1px solid #1b5055;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:11px;color:#7fa8b0;"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px 8px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
+        <h2 style="margin:0;padding:0;border:none;">Stage 5 — Optimization</h2>
+        <div style="display:flex;gap:6px;">
+            <button class="btn-stop" id="btnStopHeader" onclick="stopProcess()" title="Stop any running process immediately">&#9632; Stop</button>
+            <button class="btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="window.htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
+            <button class="btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="window.htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="steps-container">
+            <!-- ===== STEP 1: Data & Grid Setup ===== -->
+            <div class="step">
+                <div class="step-header active" id="step1Header" onclick="toggleStep(1)">
+                    <span class="step-number">1</span>
+                    <span class="step-title">Data & Grid Setup</span>
+                    <span class="step-toggle"></span>
+                </div>
+                <div class="step-content">
+                    <!-- Data Source -->
+                    <div class="section">
+                        <div class="section-title open" onclick="toggleSection(this)">Data Requirements</div>
+                        <div>
+                            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;">Data is loaded from the Database (Tab 0).</div>
+                            <div class="field">
+                                <label>Inference Mode</label>
+                                <div style="display:flex; gap:12px; padding:4px 0;">
+                                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:11px;">
+                                        <input type="radio" name="dataSourceGroup" value="model" checked onchange="toggleDataSource()">
+                                        Trained Model (DNN)
+                                    </label>
+                                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:11px;">
+                                        <input type="radio" name="dataSourceGroup" value="interpolation" onchange="toggleDataSource()">
+                                        Raw Data (Interpolation)
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div id="modelFields">
+                                <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+                                    <span style="font-size:11px;color:var(--text-secondary);">DNN Model:</span>
+                                    <span id="reqModelStatus" style="font-size:12px;font-weight:600;color:var(--error);">&#10007; Not loaded</span>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+                                    <span style="font-size:11px;color:var(--text-secondary);">Refractive Index:</span>
+                                    <span id="reqRIStatus" style="font-size:12px;font-weight:600;color:var(--text-secondary);">&#8212; Auto (McPeak)</span>
+                                </div>
+                            </div>
+
+                            <div id="interpFields" style="display:none;">
+                                <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+                                    <span style="font-size:11px;color:var(--text-secondary);">Simulation Data:</span>
+                                    <span id="reqSimStatus" style="font-size:12px;font-weight:600;color:var(--error);">&#10007; Not loaded</span>
+                                </div>
+                                <div class="toggle-row">
+                                    <input type="checkbox" id="discreteOnly">
+                                    <label for="discreteOnly">Discrete Only (skip continuous refinement)</label>
+                                </div>
+                            </div>
+
+                            <div style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px;">
+                                <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+                                    <span style="font-size:11px;color:var(--text-secondary);">Analyte Spectrum:</span>
+                                    <span id="reqAnalyteStatus" class="req-badge req-optional" style="font-size:12px;font-weight:600;">&#8212; Optional</span>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+                                    <span style="font-size:11px;color:var(--text-secondary);">Dense Predictions:</span>
+                                    <span id="reqPredStatus" class="req-badge req-optional" style="font-size:12px;font-weight:600;">&#8212; Not cached</span>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
+                                    <span style="font-size:11px;color:var(--text-secondary);">Saved Optima:</span>
+                                    <span id="reqOptimaStatus" class="req-badge req-optional" style="font-size:12px;font-weight:600;">&#8212; None</span>
+                                </div>
+                            </div>
+                            <div style="margin-top:8px;">
+                                <div style="display:flex;gap:8px;">
+                                    <button id="btnGenPredictions" class="btn-secondary" style="flex:1;padding:6px 12px;font-size:11px;" onclick="generatePredictions()">Generate / Regenerate Predictions</button>
+                                    <button class="btn-stop" onclick="stopProcess()" title="Stop any running process immediately">&#9632; Stop</button>
+                                </div>
+                                <p class="hint" style="margin-top:4px;">Runs the DNN model over the current grid and writes results to db.Pred. Required before optimization if no dense predictions are cached.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Grid Definition -->
+                    <div class="section">
+                        <div class="section-title open" onclick="toggleSection(this)">Grid Definition</div>
+                        <div>
+                            <div class="field-row">
+                                <div class="field">
+                                    <label>Laser λ (nm)</label>
+                                    <input type="number" id="laserWavelength" value="785" step="0.1">
+                                </div>
+                                <div class="field">
+                                    <label>Spatial Res (nm)</label>
+                                    <input type="number" id="spatialResolution" value="2" step="0.1" min="0.1">
+                                </div>
+                            </div>
+                            <div class="field-row">
+                                <div class="field">
+                                    <label>Period Min (nm)</label>
+                                    <input type="number" id="periodMin" value="400" step="1">
+                                </div>
+                                <div class="field">
+                                    <label>Period Max (nm)</label>
+                                    <input type="number" id="periodMax" value="1400" step="1">
+                                </div>
+                            </div>
+                            <div class="field-row">
+                                <div class="field">
+                                    <label>Radius Min (nm)</label>
+                                    <input type="number" id="radiusMin" value="50" step="1">
+                                </div>
+                                <div class="field">
+                                    <label>Radius Max (nm)</label>
+                                    <input type="number" id="radiusMax" value="450" step="1">
+                                </div>
+                            </div>
+                            <div class="field-row">
+                                <div class="field">
+                                    <label>Stokes Min (cm⁻¹)</label>
+                                    <input type="number" id="stokesShiftMin" value="100" step="10">
+                                </div>
+                                <div class="field">
+                                    <label>Stokes Max (cm⁻¹)</label>
+                                    <input type="number" id="stokesShiftMax" value="3600" step="10">
+                                </div>
+                            </div>
+                            <div class="field">
+                                <label>Stokes Resolution (cm⁻¹)</label>
+                                <input type="number" id="stokesShiftResolution" value="5" step="1" min="1">
+                            </div>
+                            <div class="field-row" style="margin-top:4px;">
+                                <div class="field" style="display:flex;align-items:center;gap:6px;">
+                                    <input type="checkbox" id="linkMetricsToGrid" checked onchange="toggleMetricsWindow()">
+                                    <label for="linkMetricsToGrid" style="cursor:pointer;font-size:11px;">Metrics window follows grid</label>
+                                </div>
+                            </div>
+                            <div id="metricsWindowBlock" style="display:none;opacity:0.5;transition:opacity 0.3s ease;">
+                                <div class="field-row">
+                                    <div class="field">
+                                        <label>Metrics Min (cm⁻¹)</label>
+                                        <input type="number" id="metricsShiftMin" value="100" step="10" disabled>
+                                    </div>
+                                    <div class="field">
+                                        <label>Metrics Max (cm⁻¹)</label>
+                                        <input type="number" id="metricsShiftMax" value="3600" step="10" disabled>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Metric Selection -->
+                    <div class="section">
+                        <div class="section-title open" onclick="toggleSection(this)">Metric Selection</div>
+                        <div>
+                            <div class="field-row">
+                                <div class="field">
+                                    <label>Optimize Metric</label>
+                                    <select id="metric">
+                                        <option value="EF_vol">EF_vol (Volume SERS EF)</option>
+                                        <option value="EF_surf">EF_surf (Surface SERS EF)</option>
+                                        <option value="Absorptance" selected>Absorptance</option>
+                                        <option value="M_vol">M_vol (Volume Cross-product)</option>
+                                        <option value="M_surf">M_surf (Surface Cross-product)</option>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label>Metric Variant</label>
+                                    <select id="metricVariant">
+                                        <option value="laser" selected>At Laser Wavelength</option>
+                                        <option value="avg">Spectral Average (Stokes Window)</option>
+                                        <option value="weighted">Analyte-Weighted Average</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <p class="hint">Laser λ uses the single-wavelength value at the excitation wavelength; Spectral Average integrates uniformly over the Stokes window; Analyte-Weighted Average weights the spectrum by the analyte Raman cross-section profile.</p>
+                        </div>
+                    </div>
+
+                    <div class="btn-row">
+                        <button id="btnPreview" class="btn-primary" onclick="previewMetric()">Preview Heatmap</button>
+                        <button class="btn-stop" onclick="stopProcess()" title="Stop any running process immediately">&#9632; Stop</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== STEP 2: Seed Detection ===== -->
+            <div class="step">
+                <div class="step-header" id="step2Header" onclick="toggleStep(2)">
+                    <span class="step-number">2</span>
+                    <span class="step-title">Seed Detection</span>
+                    <span class="step-toggle"></span>
+                </div>
+                <div class="step-content">
+                    <div class="section">
+                        <div class="section-title open" onclick="toggleSection(this)">Detection Settings</div>
+                        <div>
+                            <div class="field-row">
+                                <div class="field">
+                                    <label>Number of Seeds</label>
+                                    <input type="number" id="candidateTopN" value="10" step="1" min="1">
+                                </div>
+                                <div class="field">
+                                    <label>Prominence Threshold (fraction of max)</label>
+                                    <input type="number" id="prominenceThreshold" value="0.05" step="0.01" min="0" max="1">
+                                </div>
+                            </div>
+                            <p class="hint">Algorithm detects peaks and returns the requested number of seeds above prominence threshold.</p>
+                        </div>
+                    </div>
+
+                    <div class="btn-row">
+                        <button id="btnInitSeeds" class="btn-primary" onclick="initializeSeeds()">Initialize Seeds</button>
+                        <button class="btn-stop" onclick="stopProcess()" title="Stop any running process immediately">&#9632; Stop</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== STEP 3: Fine-Tuning ===== -->
+            <div class="step">
+                <div class="step-header" id="step3Header" onclick="toggleStep(3)">
+                    <span class="step-number">3</span>
+                    <span class="step-title">Fine-Tuning & Export</span>
+                    <span class="step-toggle"></span>
+                </div>
+                <div class="step-content">
+                    <div class="section">
+                        <div class="section-title open" onclick="toggleSection(this)">MultiStart Settings</div>
+                        <div>
+                            <div class="field-row">
+                                <div class="field">
+                                    <label>Start Points per Seed</label>
+                                    <input type="number" id="numStartPoints" value="50" step="5" min="1">
+                                </div>
+                                <div class="field">
+                                    <label>Refinement Radius (nm)</label>
+                                    <input type="number" id="refinementRadius" value="10" step="1" min="1">
+                                </div>
+                            </div>
+
+                            <div class="field-row">
+                                <div class="field">
+                                    <label>Use Parallel</label>
+                                    <input type="checkbox" id="multiStartUseParallel" checked>
+                                </div>
+                                <div class="field">
+                                    <label>Display Verbosity</label>
+                                    <select id="multiStartDisplay">
+                                        <option value="off" selected>off</option>
+                                        <option value="final">final</option>
+                                        <option value="iter">iter</option>
+                                        <option value="diagnose">diagnose</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="field-row">
+                                <div class="field">
+                                    <label>Function Tolerance</label>
+                                    <input type="number" id="functionTolerance" value="1e-9" step="1e-10" min="1e-15">
+                                </div>
+                                <div class="field">
+                                    <label>Step Tolerance</label>
+                                    <input type="number" id="stepTolerance" value="1e-9" step="1e-10" min="1e-15">
+                                </div>
+                            </div>
+
+                            <div class="field-row">
+                                <div class="field">
+                                    <label>Max Iterations</label>
+                                    <input type="number" id="maxIterations" value="10000" step="100" min="1">
+                                </div>
+                                <div class="field">
+                                    <label>Max Function Evaluations</label>
+                                    <input type="number" id="maxFunctionEvaluations" value="10000" step="100" min="1">
+                                </div>
+                            </div>
+
+                            <div class="field-row">
+                                <div class="field">
+                                    <label>fmincon Algorithm</label>
+                                    <select id="fminconAlgorithm">
+                                        <option value="interior-point" selected>interior-point</option>
+                                        <option value="sqp">sqp</option>
+                                        <option value="active-set">active-set</option>
+                                        <option value="sqp-legacy">sqp-legacy</option>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label>Constraint Tolerance</label>
+                                    <input type="number" id="constraintTolerance" value="1e-9" step="1e-10" min="1e-15">
+                                </div>
+                            </div>
+
+                            <div class="field-row">
+                                <div class="field">
+                                    <label>Optimality Tolerance</label>
+                                    <input type="number" id="optimalityTolerance" value="1e-9" step="1e-10" min="1e-15">
+                                </div>
+                                <div class="field">
+                                    <label>Basin Retry Count</label>
+                                    <input type="number" id="basinRetryCount" value="4" step="1" min="1" max="20">
+                                </div>
+                            </div>
+
+                            <div class="field-row">
+                                <div class="field">
+                                    <label>Retry Radius Factor</label>
+                                    <input type="number" id="basinRetryShrinkFactor" value="0.5" step="0.05" min="0.1" max="0.95">
+                                </div>
+                            </div>
+
+                            <div class="field-row">
+                                <div class="field">
+                                    <label>Keep Rejected Seeds</label>
+                                    <input type="checkbox" id="keepRejectedSeeds" checked>
+                                </div>
+                                <div class="field">
+                                    <label>Show Refinement Paths</label>
+                                    <input type="checkbox" id="showMultiStartPaths">
+                                </div>
+                            </div>
+
+                            <div class="section-title" style="margin-top:12px; font-size:0.9em; color:var(--text-secondary);">Analytical Gradients (Optional)</div>
+                            <div class="field-row">
+                                <div class="field">
+                                    <label>Use Analytical Gradients</label>
+                                    <input type="checkbox" id="useAnalyticalGradients" checked>
+                                </div>
+                                <div class="field">
+                                    <label>Enable Gradient Seed Init</label>
+                                    <input type="checkbox" id="useGradientSeedInit" checked>
+                                </div>
+                            </div>
+
+                            <div class="field-row">
+                                <div class="field">
+                                    <label>Gradient Seed Count</label>
+                                    <input type="number" id="gradientSeedCount" value="0" step="1" min="0">
+                                </div>
+                                <div class="field">
+                                    <label>Gradient Scan Grid Size</label>
+                                    <input type="number" id="gradientSeedGridSize" value="20" step="2" min="4" max="50">
+                                </div>
+                            </div>
+
+                            <p class="hint">If a seed jumps basin, the solver retries with tighter radius (factor each retry). After retries, original seed can be kept as fallback. Analytical gradients (via dlgradient) improve convergence; gradient seeds are sampled from high-|∇metric| regions.</p>
+                        </div>
+                    </div>
+
+                    <div class="btn-row">
+                        <button id="btnFineTune" class="btn-primary" onclick="fineTuneSeeds()">Fine Tune Seeds</button>
+                        <button class="btn-stop" onclick="stopProcess()" title="Stop any running process immediately">&#9632; Stop</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ===== BOTTOM PANEL: Dual Table + Console ===== -->
+        <div class="bottom-panel" id="bottomPanel">
+            <!-- Tab bar for Current Results / DB Optima -->
+            <div class="bottom-right-section hidden" id="seedsTableSection">
+                <div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:0;">
+                    <button class="tab-btn active" id="tabCurrentResults" onclick="switchBottomTab('current')" style="flex:1;padding:6px 0;font-size:11px;font-weight:600;background:transparent;border:none;border-bottom:2px solid var(--accent);color:var(--accent);cursor:pointer;">Current Results</button>
+                    <button class="tab-btn" id="tabDbOptima" onclick="switchBottomTab('dbOptima')" style="flex:1;padding:6px 0;font-size:11px;font-weight:600;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text-secondary);cursor:pointer;">DB Optima</button>
+                </div>
+
+                <!-- TAB 1: Current Results -->
+                <div id="panelCurrentResults">
+                    <div class="bottom-header">
+                        <h3>Detected Optima</h3>
+                        <div class="bottom-controls">
+                            <button class="btn-secondary" onclick="addSeed()">+ Add</button>
+                            <button class="btn-secondary" onclick="importSeedsCsv()">Import CSV</button>
+                            <button class="btn-secondary" onclick="removeSelectedSeeds()">Remove</button>
+                        </div>
+                    </div>
+                    <div class="seeds-table-container">
+                        <table id="seedsTable">
+                            <thead>
+                                <tr>
+                                    <th style="width:30px"><input type="checkbox" onclick="toggleAllSeeds(this)" checked></th>
+                                    <th class="sortable" data-col="1" style="width:80px" onclick="sortTable(1)">Tag</th>
+                                    <th class="sortable" data-col="2" onclick="sortTable(2)">P (nm)</th>
+                                    <th class="sortable" data-col="3" onclick="sortTable(3)">R (nm)</th>
+                                    <th class="sortable" data-col="4" onclick="sortTable(4)">Value</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div class="bottom-actions">
+                        <button id="btnUpdate" class="btn-secondary" onclick="updateSeeds()">Update Plot</button>
+                        <span class="spacer"></span>
+                        <button id="btnSaveToDb" class="btn-primary" onclick="saveOptimaToDb()">Save to DB</button>
+                        <div style="display:inline-flex; align-items:center; gap:8px; margin-left:8px;">
+                            <span style="font-size:0.9em; color:var(--text-secondary);">Format:</span>
+                            <label style="font-size:0.9em;"><input type="radio" name="exportFormat" value="mat" checked> MAT</label>
+                            <label style="font-size:0.9em;"><input type="radio" name="exportFormat" value="csv"> CSV</label>
+                        </div>
+                        <button id="btnExport" class="btn-secondary" onclick="exportResults()">Export File</button>
+                    </div>
+                </div>
+
+                <!-- TAB 2: DB Optima -->
+                <div id="panelDbOptima" style="display:none;">
+                    <div class="bottom-header">
+                        <h3>Saved DB Optima</h3>
+                        <div class="bottom-controls">
+                            <button class="btn-secondary" onclick="refreshDbOptima()">Refresh</button>
+                            <button class="btn-secondary" onclick="deleteSelectedDbOptima()">Delete Selected</button>
+                            <button class="btn-secondary" onclick="setSeedsFromDbOptima()">Set as Seeds</button>
+                        </div>
+                    </div>
+                    <div class="seeds-table-container">
+                        <table id="dbOptimaTable">
+                            <thead>
+                                <tr>
+                                    <th style="width:30px"><input type="checkbox" onclick="toggleAllDbOptima(this)"></th>
+                                    <th class="sortable" style="width:60px">Tag</th>
+                                    <th class="sortable">Optimized Metric</th>
+                                    <th class="sortable">P (nm)</th>
+                                    <th class="sortable">R (nm)</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div class="bottom-actions">
+                        <span style="font-size:11px;color:var(--text-secondary);" id="dbOptimaCount">0 rows</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Bottom Section: Console / Progress -->
+            <div class="bottom-left-section">
+                <div id="progressArea">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <span style="font-weight:600; color:var(--text-primary);">Progress</span>
+                        <span id="statusBadge" class="status-badge status-idle">Idle</span>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div id="progressBar" class="progress-bar"></div>
+                    </div>
+                    <pre id="progressLog" style="margin-top:6px; min-height:30px;"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
