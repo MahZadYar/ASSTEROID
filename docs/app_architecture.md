@@ -1,29 +1,32 @@
 # ASSTEROID App Architecture & Integration
 
-**Last Updated:** February 11, 2026  
 **Scope:** App state management, HTML5 interface, MATLAB backend coupling  
-**Audience:** Developers maintaining or extending the app
+**Audience:** Developers maintaining or extending the app  
+**Implementation:** [`scripts/apps/assteroid_app.m`](../scripts/apps/assteroid_app.m) (launched via [`ASSTEROID.m`](../ASSTEROID.m) or [`start_app.m`](../start_app.m))
 
 ## Quick Start for Developers
 
-### App Entry Point
+### App Entry Points
 ```matlab
-run_sers_app          % Launches uihtml figure with HTML5 tabs
-start_app             % Wrapper that runs setup_project then run_sers_app
+ASSTEROID             % Canonical launcher: initializes project and launches assteroid_app
+start_app             % Convenience wrapper (delegates to ASSTEROID)
+assteroid_app         % Direct app figure constructor
+run_sers_app          % (Backward-compatibility forwarder to assteroid_app)
 ```
 
 ### App Structure
 ```
-5 Tabs (left-to-right):
-┌─────────────────────────────────────────────────────────┐
-│ [1] Import  [2] Sampling  [3] Training  [4] Optim  [5] Vis │
-└─────────────────────────────────────────────────────────┘
+6 Stages & Control Panels:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ [0] Overview  [1] Import  [2] Sampling  [3] Training  [4] Predict  [5] Optim  [6] Vis │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Each tab has:
-- **HTML form** (scripts/apps/*_tab.html) - UI controls
-- **Callback handler** (run_sers_app.m) - MATLAB business logic
-- **Data structures** (fig.UserData.state) - Persistent app state
+Each stage integrates:
+- **HTML5 Control Panel (`uihtml`)** (`scripts/apps/*_tab.html`) - Responsive interactive controls
+- **MATLAB Visualizer Panel** - Dedicated 2D contour, training progress, or 3D volume axes
+- **Callback & Event Handlers** (`scripts/apps/assteroid_app.m`) - Bidirectional data bridge
+- **Persistent State Objects** (`fig.UserData`) - Reactive session state
 
 ---
 
@@ -31,7 +34,7 @@ Each tab has:
 
 ### Central State Object
 
-**Location:** `scripts/apps/run_sers_app.m`, lines 1200-1230
+**Location:** `scripts/apps/assteroid_app.m`
 
 ```matlab
 % Initialize at app startup

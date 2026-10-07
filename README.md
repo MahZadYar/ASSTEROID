@@ -171,8 +171,16 @@ ASSTEROID("path/to/my/project/data")
 The application provides:
 * Embedded HTML5 control panels with live parameter validation
 * Interactive 2D contour and 3D volume visualization canvases
-* Real-time training loss curves and early-stopping diagnostics
-* Interactive candidate seed selection and semantic tagging canvas
+* Real-time training loss curves, automated checkpointing, and early-stopping diagnostics
+* Interactive candidate seed selection, manual coordinate editing, and semantic modal tagging canvas
+* Trajectory tracking for localized MultiStart gradient refinement (`fmincon` with SQP / Interior-Point)
+
+### Interactive Multimodal Seed Curation & Optimization Workflow
+The optimization canvas (Stage 5) provides a robust 4-step interactive cycle:
+1. **Preview Landscape**: Evaluates the surrogate across an ultra-dense $(P, r)$ grid for any canonical metric ($A_L, \text{EF}_V^{\text{cell}}, \text{EF}_S^{\text{cell}}, \eta_V^{\text{broad}}, \eta_V^{\text{analyte}}$).
+2. **Topological Seed Detection**: Automatically identifies discrete candidate stationary points ($\nabla F \approx 0, \nabla^2 F < 0$) using 8-connected local extrema filtering and non-maximum suppression.
+3. **Manual Curation & Semantic Tagging**: Researchers can prune boundary artifacts, adjust coordinates directly in the reactive table, and assign physical modal tags (*Mode I*, *Mode II+*, *SLR Dipole*).
+4. **Continuous Refinement**: Dispatches MultiStart constrained optimization (`fmincon` with analytical `dlgradient`) from curated seeds, preserving custom tags and saving full convergence histories (`IterPath`) to `maximaResults.mat`.
 
 ### Option 2: Scriptable CLI Batch Pipeline
 
@@ -185,7 +193,7 @@ run("scripts/pipeline/run_import_prl_sweep.m")
 % 2. Synthesize adaptive sampling points for next simulation batch
 run("scripts/sampling/run_AdaptiveParameterSampling.m")
 
-% 3. Train physics-informed deep residual surrogate
+% 3. Train physics-informed deep residual surrogate (with auto-checkpointing)
 run("scripts/pipeline/run_dnn_pipeline.m")
 
 % 4. Generate dense grid predictions & render efficacy landscapes
@@ -201,12 +209,12 @@ run("scripts/pipeline/run_locate_maxima.m")
 
 Comprehensive architectural specifications, mathematical formalisms, and user manuals are located in [`docs/`](docs/):
 * [Application Architecture](docs/app_architecture.md): Complete architecture of the unified app, state machines, and JavaScript-MATLAB bridge.
+* [Optimization & Seed Curation Guide](docs/optimization_workflow_guide.md): Multimodal peak extraction, interactive seed curation, tag preservation, and MultiStart SQP refinement.
 * [Feature Preprocessing System](docs/feature_preprocessing_system.md): Mathematical formulations for geometric scale invariance, dispersion lookup, and logarithmic compression.
 * [Orchestration Patterns](docs/orchestration_patterns.md): Unified Config → Workflow → ProgressReporter execution patterns.
 * [Paper to Code Reference](docs/paper_to_code_reference.md): Detailed cross-reference linking formulas in the publication to source functions.
 * [Physical & Mathematical Notation](docs/notation_table.md): Parameter symbol glossary and dimensional units.
 * [Surrogate Checkpoint Guide](docs/checkpoint_guide.md): Checkpointing, training interruption handling, and fine-tuning procedures.
-* [User Guide & Robustness](docs/USER_GUIDE_ROBUSTNESS.md): Defensive programming patterns, memory management, and GPU fallback.
 
 ---
 
