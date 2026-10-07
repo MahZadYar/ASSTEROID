@@ -1,4 +1,4 @@
-# Model Checkpointing Guide
+# ☄️ Model Checkpointing Guide
 
 **Issue Fixed:** Checkpoints were not being created even when `CheckpointFrequency` was set.  
 **Root Cause:** MATLAB's `trainingOptions` requires BOTH `CheckpointPath` and `CheckpointFrequency` to be set. Users were setting frequency but leaving path empty, resulting in silent disablement.  
@@ -10,7 +10,7 @@
 
 ### Using the App (Easiest)
 
-1. Open the **Training Tab** in the app
+1. Open the **🧠 Stage 3: Training Tab** in the app
 2. Set **Checkpoint Frequency** to your desired value (e.g., `10`)
 3. Leave **Checkpoint Path** empty (or omit it)
 4. Start training

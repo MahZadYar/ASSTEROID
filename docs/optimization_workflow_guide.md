@@ -1,6 +1,6 @@
-# Optimization & Multimodal Seed Curation Workflow Guide
+# ☄️ Optimization & Multimodal Seed Curation Workflow Guide
 
-**Framework:** ASSTEROID Optimization Engine (Stage 5)  
+**Framework:** ☄️ ASSTEROID Optimization Engine (🔍 Stage 5)  
 **Associated Scripts:** [`scripts/apps/assteroid_app.m`](../scripts/apps/assteroid_app.m), [`scripts/pipeline/run_locate_maxima.m`](../scripts/pipeline/run_locate_maxima.m), [`src/orchestration/runLocalizationWorkflow.m`](../src/orchestration/runLocalizationWorkflow.m)  
 **Manuscript Reference:** Supplementary Note 2, Sections S2.1.2 (Stages 4–5) & S2.6 (*Dense Parameter-Space Exploration and Topology-Aware Local Maxima Extraction*)
 
@@ -29,24 +29,21 @@ To address this, ASSTEROID implements a **topology-aware, multi-stage exploratio
 
 The optimization canvas in ASSTEROID ([`ASSTEROID.m`](../ASSTEROID.m) / [`start_app.m`](../start_app.m)) provides reactive controls, live parameter verification, and immediate 2D contour feedback.
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                                STAGE 5 OPTIMIZATION                             │
-│                                                                                 │
-│   Left Panel: Candidate Detection        Right Panel: Continuous Refinement     │
-│   ┌───────────────────────────────┐      ┌────────────────────────────────┐     │
-│   │ • Model & Metric Selector     │      │ • Seed Table & Tag Editor      │     │
-│   │ • Resolution & Smoothness     │      │ • MultiStart Count             │     │
-│   │ • Gradient & Laplacian Knobs  │      │ • Solver: SQP / Interior-Point │     │
-│   │                               │      │                                │     │
-│   │ [ Preview Landscape ]         │      │ [ Update Seeds ]               │     │
-│   │ [ Detect Candidate Seeds ]    │      │ [ Fine-Tune Local Maxima ]     │     │
-│   │                               │      │ [ Export Optimization Results ]│     │
-│   └───────────────────────────────┘      └────────────────────────────────┘     │
-│                                                                                 │
-│                               Center: Landscape Axes                            │
-│                  (Dense Heatmap + Seed Overlays + Trajectory Paths)             │
-└─────────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph UI_Cycle ["🔍 Stage 5: Interactive Multimodal Optimization Cycle"]
+        Start(["Surrogate Model &amp; Metric Loaded"]) --> Preview["1. Preview Landscape<br/>(Dense Grid Evaluation)"]
+        Preview --> Detect["2. Detect Candidate Seeds<br/>(&nabla;F &asymp; 0, &nabla;&sup2;F &lt; 0, r_suppress)"]
+        Detect --> Curate{"3. Interactive Table Curation"}
+        
+        Curate -->|Manual Edit| Edit["Edit Coordinates (P, r)<br/>&amp; Assign Semantic Modal Tags"]
+        Edit --> Update["Click 'Update Seeds'<br/>(Re-evaluate &amp; Re-render Markers)"]
+        Update --> Curate
+        
+        Curate -->|Dispatch Refinement| Refine["4. Fine-Tune Seeds<br/>(MultiStart fmincon SQP + dlgradient)"]
+        Refine --> Traj["Trace Iteration Trajectories (IterPath)<br/>&amp; Verify Optimality Criteria"]
+        Traj --> Export["5. Export Results<br/>(maximaResults.mat)"]
+    end
 ```
 
 ### Workflow A: Clean Start to Master Export

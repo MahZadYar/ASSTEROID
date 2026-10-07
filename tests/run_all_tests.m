@@ -16,7 +16,7 @@ function summary = run_all_tests()
     errorMsgs = strings(numTests, 1);
     
     fprintf("=========================================================================\n");
-    fprintf("                ASSTEROID AUTOMATED TEST SUITE RUNNER                   \n");
+    fprintf("              ☄️  ASSTEROID AUTOMATED TEST SUITE RUNNER                   \n");
     fprintf("=========================================================================\n");
     fprintf("Found %d test scripts in %s\n\n", numTests, testDir);
     

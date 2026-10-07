@@ -1,4 +1,4 @@
-# ASSTEROID
+# ☄️ ASSTEROID
 
 **Adaptive Sampling, Surrogate Training, Exploration and Refinement for Optimal Inverse Design**
 
@@ -11,14 +11,16 @@
 
 ## Overview
 
-**ASSTEROID** is a closed-loop computational framework engineered for simulation-driven inverse design, high-dimensional surrogate modeling, and multimodal optimization. It couples deep neural network surrogates with automated finite-element method (FEM) parametric sweeps, replacing computationally prohibitive numerical simulations with high-throughput inference ($> 100{,}000$ spectra/s, $> 1.5 \times 10^5 \times$ speedup over full-wave FEM).
+**☄️ ASSTEROID** is a closed-loop computational framework engineered for simulation-driven inverse design, high-dimensional surrogate modeling, and multimodal optimization. It couples deep neural network surrogates with automated finite-element method (FEM) parametric sweeps, replacing computationally prohibitive numerical simulations with high-throughput inference ($> 100{,}000$ spectra/s, $> 1.5 \times 10^5 \times$ speedup over full-wave FEM).
 
-While ASSTEROID is demonstrated on the rational geometric design of Nanoparticle-on-Mirror (NPoM) plasmonic gas sensors using rigorous Optical Reciprocity Theorem (ORT) electrodynamics, its modular 5-stage architecture generalizes to any parametric engineering workflow requiring:
-1. **Automated Data Ingestion & Normalization**: Parsing multi-parameter solver outputs into high-performance Structure-of-Arrays (SoA) datasets.
-2. **Curvature- & Density-Aware Adaptive Sampling**: Directing subsequent simulation batches toward informative, high-enhancement modal regions using 9-point Laplacian curvature operators and dual-tier minimum-distance rejection sampling.
-3. **Physics-Informed Deep Residual Surrogates**: Training multi-task ResNets featuring explicit material dispersion ($n, k$), geometric scale invariance, and multi-decade $\text{log1p}$ target compression.
-4. **Dense Landscape Exploration & Spectral Integration**: Ultra-dense sub-nanometer grid inference coupled with Modified Akima piecewise cubic Hermite interpolation (`makima`) for continuous figures of merit.
-5. **Topology-Aware Multimodal Optimization**: Detecting discrete stationary points ($\nabla F \approx 0$, $\nabla^2 F < 0$), interactive seed curation/tagging, and continuous constrained gradient refinement via `fmincon` (SQP/Interior-Point) using analytical automatic differentiation (`dlgradient`).
+While ASSTEROID is demonstrated on the rational geometric design of Nanoparticle-on-Mirror (NPoM) plasmonic gas sensors using rigorous Optical Reciprocity Theorem (ORT) electrodynamics, its modular operational architecture generalizes to any parametric engineering workflow requiring:
+1. 💾 **Master Database Management**: Programmatic state tracking, interactive data tree inspection, and metadata archiving.
+2. 📥 **Automated Data Ingestion & QA**: Parsing multi-parameter solver outputs into high-performance Structure-of-Arrays (SoA) datasets with electromagnetic passivity verification.
+3. 🎯 **Curvature- & Density-Aware Adaptive Sampling**: Directing subsequent simulation batches toward informative, high-enhancement modal regions using 9-point discrete Laplacian curvature operators and dual-tier minimum-distance rejection sampling.
+4. 🧠 **Physics-Informed Deep Residual Surrogates**: Training multi-task ResNets featuring explicit material dispersion ($n, k$), geometric scale invariance, and multi-decade $\text{log1p}$ target compression.
+5. 🔮 **Dense Landscape Exploration & Spectral Integration**: Ultra-dense sub-nanometer grid inference coupled with Modified Akima piecewise cubic Hermite interpolation (`makima`) for continuous figures of merit.
+6. 🔍 **Topology-Aware Multimodal Optimization**: Detecting discrete stationary points ($\nabla F \approx 0$, $\nabla^2 F < 0$), interactive seed curation/tagging, and continuous constrained gradient refinement via `fmincon` (SQP/Interior-Point) using analytical automatic differentiation (`dlgradient`).
+7. 🌌 **Multi-Dimensional 3D Visualization & Export**: Rendering 1D spectra, 2D scattered/contour maps, 3D volume slices, and exporting to HDF5, ONNX, and relational MAT tables.
 
 > **Associated Publication:**  
 > Maziar Moussavi, Sigitas Tamulevičius, *"Rational Design of Plasmonic Gas Sensors by Optimizing Spectrally-Resolved Volumetric Raman Enhancement Factor"*, 2026. [DOI: 10.1021/acsnano.XXXXXXX (Tentative)](#citation).
@@ -30,7 +32,7 @@ While ASSTEROID is demonstrated on the rational geometric design of Nanoparticle
 ```
 ASSTEROID/
 │
-├── ASSTEROID.m                  ← 🚀 MAIN ENTRY POINT: Unified GUI application launcher
+├── ASSTEROID.m                  ← ☄️ MAIN ENTRY POINT: Unified GUI application launcher
 ├── start_app.m                  ← Convenience wrapper (delegates to ASSTEROID)
 ├── setup_project.m              ← Path initialization (run once per session)
 │
@@ -49,53 +51,127 @@ ASSTEROID/
 │   ├── pipeline/                ← Standalone CLI batch workflows (Stages 1, 3, 4, 5)
 │   └── sampling/                ← Standalone adaptive sampling CLI (Stage 2)
 │
-├── tests/                       ← Unit tests, integration suites, and schema verification
+├── tests/                       ← Automated test suites (run_all_tests.m, 100% passing)
 ├── docs/                        ← Technical specifications, conventions, and architectural docs
 └── legacy/                      ← Archived standalone scripts and prototype utilities
 ```
 
 ---
 
-## The 5-Stage Operational Pipeline
+## The Operational Pipeline & Architecture
 
-The computational framework operates either via the unified interactive application ([`start_app.m`](start_app.m)) or through modular CLI scripts under [`scripts/pipeline/`](scripts/pipeline/) and [`scripts/sampling/`](scripts/sampling/).
+The computational framework operates either via the unified interactive application ([`start_app.m`](start_app.m) / [`ASSTEROID.m`](ASSTEROID.m)) or through modular CLI scripts under [`scripts/pipeline/`](scripts/pipeline/) and [`scripts/sampling/`](scripts/sampling/).
 
+### End-to-End Workflow Flowchart
+
+```mermaid
+flowchart LR
+    subgraph S1 ["📥 Stage 1: Ingestion & QA"]
+        Raw["Raw FEM Sweeps<br/>(COMSOL .dat / .csv)"] --> Ingest["readSweepTable<br/>mapHeaders"]
+        Ingest --> QA["Passivity Checks &<br/>Footprint Normalization"]
+        QA --> SoA[("Master SoA DB<br/>allData.mat")]
+    end
+
+    subgraph S2 ["🎯 Stage 2: Adaptive Sampling"]
+        SoA --> Curv["9-Pt Laplacian Curvature &nabla;&sup2;F<br/>&amp; Performance Density &rho;"]
+        Curv --> Rejection["Dual-Tier Rejection<br/>(d_min &amp; r/P &le; 0.49)"]
+        Rejection --> SweepExport["COMSOL Sweep Tables<br/>(New Simulation Batch)"]
+        SweepExport -.->|Direct Solver Feed| Raw
+    end
+
+    subgraph S3 ["🧠 Stage 3: Surrogate Learning"]
+        SoA --> Feat["Physics Feature Engine<br/>8-In / 3-Out (log1p)"]
+        Feat --> ResNet["Deep Residual ResNet<br/>Adam + Checkpointing"]
+        ResNet --> NetFile[("Trained Model<br/>sers_dnn_model.mat")]
+    end
+
+    subgraph S4 ["🔮 Stage 4: Dense Prediction"]
+        NetFile --> DenseInference["Dense Grid Inference<br/>&gt; 1.2M Coordinates"]
+        DenseInference --> Quad["makima Splines &<br/>Raman Quadrature"]
+        Quad --> Efficacies["7 Continuous Optical<br/>Efficacy Landscapes"]
+    end
+
+    subgraph S5 ["🔍 Stage 5: Multimodal Optimization"]
+        Efficacies --> PeakFinder["Topological Extrema Filter<br/>(&nabla;F &asymp; 0, &nabla;&sup2;F &lt; 0)"]
+        PeakFinder --> Curation["Interactive Seed Curation<br/>&amp; Semantic Modal Tagging"]
+        Curation --> MultiStart["MultiStart fmincon (SQP)<br/>Analytical dlgradient"]
+        MultiStart --> OptimaFile[("maximaResults.mat<br/>Optimal Geometries")]
+    end
+
+    subgraph S6 ["🌌 Stage 6: 3D Visualization"]
+        OptimaFile --> VisEngine["1D Spectra | 2D Maps | 3D Volumes<br/>HDF5 / ONNX / Relational MAT"]
+    end
 ```
-  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-  │   Stage 1    │     │   Stage 2    │     │   Stage 3    │     │   Stage 4    │     │   Stage 5    │
-  │ Data Ingest  │ ──> │   Adaptive   │ ──> │   Surrogate  │ ──> │ Dense Pred.  │ ──> │ Multi-Modal  │
-  │   & QA (SoA) │     │   Sampling   │     │   Training   │     │  & Efficacies│     │ Optimization │
-  └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
-         │                    │                    │                    │                    │
-  raw COMSOL tables    Laplacian curvature    Physics-informed     1.2M grid nodes      fmincon + SQP
-  unit conversion      d_min separation       8-in / 3-out ResNet  makima integration   analytical grad
-  passivity bounds     batch parameter export R² > 0.992           7 target metrics     modal archiving
+
+### Closed-Loop Active Learning Architecture
+
+```mermaid
+flowchart TD
+    FEM["⚡ Full-Wave 3D FEM Solver<br/>(COMSOL Multiphysics)"]
+    
+    subgraph ASSTEROID_Platform ["☄️ ASSTEROID Active Learning Engine"]
+        Ingest["📥 Stage 1: Data Ingestion &amp; Quality Control"]
+        DB[("💾 Stage 0: Master Database<br/>(Structure-of-Arrays)")]
+        Sampling["🎯 Stage 2: Adaptive Density Estimation<br/>(&nabla;&sup2;F Curvature + Metric Density)"]
+        Train["🧠 Stage 3: Physics-Informed ResNet<br/>(Material Dispersion + Scale Invariance)"]
+        Pred["🔮 Stage 4: High-Throughput Inference<br/>(&gt; 100,000 spectra/s)"]
+        Opt["🔍 Stage 5: Topology Optimization<br/>(Seed Curation + MultiStart SQP)"]
+        Vis["🌌 Stage 6: Multi-Dimensional Visualization<br/>(Interactive 1D / 2D / 3D Canvas)"]
+        
+        Ingest --> DB
+        DB --> Sampling
+        DB --> Train
+        Train --> Pred
+        Pred --> Opt
+        Opt --> Vis
+    end
+
+    FEM -->|Raw Optical Spectra| Ingest
+    Sampling -->|Export Refined Parameter Batch| FEM
+    Opt -.->|Validation Re-Simulation| FEM
+
+    classDef loop stroke:#00e8ff,stroke-width:2px;
+    class ASSTEROID_Platform loop;
 ```
 
-### Stage 1: Data Ingestion & Quality Control
+---
+
+### Detailed Stage Breakdown
+
+#### 💾 Stage 0: Master Database Management
+* **GUI Component:** Stage 0 Tab (`scripts/apps/database_tab.html`)
+* **Core Utilities:** [`src/data/createDatabaseStruct.m`](src/data/createDatabaseStruct.m), [`src/data/exportDatabaseToHDF5.m`](src/data/exportDatabaseToHDF5.m)
+* **Function:** Maintains project metadata, provides interactive tree browsing of hierarchical database branches (`db.Sim`, `db.Interp`, `db.Pred`, `db.Optima`, `db.Model`), tracks dirty/unsaved states, and handles robust saving/loading.
+
+#### 📥 Stage 1: Data Ingestion & Quality Control
 * **CLI Entry Point:** [`scripts/pipeline/run_import_prl_sweep.m`](scripts/pipeline/run_import_prl_sweep.m)
-* **Core Orchestrator:** `src/orchestration/runImportSweepWorkflow.m`
+* **Core Orchestrator:** [`src/orchestration/runImportSweepWorkflow.m`](src/orchestration/runImportSweepWorkflow.m)
 * **Function:** Ingests raw full-wave FEM parametric sweep exports (`.dat`/`.csv`), normalizes headers across solver versions, validates electromagnetic passivity ($0 \leq A \leq 1$), compensates for varying unit-cell footprints ($A_{\text{cell}} = \frac{\sqrt{3}}{2}P^2$), and merges records into the canonical Structure-of-Arrays database.
 
-### Stage 2: Adaptive Exploration & Rejection Sampling
+#### 🎯 Stage 2: Adaptive Exploration & Rejection Sampling
 * **CLI Entry Point:** [`scripts/sampling/run_AdaptiveParameterSampling.m`](scripts/sampling/run_AdaptiveParameterSampling.m)
-* **Core Orchestrator:** `src/orchestration/runAdaptiveSamplingWorkflow.m`
+* **Core Orchestrator:** [`src/orchestration/runAdaptiveSamplingWorkflow.m`](src/orchestration/runAdaptiveSamplingWorkflow.m)
 * **Function:** Identifies undersampled or highly dynamic regions by evaluating discrete 9-point Laplacian curvatures ($\nabla^2 F$) and metric scores. Enforces physical interparticle gap limits ($r/P \leq 0.49$) and dual-tier minimum Euclidean distance separation ($d_{\min}$), generating focused coordinate tables formatted directly for COMSOL batch execution.
 
-### Stage 3: Physics-Informed Deep Surrogate Training
+#### 🧠 Stage 3: Physics-Informed Deep Surrogate Training
 * **CLI Entry Point:** [`scripts/pipeline/run_dnn_pipeline.m`](scripts/pipeline/run_dnn_pipeline.m)
-* **Core Orchestrator:** `src/orchestration/runTrainingWorkflow.m`
-* **Function:** Trains an 8-input, 3-head residual neural network (ResNet) mapping geometric scale ($\log P, \log r, \log \lambda$), complex experimental gold dispersion ($n(\lambda), k(\lambda)$), and electrodynamic ratios ($P/\lambda, r/\lambda, P/r$) to optical absorbance ($A$), cell-normalized volume enhancement ($\text{EF}_V^{\text{cell}}$), and surface enhancement ($\text{EF}_S^{\text{cell}}$). Employs multi-decade $\text{log1p}$ target compression, GELU activations, batch normalization, and Adam optimization with early stopping.
+* **Core Orchestrator:** [`src/orchestration/runTrainingWorkflow.m`](src/orchestration/runTrainingWorkflow.m)
+* **Function:** Trains an 8-input, 3-head residual neural network (ResNet) mapping geometric scale ($\log P, \log r, \log \lambda$), complex experimental gold dispersion ($n(\lambda), k(\lambda)$), and electrodynamic ratios ($P/\lambda, r/\lambda, P/r$) to optical absorbance ($A$), cell-normalized volume enhancement ($\text{EF}_V^{\text{cell}}$), and surface enhancement ($\text{EF}_S^{\text{cell}}$). Employs multi-decade $\text{log1p}$ target compression, GELU activations, batch normalization, and Adam optimization with automated checkpointing.
 
-### Stage 4: Dense Landscape Prediction & Spectral Efficacy
+#### 🔮 Stage 4: Dense Landscape Prediction & Spectral Efficacy
 * **CLI Entry Point:** [`scripts/pipeline/run_prediction_vis.m`](scripts/pipeline/run_prediction_vis.m)
-* **Core Orchestrator:** `src/orchestration/runPredictionVisWorkflow.m`
+* **Core Orchestrator:** [`src/orchestration/runPredictionVisWorkflow.m`](src/orchestration/runPredictionVisWorkflow.m)
 * **Function:** Evaluates the surrogate across an ultra-dense continuous grid ($> 1.2 \times 10^6$ nodes at $\Delta P = \Delta r = 0.7 \, \text{nm}$). Reconstructs high-resolution continuous Stokes spectra ($100$--$3600 \, \text{cm}^{-1}$) via Modified Akima Hermite splines (`makima`) and evaluates all single-frequency and spectrally integrated optical efficacy landscapes.
 
-### Stage 5: Topology-Aware Multimodal Optimization
+#### 🔍 Stage 5: Topology-Aware Multimodal Optimization & Seed Curation
 * **CLI Entry Point:** [`scripts/pipeline/run_locate_maxima.m`](scripts/pipeline/run_locate_maxima.m)
-* **Core Orchestrator:** `src/orchestration/runLocalizationWorkflow.m`
+* **Core Orchestrator:** [`src/orchestration/runLocalizationWorkflow.m`](src/orchestration/runLocalizationWorkflow.m)
 * **Function:** Extracts all distinct resonant mode maxima (rather than a single global peak) through 8-connected local peak detection, gradient percentile filtering ($\nabla F \approx 0$), and negative-definite Laplacian concavity checks. Seeds localized MultiStart constrained optimization (`fmincon` with SQP/Interior-Point) driven by analytical neural graph gradients (`dlgradient`), permanently archiving optimal parameters, convergence trajectories, and modal tags.
+
+#### 🌌 Stage 6: Multi-Dimensional 3D Visualization & Export
+* **GUI Component:** Stage 6 Tab (`scripts/apps/visualize_tab.html`)
+* **Core Rendering:** [`src/vis/buildSpectralVolume.m`](src/vis/buildSpectralVolume.m), [`src/vis/renderAnnotatedVolume.m`](src/vis/renderAnnotatedVolume.m)
+* **Function:** Renders synchronized 1D spectra, interactive 2D scattered/interpolated maps, and 3D volumetric slices with local maxima overlays. Exports figures, tabular CSVs, ONNX models, and full HDF5 databases.
 
 ---
 
@@ -120,6 +196,30 @@ All dataset MAT files (`allData.mat`, `prl_sweep_*.mat`) store variables in a me
 * **Spectral Coordinates:** `lambda` ($N \times L$ in nm), `f` ($N \times L$ in Hz), `RamanShift` ($N \times L$ in $\text{cm}^{-1}$)
 * **Full Spectral Responses:** `Absorptance`, `EF_vol`, `EF_surf` ($N \times L$ numeric matrices)
 * **Integrated Scalars:** `EF_vol_avg`, `EF_surf_avg`, `EF_vol_analyte`, `EF_surf_analyte` ($N \times 1$)
+
+```mermaid
+classDiagram
+    class MasterDatabase {
+        +struct Sim (Scattered FEM Data)
+        +struct Interp (Uniform Interpolant Grid)
+        +struct Pred (Dense Surrogate Predictions)
+        +struct Optima (Converged Mode Optima)
+        +struct Model (Trained ResNet &amp; Metadata)
+        +struct RI (Au Optical Dispersion)
+    }
+    class SoABranch {
+        +double[] period [N x 1, nm]
+        +double[] radius [N x 1, nm]
+        +double[] lambda [N x L, nm]
+        +double[] RamanShift [N x L, cm^-1]
+        +double[,] Absorptance [N x L]
+        +double[,] EF_vol [N x L]
+        +double[,] EF_surf [N x L]
+        +double[] EF_vol_avg [N x 1]
+        +double[] EF_vol_analyte [N x 1]
+    }
+    MasterDatabase *-- SoABranch : Sim, Interp, Pred
+```
 
 ---
 

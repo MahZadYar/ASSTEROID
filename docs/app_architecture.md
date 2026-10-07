@@ -1,4 +1,4 @@
-# ASSTEROID App Architecture & Integration
+# ☄️ ASSTEROID App Architecture & Integration
 
 **Scope:** App state management, HTML5 interface, MATLAB backend coupling  
 **Audience:** Developers maintaining or extending the app  
@@ -14,12 +14,20 @@ assteroid_app         % Direct app figure constructor
 run_sers_app          % (Backward-compatibility forwarder to assteroid_app)
 ```
 
-### App Structure
-```
-6 Stages & Control Panels:
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ [0] Overview  [1] Import  [2] Sampling  [3] Training  [4] Predict  [5] Optim  [6] Vis │
-└─────────────────────────────────────────────────────────────────────────────┘
+### App Structure & Stage Hierarchy
+
+```mermaid
+flowchart TD
+    subgraph App ["☄️ ASSTEROID Main Window (uifigure)"]
+        TG["Main Tab Group (uitabgroup)"]
+        TG --> S0["💾 0 Database<br/>(database_tab.html)"]
+        TG --> S1["📥 1 Import<br/>(import_tab.html)"]
+        TG --> S2["🎯 2 Sampling<br/>(adaptive_sampling_app.html)"]
+        TG --> S3["🧠 3 Training<br/>(training_tab.html)"]
+        TG --> S4["🔮 4 Predict<br/>(visualization_export_tab.html)"]
+        TG --> S5["🔍 5 Optimize<br/>(optimization_tab.html)"]
+        TG --> S6["🌌 6 Visualize<br/>(visualize_tab.html)"]
+    end
 ```
 
 Each stage integrates:
@@ -66,78 +74,83 @@ state.lambdaLaserIdx = [];
 fig.UserData.visState = state;
 ```
 
-### State Persistence
-
-State updates are reactive:
-```matlab
-% When user changes parameter in HTML form
-function generateVisPredictions(src, data, fig)
-    state = fig.UserData.visState;
-    
-    % Extract new values from HTML event
-    if isfield(data, "resolution")
-        state.resolution = data.resolution;
-    end
-    if isfield(data, "pLimits")
-        state.pLimits = data.pLimits;
-    end
-    
-    % Update stored state
-    fig.UserData.visState = state;
-    
-    % Use updated state in computation
-    % ...
-end
-```
-
 ---
 
 ## Event Flow: HTML ↔ MATLAB
 
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Researcher
+    participant HTML as HTML5 Control Panel (uihtml)
+    participant App as assteroid_app.m (Event Router)
+    participant State as fig.UserData (Session State)
+    participant Core as Core Scientific Pipeline (src/)
+
+    User->>HTML: Clicks Button / Modifies Input
+    HTML->>HTML: Validates client parameters
+    HTML->>App: htmlComponent.sendEventToMATLAB(EventName, EventData)
+    App->>State: Updates session buffers (workDir, db, process)
+    App->>Core: Invokes workflow (ProgressReporter forwarded)
+    loop Real-Time Execution
+        Core-->>App: ProgressReporter updates
+        App-->>HTML: sendEventToHTMLSource("Progress", status)
+        HTML-->>User: Updates progress bar / status badge
+    end
+    Core-->>App: Returns computed outputs
+    App->>State: Caches results to db struct
+    App-->>HTML: sendEventToHTMLSource("EventComplete", payload)
+    App->>App: Updates MATLAB plot axes (contour / 3D / traces)
+    HTML-->>User: Updates UI controls & reactive tables
+```
+
 ### Sending Events from HTML to MATLAB
 
-**HTML Button Click → MATLAB Callback**
-
+**HTML Button Click → MATLAB Callback:**
 ```javascript
-// prediction_vis_app.html, line 950
-function sendGenerateCommand() {
-    const config = collectConfig();
-    matlab.internal.executeSerializableAPI({
-        command: 'invokeEventFcn',
-        args: [{
-            name: 'FromHTML',
-            eventdata: struct('eventName', 'GeneratePredictions', ...
-                'data', config)
-        }]
-    });
+// Example from optimization_tab.html
+function sendDetectSeeds() {
+    var config = collectOptimizeConfig();
+    if (window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("DetectSeeds", config);
+    }
 }
 ```
 
-**Receives in MATLAB:**
+**Receiving in MATLAB:**
 ```matlab
-function handleVisualizationEvent(src, event, fig, visPanel)
-    data = event.Data;
-    eventName = data.eventName;
+function handleOptimizeEvent(src, event, fig, ax)
+    eventName = event.HTMLEventName;
+    data = event.HTMLEventData;
     
-    if strcmp(eventName, 'GeneratePredictions')
-        generateVisPredictions(src, data, fig, visPanel);
+    switch eventName
+        case "DetectSeeds"
+            detectCandidateSeeds(fig, data, ax);
+        case "FineTuneSeeds"
+            refineCandidateSeeds(fig, data, ax);
     end
 end
 ```
 
 ### Sending Events from MATLAB to HTML
 
-**MATLAB → HTML (via sendEventToHTMLSource)**
-
+**MATLAB → HTML (via `sendEventToHTMLSource`):**
 ```matlab
 sendEventToHTMLSource(src, "PredictionsLoaded", struct( ...
     "metrics", state.availableMetrics, ...
     "generated", true, ...
     "numGeometries", size(allData.lambda, 1), ...
     "numWavelengths", size(allData.lambda, 2)));
+```
 
-% HTML receives:
-matlab.internal.addEventListener('PredictionsLoaded', function(event) {
+**HTML receives via `addEventListener`:**
+```javascript
+htmlComponent.addEventListener('PredictionsLoaded', function(event) {
+    const data = event.Data;
+    updateMetricsDropdown(data.metrics);
+    showMessage(`Loaded ${data.numGeometries} geometries`);
+});
+```
     const data = event.Data;
     updateMetricsDropdown(data.metrics);
     showMessage(`Loaded ${data.numGeometries} geometries`);

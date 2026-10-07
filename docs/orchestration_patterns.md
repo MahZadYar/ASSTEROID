@@ -1,4 +1,4 @@
-# ASSTEROID Orchestration Layer & Workflow Patterns
+# ☄️ ASSTEROID Orchestration Layer & Workflow Patterns
 
 **Last Updated:** February 11, 2026  
 **Scope:** Unified config → workflow → visualization pattern  
@@ -8,29 +8,20 @@
 
 ## Overview: The Three-Step Pattern
 
-Every major workflow in ASSTEROID follows this unified pattern:
+Every major workflow in ☄️ ASSTEROID follows this unified pattern:
 
-```
-┌──────────────────────┐
-│   CONFIG BUILDER     │
-│   (Name=Value args)  │
-│  → Returns cfg struct
-└────────────┬─────────┘
-             │
-             ↓
-┌──────────────────────┐
-│     WORKFLOW         │
-│  (cfg, reporter)     │
-│  → Executes logic    │
-│  → Returns results
-└────────────┬─────────┘
-             │
-             ↓
-┌──────────────────────┐
-│   VISUALIZER         │
-│  (results)           │
-│  → Renders output
-└──────────────────────┘
+```mermaid
+flowchart LR
+    subgraph S1["Step 1: Configuration"]
+        A["⚙️ Config Builder<br/><code>*Config(Name=Value)</code><br/><i>Validates & returns cfg struct</i>"]
+    end
+    subgraph S2["Step 2: Execution"]
+        B["⚡ Workflow Runner<br/><code>run*Workflow(cfg, reporter)</code><br/><i>Decoupled headless logic</i>"]
+    end
+    subgraph S3["Step 3: Rendering"]
+        C["📊 Visualizer<br/><code>visualize*(results)</code><br/><i>Renders publication plots</i>"]
+    end
+    A --> B --> C
 ```
 
 ### Benefits of This Pattern
@@ -56,13 +47,13 @@ Every major workflow in ASSTEROID follows this unified pattern:
 
 ### Workflow Suite
 
-| Workflow | Config Builder | Workflow Function | Visualizer |
-|----------|-----------------|------------------|-----------|
-| Import | `importSweepConfig` | `runImportSweepWorkflow` | `visualizeImportSummary` |
-| Training | `trainingConfig` | `runTrainingWorkflow` | _(no viz)_ |
-| Prediction + Vis | `predictionVisConfig` | `runPredictionVisWorkflow` | _(built-in)_ |
-| Optimization | `localizeMaximaConfig` | `runLocalizationWorkflow` | `visualizeMaximaResults` |
-| Adaptive Sampling | `adaptiveSamplingConfig` | `runAdaptiveSamplingWorkflow` | _(no viz)_ |
+| Stage | Workflow | Config Builder | Workflow Function | Visualizer |
+|:---:|---|---|---|---|
+| 📥 Stage 1 | Ingestion & Sweep QA | `importSweepConfig` | `runImportSweepWorkflow` | `visualizeImportSummary` |
+| 🎯 Stage 2 | Adaptive Sampling | `adaptiveSamplingConfig` | `runAdaptiveSamplingWorkflow` | _(no viz)_ |
+| 🧠 Stage 3 | DNN Training | `trainingConfig` | `runTrainingWorkflow` | _(no viz)_ |
+| 🔮 Stage 4 | Prediction & Landscape | `predictionVisConfig` | `runPredictionVisWorkflow` | _(built-in)_ |
+| 🔍 Stage 5 | Maxima Localization | `localizeMaximaConfig` | `runLocalizationWorkflow` | `visualizeMaximaResults` |
 
 ---
 

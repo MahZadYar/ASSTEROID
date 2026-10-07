@@ -180,6 +180,66 @@
     .status-running { background: #1b5e20; color: #a5d6a7; }
     .status-done { background: #0d47a1; color: #90caf9; }
     .status-error { background: #b71c1c; color: #ef9a9a; }
+    .info-card {
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 10px 12px;
+        margin: 8px 0;
+        font-size: 11px;
+        line-height: 1.45;
+    }
+    .badge-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        font-family: 'Cascadia Code', 'Consolas', monospace;
+    }
+    .badge-physics {
+        background: rgba(0, 232, 255, 0.12);
+        color: var(--accent);
+        border: 1px solid rgba(0, 232, 255, 0.3);
+    }
+    .badge-success {
+        background: rgba(31, 184, 168, 0.15);
+        color: var(--success);
+        border: 1px solid rgba(31, 184, 168, 0.3);
+    }
+    .badge-warning {
+        background: rgba(255, 183, 77, 0.15);
+        color: var(--warning);
+        border: 1px solid rgba(255, 183, 77, 0.3);
+    }
+    .badge-removed {
+        background: rgba(255, 107, 107, 0.15);
+        color: var(--error);
+        border: 1px solid rgba(255, 107, 107, 0.3);
+        text-decoration: line-through;
+    }
+    .feature-item {
+        background: var(--input-bg);
+        border: 1px solid rgba(27, 80, 85, 0.7);
+        border-radius: 4px;
+        padding: 6px 8px;
+        font-size: 11px;
+    }
+    .feature-item-header {
+        font-weight: 600;
+        color: var(--accent);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2px;
+    }
+    .feature-item-desc {
+        color: var(--text-secondary);
+        font-size: 10px;
+    }
 </style>
 <script type="text/javascript">
 function setup(htmlComponent) {
@@ -299,6 +359,27 @@ function setup(htmlComponent) {
     }
 }
 
+function toggleFeatureSchema() {
+    var schema = val("featureSchema");
+    var v2Box = document.getElementById("v2PhysicsContainer");
+    var v1Box = document.getElementById("v1LegacyContainer");
+    if (schema === "v1_legacy") {
+        if (v2Box) v2Box.style.display = "none";
+        if (v1Box) v1Box.style.display = "block";
+    } else {
+        if (v2Box) v2Box.style.display = "block";
+        if (v1Box) v1Box.style.display = "none";
+    }
+}
+
+function toggleVerticalGapInput() {
+    var cb = document.getElementById("includeVerticalGap");
+    var row = document.getElementById("verticalGapInputRow");
+    if (row) {
+        row.style.display = (cb && cb.checked) ? "block" : "none";
+    }
+}
+
 function togglePretrainedSource() {
     var srcDb = document.getElementById("srcDb");
     var isDb = srcDb && srcDb.checked;
@@ -407,9 +488,13 @@ function collectConfig() {
         verbose: chk("verbose"),
         holdout: num("holdout"),
         valSplit: num("valSplit"),
+        splitMode: val("splitMode") || "geometry",
         saveArtifacts: chk("saveArtifacts"),
+        featureSchema: val("featureSchema") || "v2_physics",
+        includeVerticalGap: chk("includeVerticalGap"),
+        gapHeightUm: num("gapHeightUm") || 0.005,
         featureLogTransform: chk("featureLogTransform"),
-        includeRatios: chk("includeRatios"),
+        includeRatios: (val("featureSchema") === "v1_legacy") ? chk("includeRatios") : false,
         targetLogTransform: chk("targetLogTransform"),
         useMultiHead: chk("useMultiHead"),
         fc1a: num("fc1a"),
@@ -547,7 +632,7 @@ function toggleSection(el) {
 <body>
     <div id="dbStatusBanner" style="display:none;background:#132b42;border:1px solid #1b5055;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:11px;color:#7fa8b0;"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <h2 style="margin:0;border:none;padding:0;">Stage 3 — DNN Training</h2>
+        <h2 style="margin:0;border:none;padding:0;">🧠 Stage 3 — DNN Training</h2>
         <div style="display:flex;gap:6px;align-items:center;">
             <button class="btn-secondary" style="padding:4px 10px;font-size:11px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer;" onclick="window.htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
             <button class="btn-secondary" style="padding:4px 10px;font-size:11px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer;" onclick="window.htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
@@ -674,21 +759,120 @@ function toggleSection(el) {
         </div>
     </div>
 
-    <!-- Feature Engineering -->
+    <!-- Input Metrics & Feature Engineering -->
     <div class="section">
-        <div class="section-title open" onclick="toggleSection(this)">Feature Engineering</div>
+        <div class="section-title open" onclick="toggleSection(this)">Input Metrics &amp; Feature Engineering</div>
         <div>
-            <div class="toggle-row">
-                <input type="checkbox" id="featureLogTransform" checked>
-                <label for="featureLogTransform">Log-transform p, r, λ</label>
+            <!-- Feature Schema Selector -->
+            <div class="field">
+                <label for="featureSchema">Input Feature Schema</label>
+                <select id="featureSchema" onchange="toggleFeatureSchema()">
+                    <option value="v2_physics" selected>v2 Physics-Informed Invariants (Gap metrics &amp; scale-free log space)</option>
+                    <option value="v1_legacy">v1 Legacy (Dimensionless ratios: p/λ, r/λ, p/r)</option>
+                </select>
             </div>
-            <div class="toggle-row">
-                <input type="checkbox" id="includeRatios" checked>
-                <label for="includeRatios">Include ratios (p/λ, r/λ, p/r)</label>
+
+            <!-- v2 Physics Invariants Container -->
+            <div id="v2PhysicsContainer">
+                <div class="info-card" style="border-left: 3px solid var(--accent);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <strong style="color:var(--text-primary); font-size:12px;">Electrodynamic Invariant Space</strong>
+                        <span class="badge-tag badge-physics">v2_physics active</span>
+                    </div>
+                    <div style="color:var(--text-secondary); margin-bottom:8px;">
+                        Eliminates collinear log-space redundancy by retiring ratio
+                        <span class="badge-tag badge-removed">P / r</span> (where log(P/r) = log P &minus; log r) and replacing it with the normalized lateral gap clearance
+                        <span class="badge-tag badge-success">g<sub>norm</sub> = (P &minus; 2r)/P</span>.
+                    </div>
+
+                    <!-- Grid of features -->
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px;">
+                        <div class="feature-item">
+                            <div class="feature-item-header">
+                                <span>Scale Coordinates</span>
+                                <span class="badge-tag badge-physics">3 dims</span>
+                            </div>
+                            <div class="feature-item-desc">log(P), log(r), log(λ) [µm log-space]</div>
+                        </div>
+
+                        <div class="feature-item">
+                            <div class="feature-item-header">
+                                <span>Dielectric Permittivity</span>
+                                <span class="badge-tag badge-physics">2 dims</span>
+                            </div>
+                            <div class="feature-item-desc">ε₁ = n² &minus; k², ε₂ = 2nk (dispersive gold)</div>
+                        </div>
+
+                        <div class="feature-item">
+                            <div class="feature-item-header">
+                                <span>Electrodynamic Ratios</span>
+                                <span class="badge-tag badge-physics">2 dims</span>
+                            </div>
+                            <div class="feature-item-desc">P/λ (Rayleigh anomaly), r/λ (retardation)</div>
+                        </div>
+
+                        <div class="feature-item" style="border-color: rgba(31, 184, 168, 0.7); background: rgba(31, 184, 168, 0.08);">
+                            <div class="feature-item-header">
+                                <span style="color:var(--success);">Lateral Gap Clearance</span>
+                                <span class="badge-tag badge-success">Key Invariant</span>
+                            </div>
+                            <div class="feature-item-desc" style="color:var(--text-primary);">
+                                g<sub>norm</sub> = (P &minus; 2r)/P &isin; (0, 1]
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vertical Gap Metric Controls -->
+                <div class="info-card" style="margin-top:8px;">
+                    <div class="toggle-row">
+                        <input type="checkbox" id="includeVerticalGap" onchange="toggleVerticalGapInput()">
+                        <label for="includeVerticalGap" style="font-weight:600; color:var(--text-primary); cursor:pointer;">
+                            Include Vertical Gap Ratio (h<sub>gap</sub> / λ)
+                        </label>
+                    </div>
+                    <div id="verticalGapInputRow" style="display:none; margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
+                        <div class="field-row">
+                            <div class="field" style="max-width:180px;">
+                                <label for="gapHeightUm">Spacer Height h<sub>gap</sub> (µm)</label>
+                                <input type="number" id="gapHeightUm" value="0.005" step="0.001" min="0.0001">
+                            </div>
+                            <div style="flex:1; font-size:11px; color:var(--text-secondary); padding-bottom:6px;">
+                                Nominal <strong>0.005 µm (5 nm)</strong> molecular/SAM spacer height for particle-on-mirror (NPoM) architectures. Adds feature column <code>h_over_lambda</code>.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="toggle-row" style="margin-top:6px;">
+                    <input type="checkbox" id="targetLogTransform" checked>
+                    <label for="targetLogTransform">Log1p-transform targets (log(1 + y) variance stabilization)</label>
+                </div>
             </div>
-            <div class="toggle-row">
-                <input type="checkbox" id="targetLogTransform" checked>
-                <label for="targetLogTransform">Log1p-transform targets</label>
+
+            <!-- v1 Legacy Controls Container (Hidden by default, shown if v1_legacy is chosen) -->
+            <div id="v1LegacyContainer" style="display:none;">
+                <div class="info-card" style="border-left: 3px solid var(--warning); background: rgba(255, 183, 77, 0.08);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                        <strong style="color:var(--warning); font-size:12px;">Legacy v1 Feature Controls</strong>
+                        <span class="badge-tag badge-warning">Deprecated</span>
+                    </div>
+                    <div style="color:var(--text-secondary); font-size:11px;">
+                        Legacy 5–8 input schema. Warning: includes collinear ratio P/r which is redundant with log(P) and log(r).
+                    </div>
+                </div>
+                <div class="toggle-row">
+                    <input type="checkbox" id="featureLogTransform" checked>
+                    <label for="featureLogTransform">Log-transform p, r, λ</label>
+                </div>
+                <div class="toggle-row">
+                    <input type="checkbox" id="includeRatios" checked>
+                    <label for="includeRatios">Include legacy ratios (p/λ, r/λ, p/r) <span style="color:var(--error); font-size:10px;">[Contains redundant p/r]</span></label>
+                </div>
+                <div class="toggle-row">
+                    <input type="checkbox" id="legacyTargetLogTransform" checked onchange="document.getElementById('targetLogTransform').checked = this.checked">
+                    <label for="legacyTargetLogTransform">Log1p-transform targets</label>
+                </div>
             </div>
         </div>
     </div>
@@ -1013,6 +1197,13 @@ function toggleSection(el) {
     <div class="section">
         <div class="section-title open" onclick="toggleSection(this)">Data Split & Output</div>
         <div>
+            <div class="field">
+                <label for="splitMode">Data Partitioning Strategy</label>
+                <select id="splitMode">
+                    <option value="geometry" selected>Geometry-Disjoint (Recommended: prevents spectral leakage across (P, r))</option>
+                    <option value="row">Random Row Split (Legacy: splits individual spectral rows)</option>
+                </select>
+            </div>
             <div class="field-row">
                 <div class="field">
                     <label>Holdout Fraction</label>

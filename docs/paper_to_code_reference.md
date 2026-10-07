@@ -1,4 +1,4 @@
-# Paper → Code Reference (Rational Design Workflow)
+# ☄️ Paper → Code Reference (Rational Design Workflow)
 
 This document extracts the **rationale** and **methodology** of the study (see [docs/full_article.md](docs/full_article.md)) and maps each concept to the concrete implementation in this repository. It is intended to be the **single development reference** so agents do not need to re-read the full manuscript.
 
@@ -8,23 +8,24 @@ This document extracts the **rationale** and **methodology** of the study (see [
 
 **Engineering goal:** replace brute-force FEM sweeps (COMSOL) with a surrogate model (DNN) so the pipeline can:
 
-- import and normalize COMSOL sweep data into a canonical database (SoA)
-- train a DNN surrogate to predict spectral outputs
-- generate dense fitness landscapes
-- locate multiple **mode-specific** local maxima (topology-aware optimization)
-- optionally propose additional simulation points (adaptive sampling)
+- 💾 / 📥 import and normalize COMSOL sweep data into a canonical database (SoA)
+- 🎯 explore parameters via adaptive sampling
+- 🧠 train a DNN surrogate to predict spectral outputs
+- 🔮 generate dense fitness landscapes
+- 🔍 locate multiple **mode-specific** local maxima (topology-aware optimization)
+- 🌌 inspect predictions in interactive multi-dimensional 3D
 
 **Main entry points:**
 
-- Unified GUI: [scripts/apps/run_sers_app.m](scripts/apps/run_sers_app.m)
-- CLI scripts:
-  - Import: [scripts/pipeline/run_import_prl_sweep.m](scripts/pipeline/run_import_prl_sweep.m)
-  - Train: [scripts/pipeline/run_dnn_pipeline.m](scripts/pipeline/run_dnn_pipeline.m)
-  - Predict/visualize: [scripts/pipeline/run_prediction_vis.m](scripts/pipeline/run_prediction_vis.m)
-  - Optimize: [scripts/pipeline/run_locate_maxima.m](scripts/pipeline/run_locate_maxima.m)
-  - Adaptive sampling: [scripts/sampling/run_AdaptiveParameterSampling.m](scripts/sampling/run_AdaptiveParameterSampling.m)
+- ☄️ Unified GUI: `ASSTEROID` / `start_app` ([scripts/apps/assteroid_app.m](file:///d:/OneDrive%20-%20Kaunas%20University%20of%20Technology/~Science%20Projects/NanoTRAACES/WP01%20Design/Codebase/scripts/apps/assteroid_app.m))
+- Headless CLI Workflow Runners:
+  - 📥 Stage 1 (Import): [scripts/pipeline/run_import_prl_sweep.m](file:///d:/OneDrive%20-%20Kaunas%20University%20of%20Technology/~Science%20Projects/NanoTRAACES/WP01%20Design/Codebase/scripts/pipeline/run_import_prl_sweep.m)
+  - 🎯 Stage 2 (Sampling): [scripts/sampling/run_AdaptiveParameterSampling.m](file:///d:/OneDrive%20-%20Kaunas%20University%20of%20Technology/~Science%20Projects/NanoTRAACES/WP01%20Design/Codebase/scripts/sampling/run_AdaptiveParameterSampling.m)
+  - 🧠 Stage 3 (Train): [scripts/pipeline/run_dnn_pipeline.m](file:///d:/OneDrive%20-%20Kaunas%20University%20of%20Technology/~Science%20Projects/NanoTRAACES/WP01%20Design/Codebase/scripts/pipeline/run_dnn_pipeline.m)
+  - 🔮 Stage 4 (Predict/Visualize): [scripts/pipeline/run_prediction_vis.m](file:///d:/OneDrive%20-%20Kaunas%20University%20of%20Technology/~Science%20Projects/NanoTRAACES/WP01%20Design/Codebase/scripts/pipeline/run_prediction_vis.m)
+  - 🔍 Stage 5 (Optimize): [scripts/pipeline/run_locate_maxima.m](file:///d:/OneDrive%20-%20Kaunas%20University%20of%20Technology/~Science%20Projects/NanoTRAACES/WP01%20Design/Codebase/scripts/pipeline/run_locate_maxima.m)
 
-The repo enforces the orchestration pattern **Config → Workflow → (Visualize)** described in [src/orchestration/CONVENTIONS.md](src/orchestration/CONVENTIONS.md).
+The repo enforces the orchestration pattern **Config → Workflow → (Visualize)** described in [docs/orchestration_patterns.md](file:///d:/OneDrive%20-%20Kaunas%20University%20of%20Technology/~Science%20Projects/NanoTRAACES/WP01%20Design/Codebase/docs/orchestration_patterns.md).
 
 ## 2) Core Physics / Metrics (paper definitions)
 

@@ -13,7 +13,11 @@ fprintf("=== Starting test_predict_tab_layout ===\n");
 assteroid_app;
 drawnow;
 
-fig = findall(0, '-depth', 1, 'Type', 'figure', 'Name', "ASSTEROID — Optimal Inverse Design Platform");
+fig = findall(0, '-depth', 1, 'Type', 'figure', 'Tag', "ASSTEROID_MAIN_APP");
+if isempty(fig)
+    fig = findall(0, '-depth', 1, 'Type', 'figure');
+    fig = fig(arrayfun(@(f) contains(f.Name, "ASSTEROID"), fig));
+end
 assert(~isempty(fig), "Failed to find ASSTEROID figure window.");
 fig = fig(1);
 
@@ -26,13 +30,13 @@ titles = string({mainTg.Children.Title});
 fprintf("Main tabs: %s\n", strjoin(titles, " | "));
 
 % 2. Stage 4 (Predict) has no plotting surfaces
-tabPredict = mainTg.Children(startsWith(titles, "4 Predict"));
+tabPredict = mainTg.Children(contains(titles, "4 Predict"));
 assert(isscalar(tabPredict), "Stage 4 Predict tab not found.");
 assert(isempty(findobj(tabPredict, 'Type', 'axes')), "Predict tab should not contain axes.");
 assert(isempty(findobj(tabPredict, 'Type', 'uitabgroup')), "Predict tab should not contain a plot tab group.");
 
 % 3. Stage 6 (Visualize) is the last tab and owns the plot handles
-assert(titles(end) == "6 Visualize", "The last main tab should be '6 Visualize'.");
+assert(contains(titles(end), "6 Visualize"), "The last main tab should be '6 Visualize'.");
 for f = ["visualizeHtml", "visualizeTab", "visualizePanel", "visualizeTabGroup", ...
          "visualizeTab1D", "visualizeTab2D", "visualizeTab3D", ...
          "visualizeAx1D", "visualizeAx2D", "visualizeViewer"]

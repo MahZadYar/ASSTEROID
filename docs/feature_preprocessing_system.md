@@ -1,4 +1,4 @@
-# Feature Preprocessing & Model Metadata System
+# ☄️ Feature Preprocessing & Model Metadata System
 
 **Last Updated:** February 11, 2026  
 **Scope:** DNN training, inference, and app architecture  
@@ -18,41 +18,20 @@ Previous implementations had a critical architectural issue: different models co
 
 ## Architecture Overview
 
-```
-Training Pipeline:
-  ┌─ prepare_training_dataset.m ──────────────────┐
-  │  • Loads raw COMSOL data                       │
-  │  • Computes log transforms if enabled          │
-  │  • Computes ratio features if enabled          │
-  │  • Applies z-score normalization               │
-  │  • Saves FeatureLogTransform, IncludeRatios    │
-  │  • Returns dataset with metadata flags         │
-  └──────────────────┬──────────────────────────────┘
-                     │
-  ┌─ train_sers_dnn.m ────────────────────────────┐
-  │  • Reads preprocessing flags from dataset      │
-  │  • Builds network with correct input size      │
-  │  • Saves flags in model struct                 │
-  │  • Creates flag struct for reference           │
-  └──────────────────┬──────────────────────────────┘
-                     │
-          [Trained Model with Metadata]
-                     │
-        ┌────────────┴────────────┐
-        │                         │
-Inference Paths:        App GUI:
-┌─ normalizeModelFeatures.m  ─┐  ┌─ run_sers_app.m ──┐
-│ • ensureModelFlags()        │  │ • Load model      │
-│ • Check IncludeRatios       │  │ • Get flags       │
-│ • Compute ratios if needed  │  │ • Send to UI      │
-│ • Validate input size       │  │ • Validate grid   │
-└─────────────┬───────────────┘  └─────────────────┘
-              │
-┌─ predict_dense_spectrum.m ─┐
-│ • Uses normalizeModelFeatures
-│ • Batched prediction
-│ • Output in SoA format
-└────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph TrainPipe["🧠 Stage 3: Training Pipeline"]
+        Raw["Raw Simulation Data<br/><code>p, r, λ, n, k</code>"] --> Prep["<code>prepare_training_dataset.m</code><br/>• Computes log transforms (if enabled)<br/>• Computes geometric ratios (if enabled)<br/>• Z-score feature normalization<br/>• Attaches <code>FeatureLogTransform</code>, <code>IncludeRatios</code>"]
+        Prep --> Train["<code>train_sers_dnn.m</code><br/>• Inspects dataset metadata flags<br/>• Builds DNN topology matching feature dimension<br/>• Encapsulates metadata in model struct"]
+    end
+
+    Train --> ModelFile["💾 Trained Model Struct & Checkpoint<br/><code>*.mat</code> with Flag Metadata"]
+
+    subgraph InferPipe["🔮 Stages 4-5: Inference & Application"]
+        ModelFile --> App["🖥️ App GUI (<code>assteroid_app.m</code>)<br/>Loads model & queries metadata"]
+        ModelFile --> Norm["<code>normalizeModelFeatures.m</code><br/>• Calls <code>ensureModelFlags()</code><br/>• Applies conditional log transforms<br/>• Appends ratio features dynamically<br/>• Validates dimension matching"]
+        Norm --> Pred["<code>predict_dense_spectrum.m</code><br/>Batched matrix inference in SoA format"]
+    end
 ```
 
 ---

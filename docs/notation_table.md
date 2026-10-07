@@ -1,6 +1,6 @@
-# Notation Table
+# ☄️ Notation Table
 
-This table maps the mathematical notation used in [article.md](article.md) (and the project definition) to the specific variable names found in the MATLAB codebase. Use this as a reference when translating theoretical equations into code implementations.
+This table maps the mathematical notation used in the manuscript to the specific variable names found in the MATLAB codebase. Use this as a reference when translating theoretical equations into code implementations.
 
 ## Symbol → Variable Mapping
 

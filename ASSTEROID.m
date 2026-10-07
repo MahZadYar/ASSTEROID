@@ -1,4 +1,4 @@
-%% ASSTEROID  Adaptive Sampling, Surrogate Training, Exploration and Refinement for Optimal Inverse Design
+%% ☄️ ASSTEROID  Adaptive Sampling, Surrogate Training, Exploration and Refinement for Optimal Inverse Design
 %
 %   ASSTEROID is the unified MATLAB computational platform for inverse
 %   design and surrogate exploration of nanophotonic and plasmonic nanostructures.
@@ -9,12 +9,13 @@
 %       fig = ASSTEROID(...)
 %
 %   Workflow Stages:
-%     Stage 1 — Import & Database      (Data ingest, SoA construction, QA)
-%     Stage 2 — Adaptive Sampling      (Curvature/density rejection sampling)
-%     Stage 3 — DNN Training           (Physics-aware surrogate learning)
-%     Stage 4 — Prediction             (Dense surrogate inference & interpolation)
-%     Stage 5 — Optimization           (MultiStart maxima localization)
-%     Stage 6 — Visualize              (1D spectra / 2D maps / 3D volumes)
+%     💾 Stage 0 — Database Manager      (Master database state, tree, and metadata)
+%     📥 Stage 1 — Import & QA           (Data ingest, SoA construction, passivity check)
+%     🎯 Stage 2 — Adaptive Sampling     (Curvature/density rejection sampling)
+%     🧠 Stage 3 — DNN Training          (Physics-informed surrogate learning)
+%     🔮 Stage 4 — Prediction            (Dense surrogate inference & interpolation)
+%     🔍 Stage 5 — Optimization          (Topology-aware multimodal maxima localization)
+%     🌌 Stage 6 — Visualize             (1D spectra / 2D maps / 3D volumes & export)
 %
 %   Example:
 %       ASSTEROID

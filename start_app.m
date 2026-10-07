@@ -1,4 +1,4 @@
-%% START_APP  Launches the ASSTEROID unified 5-stage computational application
+%% ☄️ START_APP  Launches the ASSTEROID unified computational inverse design platform
 %
 %   Usage:
 %       start_app

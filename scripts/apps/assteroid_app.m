@@ -58,7 +58,7 @@ function figOut = assteroid_app(workFolder)
     figW = min(1700, screenSize(3) - 80);
     figH = min(1020, screenSize(4) - 80);
 
-    fig = uifigure("Name", "ASSTEROID — Optimal Inverse Design Platform", ...
+    fig = uifigure("Name", "☄️ ASSTEROID — Optimal Inverse Design Platform", ...
         "Tag", "ASSTEROID_MAIN_APP", ...
         "Position", [(screenSize(3)-figW)/2, (screenSize(4)-figH)/2, figW, figH], ...
         "Color", [0.05 0.08 0.10], ...
@@ -86,7 +86,7 @@ function figOut = assteroid_app(workFolder)
     %% ====================================================================
     %  STAGE 0 — Database Manager
     %  ====================================================================
-    tab0 = uitab(tabGroup, "Title", "0 Database", "BackgroundColor", tabColors);
+    tab0 = uitab(tabGroup, "Title", "💾 0 Database", "BackgroundColor", tabColors);
     [h0, ~] = buildImportTabLayout(tab0, "database_tab.html");
     h0.HTMLEventReceivedFcn = @(src, ev) handleDatabaseEvent(src, ev, fig);
     fig.UserData.handles.dbHtml = h0;
@@ -94,14 +94,14 @@ function figOut = assteroid_app(workFolder)
     %% ====================================================================
     %  STAGE 1 — Import & Database
     %  ====================================================================
-    tab1 = uitab(tabGroup, "Title", "1 Import", "BackgroundColor", tabColors);
+    tab1 = uitab(tabGroup, "Title", "📥 1 Import", "BackgroundColor", tabColors);
     [h1, visPanel1] = buildImportTabLayout(tab1, "import_tab.html");
     h1.HTMLEventReceivedFcn = @(src, ev) handleImportEvent(src, ev, fig, visPanel1);
 
     %% ====================================================================
     %  STAGE 2 — Adaptive Sampling
     %  ====================================================================
-    tab2 = uitab(tabGroup, "Title", "2 Sampling", "BackgroundColor", tabColors);
+    tab2 = uitab(tabGroup, "Title", "🎯 2 Sampling", "BackgroundColor", tabColors);
     [h2, visPanel2] = buildTabLayout(tab2, "adaptive_sampling_app.html");
 
     ax2 = uiaxes(visPanel2, ...
@@ -129,14 +129,14 @@ function figOut = assteroid_app(workFolder)
     %% ====================================================================
     %  STAGE 3 — DNN Training
     %  ====================================================================
-    tab3 = uitab(tabGroup, "Title", "3 Training", "BackgroundColor", tabColors);
+    tab3 = uitab(tabGroup, "Title", "🧠 3 Training", "BackgroundColor", tabColors);
     [h3, visPanel3] = buildTabLayout(tab3, "training_tab.html");
     h3.HTMLEventReceivedFcn = @(src, ev) handleTrainingEvent(src, ev, fig, visPanel3);
 
     %% ====================================================================
     %  STAGE 4 — Prediction
     %  ====================================================================
-    tab4 = uitab(tabGroup, "Title", "4 Predict", "BackgroundColor", tabColors);
+    tab4 = uitab(tabGroup, "Title", "🔮 4 Predict", "BackgroundColor", tabColors);
     % Full-width HTML: prediction / interpolation only. Rendering lives in
     % Stage 6 (Visualize).
     [h4, ~] = buildImportTabLayout(tab4, "visualization_export_tab.html");
@@ -157,7 +157,7 @@ function figOut = assteroid_app(workFolder)
     %% ====================================================================
     %  STAGE 5 — Optimization
     %  ====================================================================
-    tab5 = uitab(tabGroup, "Title", "5 Optimize", "BackgroundColor", tabColors);
+    tab5 = uitab(tabGroup, "Title", "🔍 5 Optimize", "BackgroundColor", tabColors);
     [h5Left, h5Right, visPanel5] = buildOptimizeTabLayout(tab5, "optimization_tab.html");
 
     % Create axes in visualization panel
@@ -192,7 +192,7 @@ function figOut = assteroid_app(workFolder)
     %% ====================================================================
     %  STAGE 6 — Visualize (1D spectra / 2D maps / 3D volumes)
     %  ====================================================================
-    tab6 = uitab(tabGroup, "Title", "6 Visualize", "BackgroundColor", tabColors);
+    tab6 = uitab(tabGroup, "Title", "🌌 6 Visualize", "BackgroundColor", tabColors);
     [h6, visPanel6] = buildTabLayout(tab6, "visualize_tab.html");
     visPanel6.AutoResizeChildren = "off";
     visPanel6.SizeChangedFcn = @(~, ~) resizeVisualizePanel(fig);
@@ -2326,6 +2326,11 @@ function runTrainingPipeline(src, d, fig, visPanel)
         plotsMode = "none";
     end
 
+    featureSchema = safeStr(d, "featureSchema", "v2_physics");
+    splitMode     = safeStr(d, "splitMode", "geometry");
+    incVertGap    = safeBool(d, "includeVerticalGap", false);
+    gapHeightUm   = safeNum(d, "gapHeightUm", 0.005);
+
     cfg = trainingConfig( ...
         WorkDir             = workDir, ...
         RawDataFiles        = rawFiles(:)', ...
@@ -2341,9 +2346,13 @@ function runTrainingPipeline(src, d, fig, visPanel)
         Verbose             = safeBool(d, "verbose", true), ...
         Holdout             = safeNum(d, "holdout", 0.2), ...
         ValSplit            = safeNum(d, "valSplit", 0.5), ...
+        FeatureSchema       = featureSchema, ...
+        SplitMode           = splitMode, ...
+        IncludeVerticalGap  = incVertGap, ...
+        GapHeightUm         = gapHeightUm, ...
         SaveArtifacts       = safeBool(d, "saveArtifacts", true), ...
         FeatureLogTransform = safeBool(d, "featureLogTransform", true), ...
-        IncludeRatios       = safeBool(d, "includeRatios", true), ...
+        IncludeRatios       = safeBool(d, "includeRatios", featureSchema == "v1_legacy"), ...
         TargetLogTransform  = safeBool(d, "targetLogTransform", true), ...
         Optimizer           = safeStr(d, "optimizer", "adam"), ...
         LossFunction        = safeStr(d, "lossFunction", "mse"), ...

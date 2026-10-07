@@ -84,7 +84,11 @@ fprintf("Test 5: Full ASSTEROID Predict tab grid target execution...\n");
 close all force;
 assteroid_app(tempdir);
 drawnow;
-fig = findall(0, '-depth', 1, 'Type', 'figure', 'Name', "ASSTEROID — Optimal Inverse Design Platform");
+fig = findall(0, '-depth', 1, 'Type', 'figure', 'Tag', "ASSTEROID_MAIN_APP");
+if isempty(fig)
+    fig = findall(0, '-depth', 1, 'Type', 'figure');
+    fig = fig(arrayfun(@(f) contains(f.Name, "ASSTEROID"), fig));
+end
 assert(~isempty(fig), "Failed to find ASSTEROID figure window.");
 fig = fig(1);
 cleanupObj = onCleanup(@() delete(fig));

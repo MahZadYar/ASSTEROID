@@ -77,14 +77,18 @@ fprintf("[3] 2D/3D renderers OK (annotations = %d)\n", nAnn);
 %% 4. App integration
 assteroid_app;
 drawnow;
-fig = findall(0, '-depth', 1, 'Type', 'figure', 'Name', "ASSTEROID — Optimal Inverse Design Platform");
+fig = findall(0, '-depth', 1, 'Type', 'figure', 'Tag', "ASSTEROID_MAIN_APP");
+if isempty(fig)
+    fig = findall(0, '-depth', 1, 'Type', 'figure');
+    fig = fig(arrayfun(@(f) contains(f.Name, "ASSTEROID"), fig));
+end
 assert(~isempty(fig), "Failed to find ASSTEROID figure window.");
 fig = fig(1);
 cleanupObj = onCleanup(@() delete(fig));
 
 h = fig.UserData.handles;
 titles = string({h.mainTabGroup.Children.Title});
-assert(titles(end) == "6 Visualize", "Visualize tab missing.");
+assert(contains(titles(end), "6 Visualize"), "Visualize tab missing.");
 
 fig.UserData.db.Sim = Sim;
 fig.UserData.db.Interp = Interp;
