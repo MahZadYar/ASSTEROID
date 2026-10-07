@@ -225,15 +225,16 @@ Comprehensive test suites are located in [`tests/`](tests/). Run all tests to ve
 ```matlab
 setup_project
 
-% Run complete test suite
-results = runtests("tests");
-table(results)
+% Run complete automated test suite (19 suites, 100% coverage):
+summary = run_all_tests();
+disp(summary)
 
-% Run specific diagnostic tests
+% Or run specific diagnostic tests individually:
 run("tests/test_soa_conversion.m")          % SoA conversion and grid reshaping
 run("tests/test_unit_conversion.m")         % Dimensional unit consistency
 run("tests/test_interp_column_order.m")     % Spectral column alignment verification
 run("tests/test_defaults.m")                % Built-in dispersion and analyte checks
+run("tests/test_surrogate_v2.m")            % ResNet architecture, log1p targets, AD gradients
 ```
 
 ---
