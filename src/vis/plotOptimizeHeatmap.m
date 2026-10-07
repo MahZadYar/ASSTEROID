@@ -214,9 +214,15 @@ function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSee
         end
     end
 
-    % Custom data cursor for diagnostics
-    dcm = datacursormode(ancestor(ax, "figure"));
-    dcm.UpdateFcn = @optimizeHeatmapDataCursorText;
+    % Custom data cursor for diagnostics (standard figure only; uifigure does not support datacursormode)
+    try
+        figParent = ancestor(ax, "figure");
+        if ~isempty(figParent) && ~isprop(figParent, "AutoResizeChildren")
+            dcm = datacursormode(figParent);
+            dcm.UpdateFcn = @optimizeHeatmapDataCursorText;
+        end
+    catch
+    end
 
     hold(ax, "off");
 end

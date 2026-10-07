@@ -94,9 +94,41 @@ function predictor = buildPredictorFromConfig(cfg, options)
                 numel(predictor.targetNames), numel(predictor.rGrid), ...
                 numel(predictor.pGrid), numel(predictor.lambdaGrid)));
 
+        case "predictions"
+            reporter.start("BuildPredictor", "Preparing predictions-based predictor...");
+            modelFile = "";
+            if isfield(cfg, "modelFile"), modelFile = string(cfg.modelFile); end
+            riCsvFile = "";
+            if isfield(cfg, "riCsvFile"), riCsvFile = string(cfg.riCsvFile); end
+
+            if strlength(modelFile) > 0 && isfile(modelFile)
+                [model, ri] = loadAndValidateModel( ...
+                    ModelFile=modelFile, RiCsvFile=riCsvFile, Reporter=reporter);
+                predictor = createModelPredictor(model, ri);
+                reporter.complete("BuildPredictor", ...
+                    sprintf("Model predictor ready (%d targets).", numel(predictor.targetNames)));
+            elseif isfield(cfg, "cachedAllData") && isstruct(cfg.cachedAllData) && isfield(cfg.cachedAllData, "period")
+                predictor = createDataPredictor(cfg.cachedAllData);
+                reporter.complete("BuildPredictor", ...
+                    sprintf("Predictions-interpolant predictor ready (%d targets).", numel(predictor.targetNames)));
+            elseif isfield(cfg, "predictionFile") && strlength(cfg.predictionFile) > 0 && isfile(cfg.predictionFile)
+                loaded = load(cfg.predictionFile);
+                if isfield(loaded, "allData"), pData = loaded.allData;
+                elseif isfield(loaded, "predictions"), pData = loaded.predictions;
+                else, pData = loaded;
+                end
+                predictor = createDataPredictor(pData);
+                reporter.complete("BuildPredictor", "Predictions file interpolant predictor ready.");
+            else
+                % Fallback predictor for discrete-only mode
+                predictor = struct("mode", "predictions", "targetNames", {{}}, ...
+                    "predictSpectral", @(p,r,l) [], "predictGrid", @(p,r,l) struct());
+                reporter.complete("BuildPredictor", "Discrete predictions mode ready.");
+            end
+
         otherwise
             error("buildPredictorFromConfig:InvalidSource", ...
-                "Unknown dataSource: '%s'. Use 'model' or 'interpolation'.", dataSource);
+                "Unknown dataSource: '%s'. Use 'model', 'interpolation', or 'predictions'.", dataSource);
     end
 end
 

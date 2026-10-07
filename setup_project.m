@@ -43,5 +43,15 @@ function setup_project()
         addpath(allDirs{k});
     end
 
+    % Ensure legacy folder is NOT on the MATLAB path to avoid shadowing modern functions
+    legacyDir = fullfile(root, "legacy");
+    if contains(path, legacyDir)
+        try
+            rmpath(legacyDir);
+            fprintf("ASSTEROID: Removed legacy/ from path to prevent function shadowing.\n");
+        catch
+        end
+    end
+
     fprintf("ASSTEROID: %d folders added to path.\n", numel(allDirs));
     end

@@ -32,7 +32,8 @@ function cfg = importSweepConfig(options)
 %
 %     --- Import Behaviour ---
 %       Mode                 (1,1) string  — "merge" | "rebuild"
-%       RecalculateExisting  (1,1) logical — Recalculate metrics for duplicates
+%       ReplaceExisting      (1,1) logical — Replace/overwrite existing entries if input parameters match (default: false)
+%       RecalculateExisting  (1,1) logical — Recalculate metrics for duplicates (legacy merge mode)
 %
 %   Output:
 %       cfg — struct with all configuration fields
@@ -42,6 +43,7 @@ function cfg = importSweepConfig(options)
 %           WorkDir="D:\data", ...
 %           InputFile="SweepPropeTable.dat", ...
 %           OutputFile="prl_sweep.mat", ...
+%           ReplaceExisting=true, ...
 %           LaserWavelength=785);
 %       results = runImportSweepWorkflow(cfg, ProgressReporter.console());
 %
@@ -72,7 +74,8 @@ arguments
     %% Import behaviour
     options.Mode                (1,1) string {mustBeMember(options.Mode, ...
                                     ["merge", "rebuild"])} = "merge"
-    options.RecalculateExisting (1,1) logical = true
+    options.ReplaceExisting     (1,1) logical = false
+    options.RecalculateExisting (1,1) logical = false
 
     %% Metric variant selection
     % Struct with boolean fields controlling which scalar variants to compute.
@@ -105,6 +108,7 @@ end
 
     % Import behaviour
     cfg.mode                = options.Mode;
+    cfg.replaceExisting     = options.ReplaceExisting;
     cfg.recalculateExisting = options.RecalculateExisting;
 
     % Metric variant selection

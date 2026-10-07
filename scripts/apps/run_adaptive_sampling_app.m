@@ -115,6 +115,15 @@ function handleHTMLEvent(src, event, fig)
             case "ExportResults"
                 exportResults(src, fig, eventData);
 
+            case "FindNanPoints"
+                findNanPoints_app(src, fig, eventData);
+
+            case "ExportNanPoints"
+                exportNanPoints_app(src, fig, eventData);
+
+            case "HighlightNanPoints"
+                highlightNanPoints_app(src, fig, eventData);
+
             case "Reset"
                 resetApp(src, fig);
 
@@ -492,6 +501,143 @@ function exportResults(src, fig, eventData)
 
     catch ME
         sendEventToHTMLSource(src, "Error", "Export failed: " + ME.message);
+    end
+end
+
+function findNanPoints_app(src, fig, eventData)
+    try
+        appState = fig.UserData;
+        dataSource = [];
+        if isfield(appState, "samples") && ~isempty(appState.samples) && isfield(appState.samples, "allData")
+            dataSource = appState.samples.allData;
+        elseif isfield(appState, "config") && isfield(appState.config, "dataFile") && isfile(string(appState.config.dataFile))
+            dataSource = string(appState.config.dataFile);
+        end
+
+        if isempty(dataSource)
+            sendEventToHTMLSource(src, "Error", "No dataset loaded. Load data first.");
+            return;
+        end
+
+        sendEventToHTMLSource(src, "StatusUpdate", "Scanning for NaN metrics...");
+
+        precision = 6;
+        if isfield(eventData, "precision") && isnumeric(eventData.precision)
+            precision = eventData.precision;
+        end
+
+        res = findNanSamplingPoints(dataSource, Precision=precision);
+        appState.nanResult = res;
+        fig.UserData = appState;
+
+        sendEventToHTMLSource(src, "NanPointsFound", res);
+
+        if res.hasNans
+            sendEventToHTMLSource(src, "StatusUpdate", ...
+                sprintf("Found %d unique geometry points with NaNs across %d entries.", res.count, res.totalRows));
+        else
+            sendEventToHTMLSource(src, "StatusUpdate", "No NaN values detected in any metric.");
+        end
+    catch ME
+        sendEventToHTMLSource(src, "Error", "Failed to scan for NaNs: " + ME.message);
+    end
+end
+
+function exportNanPoints_app(src, fig, eventData)
+    try
+        appState = fig.UserData;
+        if ~isfield(appState, "nanResult") || isempty(appState.nanResult) || appState.nanResult.count == 0
+            sendEventToHTMLSource(src, "Error", "Scan for NaN points first.");
+            return;
+        end
+
+        nanRes = appState.nanResult;
+        defaultName = "comsol_failed_nan_points.txt";
+        if isfield(eventData, "outputFile") && strlength(string(eventData.outputFile)) > 0
+            defaultName = char(eventData.outputFile);
+        end
+
+        [file, path] = uiputfile({'*.txt', 'Text Files (*.txt)'; '*.dat', 'Data Files (*.dat)'; '*.*', 'All Files (*.*)'}, ...
+            'Save COMSOL Re-sweep File As', fullfile(pwd, defaultName));
+
+        if isequal(file, 0) || isequal(path, 0)
+            sendEventToHTMLSource(src, "StatusUpdate", "Export cancelled.");
+            return;
+        end
+
+        outFile = fullfile(path, file);
+        fmt = "param";
+        if isfield(eventData, "format") && strlength(string(eventData.format)) > 0
+            fmt = string(eventData.format);
+        end
+        precision = 6;
+        if isfield(eventData, "precision") && isnumeric(eventData.precision)
+            precision = eventData.precision;
+        end
+
+        exportNanPointsToComsol(nanRes, ...
+            OutputFile=outFile, ...
+            Format=fmt, ...
+            Precision=precision);
+
+        sendEventToHTMLSource(src, "ExportNanComplete", struct( ...
+            "filename", outFile, ...
+            "count", nanRes.count));
+        sendEventToHTMLSource(src, "StatusUpdate", ...
+            sprintf("Exported %d points to COMSOL file: %s", nanRes.count, file));
+    catch ME
+        sendEventToHTMLSource(src, "Error", "Export failed: " + ME.message);
+    end
+end
+
+function highlightNanPoints_app(src, fig, eventData)
+    try
+        handles = getappdata(fig, "Handles");
+        if isempty(handles) || ~isfield(handles, "ax") || ~isvalid(handles.ax)
+            return;
+        end
+        ax = handles.ax;
+
+        oldH = findobj(ax, "Tag", "NAN_HIGHLIGHT_POINTS");
+        delete(oldH);
+
+        show = true;
+        if isfield(eventData, "show")
+            show = logical(eventData.show);
+        end
+        if ~show
+            return;
+        end
+
+        appState = fig.UserData;
+        if ~isfield(appState, "nanResult") || isempty(appState.nanResult) || appState.nanResult.count == 0
+            return;
+        end
+
+        nanRes = appState.nanResult;
+        hold(ax, "on");
+
+        zVal = 2.0;
+        zChildren = findobj(ax, "Type", "surface");
+        if ~isempty(zChildren)
+            try
+                zdata = get(zChildren(1), "ZData");
+                zVal = max(zdata(:)) * 1.2;
+            catch
+            end
+        end
+
+        pts = nanRes.uniquePoints;
+        hScat = scatter3(ax, pts(:, 1), pts(:, 2), repmat(zVal, size(pts, 1), 1), ...
+            60, [1 0.5 0], "^", "filled", ...
+            "MarkerEdgeColor", [1 1 1], ...
+            "LineWidth", 1.2, ...
+            "DisplayName", sprintf("Failed/NaN Points (%d)", nanRes.count), ...
+            "Tag", "NAN_HIGHLIGHT_POINTS");
+        uistack(hScat, "top");
+        legend(ax, "show", "TextColor", [0.8 0.85 0.9], "Location", "northeast");
+    catch ME
+        fprintf("[Sampling] Highlight NaN points error: %s\n", ME.message);
     end
 end
 

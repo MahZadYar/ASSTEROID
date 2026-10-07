@@ -93,14 +93,19 @@ function results = runLocalizationWorkflow(cfg, reporter)
     end
 
     %% Step 1: Build predictor
-    predictor = buildPredictorFromConfig(cfg, Reporter=reporter);
+    if isfield(cfg, "predictor") && ~isempty(cfg.predictor)
+        predictor = cfg.predictor;
+        reporter.info("[runLocalizationWorkflow] Reusing existing predictor.");
+    else
+        predictor = buildPredictorFromConfig(cfg, Reporter=reporter);
+    end
 
     % Extract model/ri for backward-compatible results struct
     model = [];
     ri = [];
-    if predictor.mode == "model"
-        model = predictor.model;
-        ri = predictor.ri;
+    if isfield(predictor, "mode") && predictor.mode == "model"
+        if isfield(predictor, "model"), model = predictor.model; end
+        if isfield(predictor, "ri"), ri = predictor.ri; end
     end
 
     %% Step 2: Load or generate dense predictions
@@ -135,6 +140,11 @@ function results = runLocalizationWorkflow(cfg, reporter)
         lambdaSamples = gp.lambdaSamples; % already in µm
         reporter.info(sprintf("[runLocalizationWorkflow] Grid skipped. Bounds: P=[%.0f,%.0f] nm, R=[%.0f,%.0f] nm.", ...
             cfg.pLimits(1), cfg.pLimits(2), cfg.rLimits(1), cfg.rLimits(2)));
+    elseif isfield(cfg, "cachedAllData") && isstruct(cfg.cachedAllData) ...
+            && isfield(cfg.cachedAllData, "period") && ~isempty(cfg.cachedAllData.period)
+        % Use pre-computed cached allData directly (from db.Pred or preview results)
+        allData = cfg.cachedAllData;
+        reporter.info("[runLocalizationWorkflow] Using cached predictions (no grid recomputation).");
     elseif dataSource == "interpolation"
         % For interpolation mode: generate dense predictions via interpolant
         reporter.start("GeneratePredictions", "Generating dense predictions via interpolation...");
@@ -159,6 +169,18 @@ function results = runLocalizationWorkflow(cfg, reporter)
             InterpResolution=cfg.stokesShiftResolution, ...
             SpectralInterpMethod="makima");
         [allData, ~] = recomputeDerivedMetrics(allData, derivedCfg, analyteSpec, reporter);
+    elseif dataSource == "predictions"
+        if isfield(cfg, "predictionFile") && strlength(cfg.predictionFile) > 0 && isfile(cfg.predictionFile)
+            loaded = load(cfg.predictionFile);
+            if isfield(loaded, "allData"), allData = loaded.allData;
+            elseif isfield(loaded, "predictions"), allData = loaded.predictions;
+            else, allData = loaded;
+            end
+            reporter.info("[runLocalizationWorkflow] Loaded predictions from file (no grid recomputation).");
+        else
+            error("runLocalizationWorkflow:NoPredictions", ...
+                "DataSource='predictions' requires either cfg.cachedAllData or an existing cfg.predictionFile.");
+        end
     else
         % Model mode: use existing loadOrGeneratePredictions
         modelPredArgs = { ...

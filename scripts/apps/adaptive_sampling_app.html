@@ -733,6 +733,18 @@
         .req-ok { color: #66bb6a; }
         .req-missing { color: #ef5350; }
         .req-optional { color: var(--text-muted, #888); }
+        .nan-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            background: rgba(245, 158, 11, 0.2);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.4);
+        }
     </style>
 </head>
 <body>
@@ -798,6 +810,81 @@
                         <button class="btn-primary" style="width:100%; margin-top:8px;" onclick="loadData()">
                             Load Data from DB
                         </button>
+                    </div>
+                </div>
+
+                <!-- 1b. NaN / Failed Points Generator -->
+                <div class="category" id="catNanPoints">
+                    <div class="category-header" onclick="toggleCategory('catNanPoints')">
+                        <h2><span class="category-icon" style="background:#f59e0b;color:#111;">⚠️</span> NaN Point Recovery (COMSOL)</h2>
+                        <span class="category-toggle">▼</span>
+                    </div>
+                    <div class="category-content">
+                        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;">
+                            Scan dataset for NaN metrics, list unique geometry inputs, and generate a COMSOL parameter sweep file to re-run simulations.
+                        </div>
+                        
+                        <div style="display:flex;gap:6px;margin-bottom:8px;">
+                            <button class="btn-primary" style="flex:1;" onclick="findNanPoints()" id="btnFindNan">
+                                🔍 Scan for NaN Metrics
+                            </button>
+                            <button class="btn-secondary" style="flex:1;" onclick="toggleHighlightNan()" id="btnHighlightNan" disabled>
+                                👁 Show on Plot
+                            </button>
+                        </div>
+
+                        <!-- Scan Results Container (hidden initially) -->
+                        <div id="nanResultsContainer" style="display:none;background:var(--input-bg);border:1px solid var(--border);border-radius:6px;padding:8px;margin-bottom:8px;">
+                            <div style="font-size:11px;font-weight:600;color:var(--accent);margin-bottom:4px;" id="nanSummaryTitle">
+                                NaN Points Found
+                            </div>
+                            
+                            <!-- Badges for metrics with NaNs -->
+                            <div id="nanMetricsBadges" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;"></div>
+
+                            <!-- Unique points table -->
+                            <div style="max-height:160px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;background:var(--bg-primary);">
+                                <table style="width:100%;border-collapse:collapse;font-size:10px;font-family:'Cascadia Code',Consolas,monospace;" id="nanPointsTable">
+                                    <thead style="position:sticky;top:0;background:var(--bg-tertiary);color:var(--accent);">
+                                        <tr id="nanTableHeaderRow">
+                                            <th style="padding:3px 5px;text-align:left;">#</th>
+                                            <th style="padding:3px 5px;text-align:left;">Inputs</th>
+                                            <th style="padding:3px 5px;text-align:left;">Failed Metrics</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="nanTableBody"></tbody>
+                                </table>
+                            </div>
+
+                            <!-- Export controls -->
+                            <div class="form-group" style="margin-bottom:6px;">
+                                <label style="font-size:10px;">Export Filename</label>
+                                <input type="text" id="nanOutputFile" value="comsol_failed_nan_points.txt" style="font-size:11px;padding:4px 6px;">
+                            </div>
+
+                            <div class="form-row" style="margin-bottom:8px;">
+                                <div class="form-group" style="margin-bottom:0;">
+                                    <label style="font-size:10px;">Format</label>
+                                    <select id="nanExportFormat" style="font-size:11px;padding:4px 6px;">
+                                        <option value="param">Parametric Sweep (param "v1 v2..." [unit])</option>
+                                        <option value="table">Table Sweep (% param1\tparam2)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin-bottom:0;max-width:70px;">
+                                    <label style="font-size:10px;">Precision</label>
+                                    <input type="number" id="nanPrecision" value="6" min="1" max="15" style="font-size:11px;padding:4px 6px;">
+                                </div>
+                            </div>
+
+                            <div style="display:flex;gap:6px;">
+                                <button class="btn-success" style="flex:2;padding:6px 8px;font-size:11px;" onclick="exportNanPoints()" id="btnExportNan" disabled>
+                                    💾 Export to COMSOL
+                                </button>
+                                <button class="btn-secondary" style="flex:1;padding:6px 8px;font-size:11px;" onclick="copyNanPoints()" id="btnCopyNan" disabled>
+                                    📋 Copy
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -1149,6 +1236,8 @@
             htmlComponent.addEventListener("SamplingComplete", handleSamplingComplete);
             htmlComponent.addEventListener("DensityPreview", handleDensityPreview);
             htmlComponent.addEventListener("ExportComplete", handleExportComplete);
+            htmlComponent.addEventListener("NanPointsFound", handleNanPointsFound);
+            htmlComponent.addEventListener("ExportNanComplete", handleExportNanComplete);
             htmlComponent.addEventListener("Error", handleError);
             htmlComponent.addEventListener("Warning", handleWarning);
             htmlComponent.addEventListener("StatusUpdate", handleStatusUpdate);
@@ -1156,13 +1245,6 @@
             htmlComponent.addEventListener("DbStatus", function(event) {
                 dbUpdateBanner(event.Data);
                 updateSamplingRequirements(event.Data);
-                if (event.Data && event.Data.hasSimData) {
-                    const dbId = (event.Data.dbFile || "mem") + "_" + (event.Data.simEntries || 0);
-                    if (window._lastLoadedDbId !== dbId) {
-                        window._lastLoadedDbId = dbId;
-                        loadData();
-                    }
-                }
             });
             htmlComponent.addEventListener("SaveComplete", function(event) {
                 showAlert(event.Data || "Database saved.", "success");
@@ -1491,6 +1573,145 @@
             document.getElementById("statOriginal").textContent = "0";
 
             setStatus("ready", "Ready");
+        }
+
+        // ============================================================
+        // NaN / Failed Points Handling
+        // ============================================================
+        let currentNanResult = null;
+        let nanHighlightActive = false;
+
+        function findNanPoints() {
+            if (!htmlComponent) return;
+            setStatus("loading", "Scanning for NaN metrics...");
+            const btn = document.getElementById("btnFindNan");
+            if (btn) btn.disabled = true;
+            const prec = parseInt(document.getElementById("nanPrecision")?.value || "6", 10);
+            htmlComponent.sendEventToMATLAB("FindNanPoints", { precision: prec });
+        }
+
+        function handleNanPointsFound(event) {
+            const btn = document.getElementById("btnFindNan");
+            if (btn) btn.disabled = false;
+            const res = event.Data;
+            if (!res) return;
+            currentNanResult = res;
+
+            const container = document.getElementById("nanResultsContainer");
+            if (!container) return;
+
+            if (!res.hasNans || res.count === 0) {
+                container.style.display = "block";
+                const titleEl = document.getElementById("nanSummaryTitle");
+                if (titleEl) {
+                    titleEl.innerHTML = "✓ No NaN values detected in any metric!";
+                    titleEl.style.color = "var(--success)";
+                }
+                const badgesDiv = document.getElementById("nanMetricsBadges");
+                if (badgesDiv) badgesDiv.innerHTML = "";
+                const tbody = document.getElementById("nanTableBody");
+                if (tbody) tbody.innerHTML = '<tr><td colspan="3" style="padding:8px;text-align:center;color:var(--text-secondary);">All ' + (res.totalRows || 0) + ' entries have valid finite metric values.</td></tr>';
+                document.getElementById("btnExportNan").disabled = true;
+                document.getElementById("btnCopyNan").disabled = true;
+                document.getElementById("btnHighlightNan").disabled = true;
+                setStatus("ready", "Scan complete: No NaNs found");
+                showAlert("Scan complete: No NaN metrics found across " + (res.totalRows || 0) + " entries.", "info");
+                return;
+            }
+
+            container.style.display = "block";
+            const titleEl = document.getElementById("nanSummaryTitle");
+            if (titleEl) {
+                titleEl.innerHTML = "⚠️ Found " + res.count + " Unique Failed Geometries (" + res.totalNanRows + " NaN entries):";
+                titleEl.style.color = "#fbbf24";
+            }
+
+            // Populate badges for metrics with NaNs
+            const badgesDiv = document.getElementById("nanMetricsBadges");
+            if (badgesDiv) {
+                let badgeHtml = '';
+                const metricsWithNan = normalizeArray(res.metricsWithNan);
+                metricsWithNan.forEach(m => {
+                    badgeHtml += '<span class="nan-badge">' + m.name + ' (' + m.nanCount + ' NaNs)</span>';
+                });
+                badgesDiv.innerHTML = badgeHtml;
+            }
+
+            // Populate table of unique geometry points
+            const tbody = document.getElementById("nanTableBody");
+            if (tbody) {
+                let rowsHtml = '';
+                const pointList = normalizeArray(res.pointList);
+                pointList.forEach((pt, idx) => {
+                    const failedStr = normalizeArray(pt.failedMetrics).join(", ");
+                    rowsHtml += '<tr>' +
+                        '<td style="padding:2px 5px;border-bottom:1px solid rgba(27,80,85,0.3);color:var(--text-secondary);">' + (idx + 1) + '</td>' +
+                        '<td style="padding:2px 5px;border-bottom:1px solid rgba(27,80,85,0.3);color:var(--accent);font-weight:600;">' + (pt.paramStr || '') + '</td>' +
+                        '<td style="padding:2px 5px;border-bottom:1px solid rgba(27,80,85,0.3);color:#fbbf24;">' + failedStr + '</td>' +
+                        '</tr>';
+                });
+                tbody.innerHTML = rowsHtml;
+            }
+
+            document.getElementById("btnExportNan").disabled = false;
+            document.getElementById("btnCopyNan").disabled = false;
+            document.getElementById("btnHighlightNan").disabled = false;
+
+            setStatus("ready", "Found " + res.count + " unique NaN geometry points");
+            showAlert("Found " + res.count + " unique geometry points with NaNs (" + res.totalNanRows + " total). Ready to export for COMSOL.", "warning");
+        }
+
+        function exportNanPoints() {
+            if (!htmlComponent || !currentNanResult) return;
+            const outFile = document.getElementById("nanOutputFile")?.value || "comsol_failed_nan_points.txt";
+            const fmt = document.getElementById("nanExportFormat")?.value || "param";
+            const prec = parseInt(document.getElementById("nanPrecision")?.value || "6", 10);
+
+            setStatus("loading", "Exporting COMSOL file...");
+            htmlComponent.sendEventToMATLAB("ExportNanPoints", {
+                outputFile: outFile,
+                format: fmt,
+                precision: prec
+            });
+        }
+
+        function handleExportNanComplete(event) {
+            const data = event.Data;
+            setStatus("ready", "Export complete");
+            showAlert("Successfully exported " + (data.count || 0) + " points to " + (data.filename || "COMSOL file"), "success");
+        }
+
+        function copyNanPoints() {
+            if (!currentNanResult) return;
+            const fmt = document.getElementById("nanExportFormat")?.value || "param";
+            const textToCopy = fmt === "table" ? currentNanResult.comsolTableString : currentNanResult.comsolParamString;
+            if (!textToCopy) return;
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(textToCopy).then(() => {
+                    showAlert("Copied COMSOL sweep points to clipboard!", "success");
+                }).catch(() => {
+                    prompt("Copy COMSOL points manually:", textToCopy);
+                });
+            } else {
+                prompt("Copy COMSOL points manually:", textToCopy);
+            }
+        }
+
+        function toggleHighlightNan() {
+            if (!htmlComponent || !currentNanResult) return;
+            nanHighlightActive = !nanHighlightActive;
+            const btn = document.getElementById("btnHighlightNan");
+            if (nanHighlightActive) {
+                btn.textContent = "🙈 Hide on Plot";
+                btn.style.borderColor = "#fbbf24";
+                btn.style.color = "#fbbf24";
+            } else {
+                btn.textContent = "👁 Show on Plot";
+                btn.style.borderColor = "";
+                btn.style.color = "";
+            }
+            htmlComponent.sendEventToMATLAB("HighlightNanPoints", { show: nanHighlightActive });
         }
 
         // Event handlers from MATLAB

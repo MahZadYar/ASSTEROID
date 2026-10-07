@@ -71,7 +71,7 @@ function cfg = localizeMaximaConfig(options)
     %   See also: runLocalizationWorkflow, computeDenseGridParams, ProgressReporter
 
     arguments
-        options.DataSource (1,1) string {mustBeMember(options.DataSource, ["model", "interpolation"])} = "model"
+        options.DataSource (1,1) string {mustBeMember(options.DataSource, ["model", "interpolation", "predictions"])} = "model"
         options.DataFile (1,1) string = ""
         options.DiscreteOnly (1,1) logical = false
         options.WorkDir (1,1) string = string(pwd)

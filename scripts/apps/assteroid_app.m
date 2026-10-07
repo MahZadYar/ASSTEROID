@@ -38,10 +38,23 @@ function figOut = assteroid_app(workFolder)
     end
     workFolder = string(workFolder);
 
+    % Sanitize path: legacy folder must never shadow src/
+    codebaseRoot = fileparts(fileparts(fileparts(mfilename("fullpath"))));
+    legacyDir = fullfile(codebaseRoot, "legacy");
+    if contains(path, legacyDir)
+        try rmpath(legacyDir); catch; end
+    end
+
     % Singleton guard: if an instance is already running, focus it
-    existing = findall(groot, "Type", "figure", "Tag", "ASSTEROID_MAIN_APP");
+    existing = findall(groot, "Tag", "ASSTEROID_MAIN_APP");
     if isempty(existing)
-        existing = findall(groot, "Type", "figure", "-regexp", "Name", "ASSTEROID");
+        allFigs = findall(groot, "Type", "figure");
+        for k = 1:numel(allFigs)
+            if contains(string(allFigs(k).Name), "ASSTEROID")
+                existing = allFigs(k);
+                break;
+            end
+        end
     end
     if ~isempty(existing) && isvalid(existing(1))
         fig = existing(1);
@@ -1738,7 +1751,8 @@ function runImportPipeline(src, d, fig, visPanel)
         InterpResolution    = safeNum(d, "interpResolution", 1), ...
         SpectralInterpMethod = safeStr(d, "spectralInterpMethod", "makima"), ...
         Mode                = safeStr(d, "mode", "merge"), ...
-        RecalculateExisting = safeBool(d, "recalculateExisting", true), ...
+        ReplaceExisting     = safeBool(d, "replaceExisting", false), ...
+        RecalculateExisting = safeBool(d, "recalculateExisting", false), ...
         MetricVariants      = safeStruct(d, "metricVariants"));
 
     results = runImportSweepWorkflow(cfg, reporter);
@@ -1812,6 +1826,15 @@ function handleSamplingEvent(src, event, fig)
 
             case "ExportResults"
                 exportSamplingResults_app(src, fig, data);
+
+            case "FindNanPoints"
+                findNanPoints_app(src, fig, data);
+
+            case "ExportNanPoints"
+                exportNanPoints_app(src, fig, data);
+
+            case "HighlightNanPoints"
+                highlightNanPoints_app(src, fig, data);
 
             case "Reset"
                 resetSampling(src, fig);
@@ -2015,6 +2038,149 @@ function exportSamplingResults_app(src, fig, eventData)
         IncludeOriginal=safeBool(eventData,"includeOriginal",false), ...
         OriginalPoints=originalPoints);
     sendEventToHTMLSource(src, "ExportComplete", struct("filename", outFile));
+end
+
+function findNanPoints_app(src, fig, eventData)
+    try
+        % Find available data source:
+        % 1. Sampling samples loaded in fig.UserData.sampling.samples
+        % 2. Database Sim data in fig.UserData.db.Sim
+        % 3. Database SimFile if set
+        % 4. Fallback to dataFile from resolveDbPaths
+        dataSource = [];
+        if isfield(fig.UserData, "sampling") && isfield(fig.UserData.sampling, "samples") && ...
+           ~isempty(fig.UserData.sampling.samples) && isfield(fig.UserData.sampling.samples, "allData")
+            dataSource = fig.UserData.sampling.samples.allData;
+        elseif isfield(fig.UserData, "db") && isfield(fig.UserData.db, "Sim") && ...
+               isstruct(fig.UserData.db.Sim) && structRowCount(fig.UserData.db.Sim) > 0
+            dataSource = fig.UserData.db;
+        elseif isfield(fig.UserData, "db") && isfield(fig.UserData.db, "Global") && ...
+               isfield(fig.UserData.db.Global, "SimFile") && isfile(string(fig.UserData.db.Global.SimFile))
+            dataSource = string(fig.UserData.db.Global.SimFile);
+        end
+
+        if isempty(dataSource)
+            [~, ~, simDataFile, ~] = resolveDbPaths(fig);
+            if strlength(simDataFile) > 0 && isfile(simDataFile)
+                dataSource = simDataFile;
+            end
+        end
+
+        if isempty(dataSource)
+            sendEventToHTMLSource(src, "Error", "No dataset loaded. Load data in Database or Sampling tab first.");
+            return;
+        end
+
+        sendEventToHTMLSource(src, "StatusUpdate", "Scanning for NaN metrics...");
+
+        precision = safeNum(eventData, "precision", 6);
+        res = findNanSamplingPoints(dataSource, Precision=precision);
+        fig.UserData.sampling.nanResult = res;
+
+        % Send structured result to HTML component
+        sendEventToHTMLSource(src, "NanPointsFound", res);
+
+        if res.hasNans
+            sendEventToHTMLSource(src, "StatusUpdate", ...
+                sprintf("Found %d unique geometry points with NaNs across %d entries.", res.count, res.totalRows));
+        else
+            sendEventToHTMLSource(src, "StatusUpdate", "No NaN values detected in any metric.");
+        end
+    catch ME
+        sendEventToHTMLSource(src, "Error", "Failed to scan for NaNs: " + ME.message);
+    end
+end
+
+function exportNanPoints_app(src, fig, eventData)
+    try
+        if ~isfield(fig.UserData.sampling, "nanResult") || isempty(fig.UserData.sampling.nanResult) || ...
+           fig.UserData.sampling.nanResult.count == 0
+            sendEventToHTMLSource(src, "Error", "Scan for NaN points first.");
+            return;
+        end
+
+        nanRes = fig.UserData.sampling.nanResult;
+        defaultName = safeStr(eventData, "outputFile", "comsol_failed_nan_points.txt");
+        workDir = fig.UserData.workDir;
+        if workDir ~= ""
+            defaultPath = fullfile(workDir, defaultName);
+        else
+            defaultPath = fullfile(pwd, defaultName);
+        end
+
+        [file, path] = uiputfile({'*.txt', 'Text Files (*.txt)'; '*.dat', 'Data Files (*.dat)'; '*.*', 'All Files (*.*)'}, ...
+            'Save COMSOL Re-sweep File As', defaultPath);
+
+        if isequal(file, 0) || isequal(path, 0)
+            sendEventToHTMLSource(src, "StatusUpdate", "Export cancelled.");
+            return;
+        end
+
+        outFile = fullfile(path, file);
+        fmt = safeStr(eventData, "format", "param");
+        precision = safeNum(eventData, "precision", 6);
+
+        exportNanPointsToComsol(nanRes, ...
+            OutputFile=outFile, ...
+            Format=fmt, ...
+            Precision=precision);
+
+        sendEventToHTMLSource(src, "ExportNanComplete", struct( ...
+            "filename", outFile, ...
+            "count", nanRes.count));
+        sendEventToHTMLSource(src, "StatusUpdate", ...
+            sprintf("Exported %d points to COMSOL file: %s", nanRes.count, file));
+    catch ME
+        sendEventToHTMLSource(src, "Error", "Export failed: " + ME.message);
+    end
+end
+
+function highlightNanPoints_app(src, fig, eventData)
+    try
+        ax = fig.UserData.handles.samplingAx;
+        if isempty(ax) || ~isvalid(ax)
+            return;
+        end
+
+        % Delete any existing NaN highlight scatter
+        oldH = findobj(ax, "Tag", "NAN_HIGHLIGHT_POINTS");
+        delete(oldH);
+
+        show = safeBool(eventData, "show", true);
+        if ~show
+            return;
+        end
+
+        if ~isfield(fig.UserData.sampling, "nanResult") || isempty(fig.UserData.sampling.nanResult) || ...
+           fig.UserData.sampling.nanResult.count == 0
+            return;
+        end
+
+        nanRes = fig.UserData.sampling.nanResult;
+        hold(ax, "on");
+
+        zVal = 2.0;
+        zChildren = findobj(ax, "Type", "surface");
+        if ~isempty(zChildren)
+            try
+                zdata = get(zChildren(1), "ZData");
+                zVal = max(zdata(:)) * 1.2;
+            catch
+            end
+        end
+
+        pts = nanRes.uniquePoints;
+        hScat = scatter3(ax, pts(:, 1), pts(:, 2), repmat(zVal, size(pts, 1), 1), ...
+            60, [1 0.5 0], "^", "filled", ...
+            "MarkerEdgeColor", [1 1 1], ...
+            "LineWidth", 1.2, ...
+            "DisplayName", sprintf("Failed/NaN Points (%d)", nanRes.count), ...
+            "Tag", "NAN_HIGHLIGHT_POINTS");
+        uistack(hScat, "top");
+        legend(ax, "show", "TextColor", [0.8 0.85 0.9], "Location", "northeast");
+    catch ME
+        fprintf("[Sampling] Highlight NaN points error: %s\n", ME.message);
+    end
 end
 
 function resetSampling(src, fig)
@@ -2643,16 +2809,60 @@ function generateDensePredictions(src, d, fig)
             ExportPredictions   = false, ...
             ExportGraphics      = false);
 
-        results = runPredictionVisWorkflow(cfg, reporter);
+        % Resolve model & RI from app state
+        model = [];
+        ri = [];
+        if isfield(fig.UserData, "visExport") && isfield(fig.UserData.visExport, "model") ...
+                && ~isempty(fig.UserData.visExport.model)
+            model = fig.UserData.visExport.model;
+        end
+        if isfield(fig.UserData, "visExport") && isfield(fig.UserData.visExport, "ri") ...
+                && ~isempty(fig.UserData.visExport.ri)
+            ri = fig.UserData.visExport.ri;
+        else
+            ri = resolveRefractiveIndexStruct(fig, riCsvFile);
+        end
 
-        if isfield(results, "allData") && isstruct(results.allData)
-            fig.UserData.db.Pred = results.allData;
+        % Optional analyte spectrum
+        analyteSpec = struct();
+        if isfield(fig.UserData, "visExport") && isfield(fig.UserData.visExport, "analyteSpectrum") ...
+                && isstruct(fig.UserData.visExport.analyteSpectrum)
+            analyteSpec = fig.UserData.visExport.analyteSpectrum;
+        elseif isfield(fig.UserData.db, "Global") && isfield(fig.UserData.db.Global, "AnalyteSpectrumFile") ...
+                && isfile(string(fig.UserData.db.Global.AnalyteSpectrumFile))
+            try
+                analyteSpec = loadAndNormalizeAnalyteSpectrum(char(fig.UserData.db.Global.AnalyteSpectrumFile));
+            catch
+            end
+        end
+
+        loadPredArgs = { ...
+            "Recompute", true, ...
+            "Model", model, "Ri", ri, ...
+            "PSamples", cfg.pSamples, "RSamples", cfg.rSamples, ...
+            "LambdaSamples", cfg.lambdaSamples, ...
+            "LambdaLaser", laserWl, ...
+            "StokesShiftLimits", [stokesMin, stokesMax], ...
+            "AnalyteSpectrum", analyteSpec, ...
+            "InterpResolution", stokesRes, ...
+            "PredictionFile", cfg.predictionFile, ...
+            "SaveAfterGeneration", false, ...
+            "Reporter", reporter};
+        if ~linkMetrics
+            loadPredArgs = [loadPredArgs, {"MetricsShiftLimits", [metricsMin, metricsMax]}];
+        end
+
+        allDataRaw = loadOrGeneratePredictions(loadPredArgs{:});
+
+        if isstruct(allDataRaw) && structRowCount(allDataRaw) > 0
+            fig.UserData.db.Pred = allDataRaw;
             markDbDirty(fig);
             broadcastDbStatus(fig);
-            n = structRowCount(results.allData);
+            n = structRowCount(allDataRaw);
+            reporter.complete("GeneratePredictions", sprintf("Dense predictions ready (%d entries).", n));
             sendOptimizeEvent(fig, "PredictionsGenerated", struct("count", n), src);
         else
-            sendOptimizeEvent(fig, "PredictionsError", "Workflow returned no prediction data.", src);
+            sendOptimizeEvent(fig, "PredictionsError", "Generated prediction dataset was empty.", src);
         end
     catch ME
         if isProcessStopRequested(fig) || strcmp(ME.identifier, "Process:Terminated")
@@ -2929,15 +3139,39 @@ function runOptimizePipeline(src, d, fig, ax)
         stokesShiftMax = gridRawStokesMax;
     end
 
+    % Check for cached allData from preview or db.Pred
+    cachedAllData = [];
+    if isfield(fig.UserData, "optimize")
+        if isfield(fig.UserData.optimize, "previewResults") && isstruct(fig.UserData.optimize.previewResults) ...
+                && isfield(fig.UserData.optimize.previewResults, "allData") && ~isempty(fig.UserData.optimize.previewResults.allData)
+            cachedAllData = fig.UserData.optimize.previewResults.allData;
+        elseif isfield(fig.UserData.optimize, "lastResults") && isstruct(fig.UserData.optimize.lastResults) ...
+                && isfield(fig.UserData.optimize.lastResults, "allData") && ~isempty(fig.UserData.optimize.lastResults.allData)
+            cachedAllData = fig.UserData.optimize.lastResults.allData;
+        end
+    end
+    if isempty(cachedAllData) && isfield(fig.UserData, "db") && isfield(fig.UserData.db, "Pred") ...
+            && structRowCount(fig.UserData.db.Pred) > 0
+        cachedAllData = extractBranchAsSoA(fig.UserData.db, "Pred");
+    end
+
+    dataSource = safeStr(d, "dataSource", "model");
+    shouldRecompute = safeBool(d, "recomputePredictions", false);
+    if dataSource == "predictions" || (~isempty(cachedAllData) && ~shouldRecompute)
+        recompFlag = false;
+    else
+        recompFlag = (mode ~= "refine");
+    end
+
     cfg = localizeMaximaConfig( ...
         WorkDir          = workDir, ...
-        DataSource       = safeStr(d, "dataSource", "model"), ...
+        DataSource       = dataSource, ...
         DataFile         = dataFile, ...
         DiscreteOnly     = safeBool(d, "discreteOnly", false), ...
         ModelFile        = modelFile, ...
         RiCsvFile        = riCsvFile, ...
         PredictionFile   = predictionFile, ...
-        RecomputePredictions = (mode ~= "refine"), ...
+        RecomputePredictions = recompFlag, ...
         LambdaLaser      = gridLambdaLaser, ...
         PLimits          = gridPLimits, ...
         RLimits          = gridRLimits, ...
@@ -2969,6 +3203,14 @@ function runOptimizePipeline(src, d, fig, ax)
         TuningRadius     = tuningRadiusNm * 1e-3);
 
     cfg.metricVariant = metricVariant;
+    if ~isempty(cachedAllData)
+        cfg.cachedAllData = cachedAllData;
+    end
+    if isfield(fig.UserData, "optimize") && isfield(fig.UserData.optimize, "previewResults") ...
+            && isstruct(fig.UserData.optimize.previewResults) && isfield(fig.UserData.optimize.previewResults, "predictor") ...
+            && ~isempty(fig.UserData.optimize.previewResults.predictor)
+        cfg.predictor = fig.UserData.optimize.previewResults.predictor;
+    end
 
     if mode == "detect"
         cfg.discreteOnly = true;
@@ -2978,18 +3220,6 @@ function runOptimizePipeline(src, d, fig, ax)
             cfg.initialCandidates = buildSeedTable(d.seeds);
             % Skip the expensive grid generation — model-only evaluation path
             cfg.skipGridGeneration = true;
-            % Pass cached allData for the results struct (keeps heatmap re-usable)
-            cachedResults = [];
-            if isfield(fig.UserData, "optimize")
-                if isfield(fig.UserData.optimize, "lastResults") && isstruct(fig.UserData.optimize.lastResults)
-                    cachedResults = fig.UserData.optimize.lastResults;
-                elseif isfield(fig.UserData.optimize, "previewResults") && isstruct(fig.UserData.optimize.previewResults)
-                    cachedResults = fig.UserData.optimize.previewResults;
-                end
-            end
-            if ~isempty(cachedResults) && isfield(cachedResults, "allData")
-                cfg.cachedAllData = cachedResults.allData;
-            end
         end
         
         % Initialize parallel pool only when not forcing iteration-path tracing
@@ -3248,14 +3478,26 @@ function previewOptimizeMetric(src, d, fig, ax)
         
         allData_raw = [];  % Pre-declare for interpolation mode
         
-        if dataSource == "model"
+        hasDbPred = isfield(fig.UserData, "db") && isfield(fig.UserData.db, "Pred") ...
+            && structRowCount(fig.UserData.db.Pred) > 0;
+
+        if dataSource == "predictions"
+            if ~hasDbPred
+                error("No predictions found in database (db.Pred). Generate or load predictions first.");
+            end
+        elseif dataSource == "model"
             cfg.modelFile = dbModelFile;
             cfg.riCsvFile = dbRiCsvFile;
             
             if ~isfile(cfg.modelFile)
-                error("Model not loaded in database. Load a model in the Database tab.");
+                if hasDbPred
+                    dataSource = "predictions";
+                    reporter.info("Model not found on disk, but db.Pred is populated. Using pre-computed predictions.");
+                else
+                    error("Model not loaded in database. Load a model in the Database tab.");
+                end
             end
-            if strlength(cfg.riCsvFile) > 0 && ~isfile(cfg.riCsvFile)
+            if dataSource == "model" && strlength(cfg.riCsvFile) > 0 && ~isfile(cfg.riCsvFile)
                 warning("RI file not found (will use default): %s", cfg.riCsvFile);
                 cfg.riCsvFile = "";
             end
@@ -3269,9 +3511,20 @@ function previewOptimizeMetric(src, d, fig, ax)
         
         % Build predictor (model or interpolation)
         reporter.start("BuildPredictor", "Preparing predictor...");
+        predictor = [];
         
-        % For interpolation preview, use nearest-neighbor (fast) not makima (slow)
-        if dataSource == "interpolation"
+        if dataSource == "predictions"
+            reporter.complete("BuildPredictor", "Using pre-computed predictions from db.Pred.");
+            % If model file exists, pre-load model predictor for continuous refinement in Step 3
+            if strlength(dbModelFile) > 0 && isfile(dbModelFile)
+                try
+                    predCfg = struct("dataSource", "model", "workDir", workDir, "modelFile", dbModelFile, "riCsvFile", dbRiCsvFile);
+                    predictor = buildPredictorFromConfig(predCfg);
+                catch
+                    predictor = [];
+                end
+            end
+        elseif dataSource == "interpolation"
             reporter.info("Using fast nearest-neighbor mode for preview (interpolation is slower).");
             
             % Load raw data directly (no interpolant building)
@@ -3299,10 +3552,13 @@ function previewOptimizeMetric(src, d, fig, ax)
             reporter.complete("BuildPredictor", "Predictor ready.");
         end
         
-        % Generate dense predictions using predictor's predictGrid method
+        % Generate dense predictions using predictor's predictGrid method or extract db.Pred
         reporter.start("GeneratePredictions", "Generating preview predictions...");
         
-        if dataSource == "interpolation"
+        if dataSource == "predictions"
+            allData = extractBranchAsSoA(fig.UserData.db, "Pred");
+            reporter.complete("GeneratePredictions", sprintf("Loaded %d predictions from db.Pred.", structRowCount(allData)));
+        elseif dataSource == "interpolation"
             % For interpolation preview: use raw data directly (already on grid)
             allData = allData_raw;
             
@@ -3385,9 +3641,79 @@ function previewOptimizeMetric(src, d, fig, ax)
                     "LaserWavelength", lambdaLaser, ...
                     "RamanWindow", [stokesShiftMin, stokesShiftMax]);
             end
+            reporter.complete("GeneratePredictions", "Preview predictions ready.");
         end
-        
-        reporter.complete("GeneratePredictions", "Preview predictions ready.");
+
+        % Ensure derived metric field is present in allData for heatmap & diagnostics
+        if metricVariant == "weighted"
+            variantForField = "analyte";
+        elseif metricVariant == "laser"
+            variantForField = "laser";
+        else
+            variantForField = "avg";
+        end
+        diagField = resolveDerivedMetricField(baseMetric, variantForField, allData);
+
+        if ~isfield(allData, diagField) && isfield(allData, baseMetric)
+            specMat = allData.(baseMetric);
+            if variantForField == "laser"
+                if isfield(allData, "lambda")
+                    [~, lIdx] = min(abs(allData.lambda - lambdaLaser));
+                else
+                    lIdx = 1;
+                end
+                allData.(diagField) = specMat(:, lIdx);
+            elseif variantForField == "avg"
+                allData.(diagField) = mean(specMat, 2, "omitnan");
+            elseif variantForField == "analyte"
+                analyteSpec = [];
+                if isfield(fig.UserData, "visExport") && isfield(fig.UserData.visExport, "analyteSpectrum") ...
+                        && isstruct(fig.UserData.visExport.analyteSpectrum)
+                    analyteSpec = fig.UserData.visExport.analyteSpectrum;
+                elseif isfield(fig.UserData, "db") && isfield(fig.UserData.db, "Global") && isfield(fig.UserData.db.Global, "AnalyteSpectrumFile") ...
+                        && isfile(string(fig.UserData.db.Global.AnalyteSpectrumFile))
+                    try
+                        analyteSpec = loadAndNormalizeAnalyteSpectrum(char(fig.UserData.db.Global.AnalyteSpectrumFile));
+                    catch
+                    end
+                end
+                if isstruct(analyteSpec) && isfield(analyteSpec, "shift_cm") && isfield(allData, "RamanShift")
+                    shifts = allData.RamanShift(:)';
+                    aw = interp1(analyteSpec.shift_cm(:), analyteSpec.intensity(:), shifts, "makima", 0);
+                    aw = max(0, aw);
+                    if sum(aw) > 0
+                        weights = aw / sum(aw);
+                        allData.(diagField) = specMat * weights(:);
+                    else
+                        allData.(diagField) = mean(specMat, 2, "omitnan");
+                    end
+                else
+                    allData.(diagField) = mean(specMat, 2, "omitnan");
+                end
+            end
+        end
+
+        % Synchronize grid samples from allData if using precomputed predictions
+        if isfield(allData, "lambda") && ~isempty(allData.lambda)
+            lamVals = allData.lambda(:)';
+            if max(lamVals) > 50
+                gp.lambdaSamples = lamVals * 1e-3;
+            else
+                gp.lambdaSamples = lamVals;
+            end
+        end
+        if isfield(allData, "period") && isfield(allData, "radius")
+            pVals = unique(allData.period(:), "sorted");
+            rVals = unique(allData.radius(:), "sorted");
+            if ~isempty(pVals)
+                if max(pVals) > 50, gp.pSamples = pVals * 1e-3;
+                else, gp.pSamples = pVals; end
+            end
+            if ~isempty(rVals)
+                if max(rVals) > 50, gp.rSamples = rVals * 1e-3;
+                else, gp.rSamples = rVals; end
+            end
+        end
         
         % Store results for later use (minimal structure)
         if ~isfield(fig.UserData, "optimize")
@@ -3405,7 +3731,7 @@ function previewOptimizeMetric(src, d, fig, ax)
             "allData", allData, ...
             "metrics", {{previewMetricEntry}}, ...
             "cfg",     previewCfg);  % cfg needed by evaluateMetricAtPoints
-        if dataSource == "model" && exist("predictor", "var") && ~isempty(predictor)
+        if exist("predictor", "var") && ~isempty(predictor)
             fig.UserData.optimize.previewResults.predictor = predictor;
         end
         fig.UserData.optimize.baseMetric = baseMetric;

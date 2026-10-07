@@ -595,6 +595,7 @@ function collectConfig() {
         interpResolution: num("interpResolution"),
         spectralInterpMethod: val("spectralInterpMethod"),
         mode: val("mode"),
+        replaceExisting: chk("replaceExisting"),
         recalculateExisting: chk("recalculateExisting"),
         metricVariants: collectMetricVariants()
     };
@@ -768,8 +769,15 @@ function toggleSection(el) {
                     </select>
                 </div>
                 <div class="toggle-row">
-                    <input type="checkbox" id="recalculateExisting" checked>
-                    <label for="recalculateExisting">Recalculate existing entries</label>
+                    <input type="checkbox" id="replaceExisting">
+                    <label for="replaceExisting">Replace existing entries on parameter match (overwrite)</label>
+                </div>
+                <div style="font-size:10px; color:var(--text-secondary); margin-left:22px; margin-top:-2px; margin-bottom:6px;">
+                    When checked, imported points overwrite old database entries on input match. Default (unchecked) skips duplicates.
+                </div>
+                <div class="toggle-row">
+                    <input type="checkbox" id="recalculateExisting">
+                    <label for="recalculateExisting">Recalculate existing entries (legacy merge)</label>
                 </div>
             </div>
         </div>

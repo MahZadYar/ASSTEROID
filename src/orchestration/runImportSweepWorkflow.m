@@ -193,18 +193,24 @@ end
         existingIdx = findExistingRowsGeneric(allDataStruct, inputNames, keyPairs(g, :));
 
         if ~isempty(existingIdx)
-            if ~cfg.recalculateExisting
+            if isfield(cfg, "replaceExisting") && cfg.replaceExisting
+                % Overwrite / replace existing entries with newly imported entry
+                allDataStruct = removeRowsFromStruct(allDataStruct, existingIdx);
+                replacedDuplicates = replacedDuplicates + numel(existingIdx);
+            elseif isfield(cfg, "recalculateExisting") && cfg.recalculateExisting
+                % Legacy merge with existing
+                if ~isempty(spectralName)
+                    oldEntry = extractEntryStruct(allDataStruct, existingIdx(1));
+                    interpSamples = max(2, round((cfg.ramanWindow(2) - cfg.ramanWindow(1)) / cfg.interpResolution));
+                    entry = mergeEntryWithNewWavelengths(oldEntry, entry, cfg.ramanWindow, interpSamples);
+                end
+                allDataStruct = removeRowsFromStruct(allDataStruct, existingIdx);
+                replacedDuplicates = replacedDuplicates + numel(existingIdx);
+            else
+                % Default: skip existing entries when parameters match
                 skippedExisting = skippedExisting + numel(existingIdx);
-                continue
+                continue;
             end
-            % Merge with existing
-            if ~isempty(spectralName)
-                oldEntry = extractEntryStruct(allDataStruct, existingIdx(1));
-                interpSamples = max(2, round((cfg.ramanWindow(2) - cfg.ramanWindow(1)) / cfg.interpResolution));
-                entry = mergeEntryWithNewWavelengths(oldEntry, entry, cfg.ramanWindow, interpSamples);
-            end
-            allDataStruct = removeRowsFromStruct(allDataStruct, existingIdx);
-            replacedDuplicates = replacedDuplicates + numel(existingIdx);
         end
 
         allDataStruct = append_entry_struct(allDataStruct, entry);
@@ -389,7 +395,15 @@ function idx = findExistingRowsGeneric(dataStruct, inputNames, keyValues)
         paramName = inputNames{k};
         paramVal  = keyValues(k);
 
-        vals = extractGeometryField(dataStruct, {paramName});
+        candidateList = {paramName};
+        if any(strcmpi(paramName, ["particle_r", "radius", "r"]))
+            candidateList = [candidateList, {"particle_r", "radius", "r"}];
+        elseif any(strcmpi(paramName, ["period", "p"]))
+            candidateList = [candidateList, {"period", "p"}];
+        end
+        candidateList = unique(cellstr(candidateList), 'stable');
+
+        vals = extractGeometryField(dataStruct, candidateList);
         if isempty(vals)
             return;
         end

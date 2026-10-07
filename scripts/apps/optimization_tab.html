@@ -606,6 +606,7 @@ function toggleMetricsWindow() {
 }
 
 function toggleDataSource() {
+    window._userChangedDataSource = true;
     var radios = document.getElementsByName("dataSourceGroup");
     var source = "model";
     for (var i = 0; i < radios.length; i++) {
@@ -614,8 +615,10 @@ function toggleDataSource() {
             break;
         }
     }
-    document.getElementById("modelFields").style.display = source === "model" ? "block" : "none";
-    document.getElementById("interpFields").style.display = source === "interpolation" ? "block" : "none";
+    var predFields = document.getElementById("predFields");
+    if (predFields) predFields.style.display = (source === "predictions") ? "block" : "none";
+    document.getElementById("modelFields").style.display = (source === "model") ? "block" : "none";
+    document.getElementById("interpFields").style.display = (source === "interpolation") ? "block" : "none";
 }
 
 function getDataSource() {
@@ -1057,13 +1060,31 @@ function updateOptRequirements(d) {
     }
     // Predictions status
     var predEl = document.getElementById("reqPredStatus");
+    var predBadge = document.getElementById("reqPredBadge");
     if (predEl) {
         if (d.hasPredictions) {
             predEl.textContent = "\u2713 " + (d.predEntries || "") + " entries";
             predEl.className = "req-badge req-ok";
+            if (predBadge) {
+                predBadge.textContent = "\u2713 " + (d.predEntries || "") + " entries";
+                predBadge.className = "req-badge req-ok";
+                predBadge.style.color = "var(--success)";
+            }
+            if (!window._userChangedDataSource) {
+                var predRadio = document.querySelector('input[name="dataSourceGroup"][value="predictions"]');
+                if (predRadio) {
+                    predRadio.checked = true;
+                    toggleDataSource();
+                }
+            }
         } else {
             predEl.textContent = "\u2014 Not cached";
             predEl.className = "req-badge req-optional";
+            if (predBadge) {
+                predBadge.textContent = "\u2717 Not cached";
+                predBadge.className = "req-badge req-missing";
+                predBadge.style.color = "var(--error)";
+            }
         }
     }
     // Optima status
@@ -1294,15 +1315,26 @@ function toggleAllDbOptima(masterCb) {
                             <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;">Data is loaded from the Database (Tab 0).</div>
                             <div class="field">
                                 <label>Inference Mode</label>
-                                <div style="display:flex; gap:12px; padding:4px 0;">
-                                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:11px;">
+                                <div style="display:flex; flex-direction:column; gap:6px; padding:4px 0;">
+                                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:11px;">
+                                        <input type="radio" name="dataSourceGroup" value="predictions" onchange="toggleDataSource()">
+                                        <span style="font-weight:600; color:var(--text-primary);">Pre-computed Predictions (<code style="color:var(--accent);">db.Pred</code>)</span>
+                                    </label>
+                                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:11px;">
                                         <input type="radio" name="dataSourceGroup" value="model" checked onchange="toggleDataSource()">
-                                        Trained Model (DNN)
+                                        <span>Trained Model (DNN — fresh evaluation)</span>
                                     </label>
-                                    <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:11px;">
+                                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:11px;">
                                         <input type="radio" name="dataSourceGroup" value="interpolation" onchange="toggleDataSource()">
-                                        Raw Data (Interpolation)
+                                        <span>Raw Data (Interpolation)</span>
                                     </label>
+                                </div>
+                            </div>
+
+                            <div id="predFields" style="display:none; padding:4px 0;">
+                                <div style="display:flex;align-items:center;gap:8px;padding:2px 0;">
+                                    <span style="font-size:11px;color:var(--text-secondary);">Predictions in DB:</span>
+                                    <span id="reqPredBadge" style="font-size:12px;font-weight:600;color:var(--error);">&#10007; Not cached</span>
                                 </div>
                             </div>
 
