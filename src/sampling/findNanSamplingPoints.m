@@ -57,6 +57,8 @@ end
     res.comsolTableString = "";
     res.totalNanRows = 0;
     res.totalRows = 0;
+    res.rowHasNan = false(0, 1);
+    res.nanRows = [];
 
     %% 1. Extract data struct / table
     [dataStruct, schema] = extractDataStruct(dataSource);
@@ -168,6 +170,8 @@ end
 
     res.metricsWithNan = metricsWithNan;
     res.totalNanRows = nnz(rowHasNan);
+    res.rowHasNan = rowHasNan;
+    res.nanRows = find(rowHasNan);
 
     if ~any(rowHasNan)
         return;

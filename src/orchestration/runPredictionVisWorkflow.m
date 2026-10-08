@@ -127,7 +127,7 @@ end
         [~, laserIdx] = min(abs(lambdaGrid_nm - cfg.lambdaLaser));
         laserMetricGrid = double(metricVolume(:, :, laserIdx));
 
-        figLaser = figure;
+        figLaser = figure("Visible", "off");
         hP = pcolor(pGrid_nm, rGrid_nm, laserMetricGrid);
         set(hP, "EdgeColor", "none", "FaceColor", "interp");
         colormap(cmap); colorbar;
@@ -137,13 +137,14 @@ end
             saveas(figLaser, fullfile(cfg.workDir, ...
                 sprintf("prediction_%s_laser.png", metricField)));
         end
+        close(figLaser);
 
         % --- Spectral-average map ---
         if isfield(allData, metricAvgField)
             [avgMap, ~, ~, ~] = reshapeSoAToVolume(allData, metricAvgField);
             avgGrid = double(avgMap);
 
-            figAvg = figure;
+            figAvg = figure("Visible", "off");
             hP2 = pcolor(pGrid_nm, rGrid_nm, avgGrid);
             set(hP2, "EdgeColor", "none", "FaceColor", "interp");
             colormap(cmap); colorbar;
@@ -154,6 +155,7 @@ end
                 saveas(figAvg, fullfile(cfg.workDir, ...
                     sprintf("prediction_%s_avg.png", metricField)));
             end
+            close(figAvg);
         end
 
         % --- 3-D volume render ---
@@ -199,6 +201,11 @@ end
 %  LOCAL HELPER: 3-D volume render via volshow
 %  ========================================================================
 function renderVolumeVis(metricVolume, pGrid_nm, rGrid_nm, lambdaGrid_nm, cmap, cfg, metricField)
+    % Skip creating unparented volume figure if video export is disabled
+    if ~cfg.exportVideo
+        return;
+    end
+
     volData = double(metricVolume);
     xData = pGrid_nm;
     yData = rGrid_nm;
@@ -276,19 +283,18 @@ function renderVolumeVis(metricVolume, pGrid_nm, rGrid_nm, lambdaGrid_nm, cmap, 
     viewer.CameraUpVector = [0 1 0];
 
     % Video export
-    if cfg.exportVideo
-        numFrames = cfg.videoFrames;
-        vec = linspace(0, 2 * pi, numFrames)' + 3 * pi / 4;
-        hFig.Position = [10 10 cfg.videoSize(1) cfg.videoSize(2)];
-        videoFile = fullfile(cfg.workDir, sprintf("prediction_%s_3Dvis.mp4", metricField));
-        v = VideoWriter(videoFile, "Archival");
-        v.FrameRate = 30;
-        v.MJ2BitDepth = 12;
-        open(v);
-        for fIdx = 1:numFrames
-            viewer.CameraPosition = center + [cos(vec(fIdx)), sin(vec(fIdx)), 1] * dist;
-            writeVideo(v, getframe(hFig));
-        end
-        close(v);
+    numFrames = cfg.videoFrames;
+    vec = linspace(0, 2 * pi, numFrames)' + 3 * pi / 4;
+    hFig.Position = [10 10 cfg.videoSize(1) cfg.videoSize(2)];
+    videoFile = fullfile(cfg.workDir, sprintf("prediction_%s_3Dvis.mp4", metricField));
+    v = VideoWriter(videoFile, "Archival");
+    v.FrameRate = 30;
+    v.MJ2BitDepth = 12;
+    open(v);
+    for fIdx = 1:numFrames
+        viewer.CameraPosition = center + [cos(vec(fIdx)), sin(vec(fIdx)), 1] * dist;
+        writeVideo(v, getframe(hFig));
     end
+    close(v);
+    close(hFig);
 end

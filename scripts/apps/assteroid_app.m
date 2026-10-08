@@ -100,6 +100,7 @@ function figOut = assteroid_app(workFolder)
     %  STAGE 0 — Database Manager
     %  ====================================================================
     tab0 = uitab(tabGroup, "Title", "💾 0 Database", "BackgroundColor", tabColors);
+    fig.UserData.handles.dbTab = tab0;
     [h0, ~] = buildImportTabLayout(tab0, "database_tab.html");
     h0.HTMLEventReceivedFcn = @(src, ev) handleDatabaseEvent(src, ev, fig);
     fig.UserData.handles.dbHtml = h0;
@@ -161,9 +162,6 @@ function figOut = assteroid_app(workFolder)
         "allData", [], "predictionsLoaded", false, ...
         "model", [], "ri", [], "modelLoaded", false, ...
         "analyteSpectrum", struct());
-
-    % Keep legacy visState for shared utility functions
-    fig.UserData.visState = initializeVisState();
 
     h4.HTMLEventReceivedFcn = @(src, ev) handleVisExportEvent(src, ev, fig);
 
@@ -249,6 +247,9 @@ function figOut = assteroid_app(workFolder)
     %% Store all HTML handles -------------------------------------------------
     fig.UserData.handles.htmlPanels = [h0, h1, h2, h3, h4, h5Left, h5Right, h6];
 
+    %% Ensure Stage 0 Database tab is the initially selected tab --------------
+    tabGroup.SelectedTab = tab0;
+
     %% Load colormap once for reuse -------------------------------------------
     loadCustomColormap(fig);
 
@@ -259,6 +260,10 @@ function figOut = assteroid_app(workFolder)
     defaultDb = fullfile(workFolder, "database.mat");
     if isfile(defaultDb)
         loadDbFile(fig, defaultDb);
+    end
+
+    if nargout < 1
+        clear figOut;
     end
 end
 
@@ -294,6 +299,10 @@ function handleDatabaseEvent(src, event, fig)
                     return
                 end
                 loadDbFile(fig, dbPath);
+                if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "mainTabGroup") && ...
+                   isfield(fig.UserData.handles, "dbTab") && isvalid(fig.UserData.handles.dbTab)
+                    fig.UserData.handles.mainTabGroup.SelectedTab = fig.UserData.handles.dbTab;
+                end
                 sendEventToHTMLSource(src, "LoadComplete", ...
                     sprintf("Database loaded from %s", dbPath));
 
@@ -472,6 +481,11 @@ function loadDbFile(fig, dbPath)
         fig.UserData.workDir = string(fileparts(dbPath));
     end
 
+    if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "mainTabGroup") && ...
+       isfield(fig.UserData.handles, "dbTab") && isvalid(fig.UserData.handles.dbTab)
+        fig.UserData.handles.mainTabGroup.SelectedTab = fig.UserData.handles.dbTab;
+    end
+
     broadcastDbStatus(fig);
 end
 
@@ -522,10 +536,6 @@ function broadcastDbStatus(fig)
                 sendEventToHTMLSource(panels(i), "DbStatus", status);
             end
         end
-    end
-
-    if nargout < 1
-        clear figOut;
     end
 end
 
@@ -941,10 +951,8 @@ function ri = resolveRefractiveIndexStruct(fig, riCsvFile)
     if isstruct(fig.UserData) && isfield(fig.UserData, "db") && isstruct(fig.UserData.db) ...
             && isfield(fig.UserData.db, "RI") && isstruct(fig.UserData.db.RI)
         dbRi = fig.UserData.db.RI;
-        if isValidRi(dbRi)
-            ri = dbRi;
-            return;
-        elseif isfield(dbRi, "lambda") && isfield(dbRi, "n") && isfield(dbRi, "k") && ~isempty(dbRi.lambda)
+        % Prefer fresh interpolants from raw vectors over stale deserialized handles
+        if isfield(dbRi, "lambda") && isfield(dbRi, "n") && isfield(dbRi, "k") && ~isempty(dbRi.lambda)
             try
                 Fn = griddedInterpolant(double(dbRi.lambda(:)), double(dbRi.n(:)), 'linear', 'nearest');
                 Fk = griddedInterpolant(double(dbRi.lambda(:)), double(dbRi.k(:)), 'linear', 'nearest');
@@ -955,6 +963,16 @@ function ri = resolveRefractiveIndexStruct(fig, riCsvFile)
                 return;
             catch
                 % continue
+            end
+        elseif isValidRi(dbRi)
+            try
+                testVal = dbRi.nFunc(0.785);
+                if isfinite(testVal)
+                    ri = dbRi;
+                    return;
+                end
+            catch
+                % Stale serialized handle, fall through
             end
         elseif isfield(dbRi, "SourceFile") && strlength(string(dbRi.SourceFile)) > 0 && isfile(string(dbRi.SourceFile))
             [~, ~, ext] = fileparts(string(dbRi.SourceFile));
@@ -5306,477 +5324,6 @@ end
 function t = emptyVisualizeTraces()
 %emptyVisualizeTraces  0x0 trace struct used by the 1D spectra view.
     t = struct("lambda", {}, "y", {}, "label", {}, "isDense", {});
-end
-
-%% ########################################################################
-%   STAGE 5 — LEGACY VISUALIZATION HANDLERS (kept for standalone app)
-%  ########################################################################
-function handleVisEvent(src, event, fig)
-    name = event.HTMLEventName;
-    data = event.HTMLEventData;
-
-    state = fig.UserData.visState;
-
-    try
-        switch name
-            case "LoadModel"
-                loadVisModel(src, data, fig);
-            case "LoadPredictions"
-                loadVisPredictions(src, data, fig);
-            case "LoadRI"
-                loadVisRI(src, data, fig);
-            case "GeneratePredictions"
-                generateVisPredictions(src, data, fig);
-            case "UpdateVisualization"
-                updateVisVisualization(src, data, fig);
-            case "UpdateSlice"
-                updateVisSlice(src, data, fig);
-            case "UpdateSpectrum"
-                updateVisSpectrum(src, data, fig);
-            case "Update3DVolume"
-                updateVis3DVolume(src, data, fig);
-            case "ExportGraphics"
-                exportVisGraphics(src, data, fig);
-            case "UpdateConfig"
-                updateVisConfig(src, data, fig);
-            case "BrowseFile"
-                browseVisFile(src, data, fig);
-            case "LoadAnalyteSpectrum"
-                loadVisAnalyte(src, data, fig);
-            case "RequestState"
-                sendVisState(src, fig);
-            otherwise
-                fprintf("[Vis] Unknown event: %s\n", name);
-        end
-    catch ME
-        sendEventToHTMLSource(src, "Error", struct("message", ME.message, "event", name));
-    end
-end
-
-% --- Vis: Load model ---
-function loadVisModel(src, data, fig)
-    state = fig.UserData.visState;
-    if isfield(data,"filePath") && ~isempty(data.filePath)
-        mf = string(data.filePath);
-    else
-        mf = fullfile(state.workDir, state.modelFile);
-    end
-    if ~isfile(mf)
-        sendEventToHTMLSource(src,"Error",struct("message","Model not found: "+mf)); return
-    end
-    sendEventToHTMLSource(src,"Status",struct("message","Loading model...","progress",10));
-    ms = load(mf,"model");
-    if ~isfield(ms,"model"), error("File does not contain 'model'."); end
-    ms.model = ensureModelFlags(ms.model);
-    state.model = ms.model; state.modelLoaded = true; state.modelFile = mf;
-    if isempty(state.ri), loadRefractiveIndexData(fig); state = fig.UserData.visState; end
-    fig.UserData.visState = state;
-    sendEventToHTMLSource(src,"Status",struct("message","Model loaded!","progress",100));
-    sendEventToHTMLSource(src,"ModelLoaded",struct( ...
-        "targets",ms.model.targetNames, ...
-        "filePath",mf, ...
-        "inputSize",ms.model.inputSize, ...
-        "includeRatios",ms.model.IncludeRatios, ...
-        "featureLogTransform",ms.model.FeatureLogTransform, ...
-        "targetLogTransform",ms.model.TargetLogTransform, ...
-        "inputPreprocessing",ms.model.inputPreprocessing));
-end
-
-% --- Vis: Load predictions ---
-function loadVisPredictions(src, data, fig)
-    state = fig.UserData.visState;
-    if isfield(data,"filePath") && ~isempty(data.filePath)
-        pf = string(data.filePath);
-    else
-        pf = fullfile(state.workDir, state.predictionFile);
-    end
-    if ~isfile(pf)
-        sendEventToHTMLSource(src,"Error",struct("message","File not found: "+pf)); return
-    end
-    sendEventToHTMLSource(src,"Status",struct("message","Loading predictions...","progress",10));
-    ld = load(pf);
-
-    if isfield(ld,"allData")
-        allData = ld.allData;
-    elseif isfield(ld,"predictions")
-        sendEventToHTMLSource(src,"Status",struct("message","Converting legacy format...","progress",50));
-        allData = convertGridToSoA(ld.predictions, ...
-            "LaserWavelength", state.lambdaLaser, "RamanWindow", state.stokesShiftLimits);
-    else
-        error("No allData or predictions variable found.");
-    end
-
-    state.allData = allData; state.predictionsLoaded = true; state.predictionFile = pf;
-    state.availableMetrics = detectMetricFields(allData);
-    fig.UserData.visState = state;
-
-    pGrid = unique(allData.period); rGrid = unique(allData.radius);
-    lGrid = allData.lambda(1,:);
-    sendEventToHTMLSource(src,"Status",struct("message","Predictions loaded!","progress",100));
-    sendEventToHTMLSource(src,"PredictionsLoaded",struct( ...
-        "metrics", state.availableMetrics, "filePath", pf, ...
-        "numGeometries", size(allData.lambda,1), "numWavelengths", size(allData.lambda,2), ...
-        "pRange",[min(pGrid) max(pGrid)], "rRange",[min(rGrid) max(rGrid)], ...
-        "lambdaRange",[min(lGrid) max(lGrid)]));
-    updateVisVisualization(src, struct("metric",state.primaryMetric), fig);
-end
-
-% --- Vis: Load RI ---
-function loadVisRI(src, data, fig)
-    state = fig.UserData.visState;
-    if isfield(data,"filePath") && ~isempty(data.filePath)
-        rf = string(data.filePath);
-    else
-        rf = fullfile(state.workDir, state.riFile);
-    end
-    if ~isfile(rf)
-        sendEventToHTMLSource(src,"Error",struct("message","RI file not found: "+rf)); return
-    end
-    state.ri = load_gold_refractive_index(rf,"WavelengthUnit","um");
-    state.riFile = rf; fig.UserData.visState = state;
-    sendEventToHTMLSource(src,"Status",struct("message","RI loaded!","progress",100));
-    sendEventToHTMLSource(src,"RILoaded",struct("filePath",rf));
-end
-
-% --- Vis: Generate predictions ---
-function generateVisPredictions(src, data, fig)
-    state = fig.UserData.visState;
-    if ~state.modelLoaded
-        sendEventToHTMLSource(src,"Error",struct("message","Load model first.")); return
-    end
-    if isempty(state.ri)
-        sendEventToHTMLSource(src,"Error",struct("message","Load RI data first.")); return
-    end
-
-    % Update params from event
-    if isfield(data,"resolution"),        state.resolution = data.resolution; end
-    if isfield(data,"lambdaLaser"),       state.lambdaLaser = data.lambdaLaser; end
-    if isfield(data,"pLimits"),           state.pLimits = data.pLimits; end
-    if isfield(data,"rLimits"),           state.rLimits = data.rLimits; end
-    if isfield(data,"stokesShiftLimits"), state.stokesShiftLimits = data.stokesShiftLimits; end
-    fig.UserData.visState = state;
-
-    % Validate grid parameters - fallback to defaults if invalid
-    if isnan(state.resolution) || state.resolution <= 0
-        state.resolution = 2;
-    end
-    if isnan(state.lambdaLaser) || state.lambdaLaser <= 0
-        state.lambdaLaser = 785;
-    end
-    if ~isvector(state.pLimits) || numel(state.pLimits) ~= 2 || any(isnan(state.pLimits)) || any(state.pLimits <= 0)
-        state.pLimits = [400, 1400];
-    end
-    if ~isvector(state.rLimits) || numel(state.rLimits) ~= 2 || any(isnan(state.rLimits)) || any(state.rLimits <= 0)
-        state.rLimits = [10, 500];
-    end
-    if ~isvector(state.stokesShiftLimits) || numel(state.stokesShiftLimits) ~= 2 || any(isnan(state.stokesShiftLimits))
-        state.stokesShiftLimits = [100, 3600];
-    end
-    fig.UserData.visState = state;
-
-    sendEventToHTMLSource(src,"Status",struct("message","Generating predictions...","progress",5));
-
-    lambdaLimits = state.lambdaLaser ./ (1 - state.lambdaLaser * state.stokesShiftLimits * 1e-7);
-    lambdaSamples = [state.lambdaLaser, linspace(lambdaLimits(1),lambdaLimits(2), ...
-        round((lambdaLimits(2)-lambdaLimits(1))/state.resolution)+1)] * 1e-3;
-    pSamples = linspace(state.pLimits(1),state.pLimits(2), ...
-        round((state.pLimits(2)-state.pLimits(1))/state.resolution)+1) * 1e-3;
-    rSamples = linspace(state.rLimits(1),state.rLimits(2), ...
-        round((state.rLimits(2)-state.rLimits(1))/state.resolution)+1) * 1e-3;
-
-    sendEventToHTMLSource(src,"Status",struct( ...
-        "message",sprintf("Grid: %dx%dx%d",numel(pSamples),numel(rSamples),numel(lambdaSamples)), ...
-        "progress",20));
-
-    try
-        allData = predict_dense_spectrum(state.model, pSamples, rSamples, lambdaSamples, state.ri, ...
-            "LaserWavelength",state.lambdaLaser, "RamanWindow",state.stokesShiftLimits, ...
-            "AnalyteSpectrum",state.analyteSpectrum, "InterpResolution",state.stokesShiftResolution);
-    catch ME
-        errMsg = sprintf('Prediction failed: %s', ME.message);
-        sendEventToHTMLSource(src,"Error",struct("message",errMsg));
-        return;
-    end
-
-    state.allData = allData; state.predictionsLoaded = true;
-    state.availableMetrics = detectMetricFields(allData);
-    fig.UserData.visState = state;
-
-    pGrid = unique(allData.period); rGrid = unique(allData.radius);
-    lGrid = allData.lambda(1,:);
-    sendEventToHTMLSource(src,"Status",struct("message","Predictions ready!","progress",100));
-    sendEventToHTMLSource(src,"PredictionsLoaded",struct( ...
-        "metrics",state.availableMetrics,"generated",true, ...
-        "numGeometries",size(allData.lambda,1),"numWavelengths",size(allData.lambda,2), ...
-        "pRange",[min(pGrid) max(pGrid)],"rRange",[min(rGrid) max(rGrid)], ...
-        "lambdaRange",[min(lGrid) max(lGrid)]));
-    updateVisVisualization(src,struct("metric",state.primaryMetric),fig);
-end
-
-% --- Vis: Update all panels ---
-function updateVisVisualization(src, data, fig)
-    state = fig.UserData.visState;
-    if ~state.predictionsLoaded, return; end
-
-    if isfield(data,"metric"),          state.primaryMetric = string(data.metric); end
-    if isfield(data,"logScale"),        state.logScale = data.logScale; end
-    if isfield(data,"colormapInverted"),state.colormapInverted = data.colormapInverted; end
-    fig.UserData.visState = state;
-
-    allData = state.allData;
-    mf = matlab.lang.makeValidName(state.primaryMetric);
-    mfAvg = matlab.lang.makeValidName(state.primaryMetric + "_avg");
-    if ~isfield(allData, mf), return; end
-
-    [vol, pGrid, rGrid, lGrid] = reshapeSoAToVolume(allData, mf);
-    cmap = getVisColormap(fig, state);
-    axes = fig.UserData.handles.visAxes;
-
-    % 1. Metric @ laser wavelength
-    [~,idx] = min(abs(lGrid - state.lambdaLaser));
-    ld = maybeLog(double(vol(:,:,idx)), state.logScale);
-    plotPcolor(axes.axLaser, pGrid, rGrid, ld, cmap, ...
-        sprintf("%s @ λ = %.0f nm", strrep(state.primaryMetric,"_","\_"), state.lambdaLaser), state);
-
-    % 2. Spectrally averaged
-    if isfield(allData, mfAvg)
-        [avgVol,~,~,~] = reshapeSoAToVolume(allData, mfAvg);
-        plotPcolor(axes.axAvg, pGrid, rGrid, maybeLog(double(avgVol),state.logScale), cmap, ...
-            sprintf("Average %s", strrep(state.primaryMetric,"_","\_")), state);
-    end
-
-    % 3. Spectral profile
-    updateVisSpectrum(src, struct("p",state.selectedPoint.p,"r",state.selectedPoint.r), fig);
-
-    % 4. Lambda slice
-    wl = state.lambdaLaser / (1 - state.lambdaLaser * state.currentSliceStokes * 1e-7);
-    updateVisSlice(src, struct("wavelength",wl,"stokesShift",state.currentSliceStokes), fig);
-
-    % 5. 3-D volume
-    updateVis3DVolume(src, struct(), fig);
-
-    sendEventToHTMLSource(src,"VisualizationUpdated",struct("metric",state.primaryMetric,"success",true));
-end
-
-function updateVisSlice(~, data, fig)
-    state = fig.UserData.visState;
-    if ~state.predictionsLoaded, return; end
-    wl = data.wavelength;
-    if isfield(data,"stokesShift"), state.currentSliceStokes = data.stokesShift;
-    else, state.currentSliceStokes = (1/state.lambdaLaser - 1/wl)*1e7; end
-    fig.UserData.visState = state;
-
-    mf = matlab.lang.makeValidName(state.primaryMetric);
-    [vol,pG,rG,lG] = reshapeSoAToVolume(state.allData, mf);
-    [~,li] = min(abs(lG-wl)); aWl = lG(li);
-    aStk = (1/state.lambdaLaser - 1/aWl)*1e7;
-    sd = maybeLog(double(vol(:,:,li)), state.logScale);
-    cmap = getVisColormap(fig, state);
-    ttl = sprintf("%s at Δν = %.0f cm⁻¹ (λ = %.1f nm)", ...
-        strrep(state.primaryMetric,"_","\_"), aStk, aWl);
-    plotPcolor(fig.UserData.handles.visAxes.axSlice, pG, rG, sd, cmap, ttl, state);
-end
-
-function updateVisSpectrum(src, data, fig)
-    state = fig.UserData.visState;
-    if ~state.predictionsLoaded, return; end
-    pVal = data.p; rVal = data.r;
-    state.selectedPoint = struct("p",pVal,"r",rVal);
-    fig.UserData.visState = state;
-
-    allData = state.allData;
-    mf = matlab.lang.makeValidName(state.primaryMetric);
-    dists = sqrt((allData.period-pVal).^2 + (allData.radius-rVal).^2);
-    [~,ri] = min(dists);
-    aP = allData.period(ri); aR = allData.radius(ri);
-    spec = allData.(mf)(ri,:); lam = allData.lambda(ri,:);
-
-    ax = fig.UserData.handles.visAxes.axSpectrum;
-    cla(ax);
-    plot(ax, lam, spec, "LineWidth", 2, "Color", [0.0 0.91 1.0]);
-    ax.Title.String = sprintf("p = %.0f nm, r = %.0f nm", aP, aR);
-    ax.Title.Color = "w"; ax.Title.FontSize = 14;
-    ax.XLabel.String = "Wavelength (nm)"; ax.YLabel.String = strrep(state.primaryMetric,"_","\_");
-    if state.showGrid, grid(ax,"on"); end
-    hold(ax,"on");
-    xline(ax, state.lambdaLaser, "--", "Color", [1 0.3 0.3], "LineWidth", 1.5, ...
-        "Label", sprintf("λ₀ = %.0f nm", state.lambdaLaser));
-    hold(ax,"off");
-    if ~isempty(src)
-        sendEventToHTMLSource(src,"SpectrumUpdated",struct("p",aP,"r",aR));
-    end
-end
-
-function updateVis3DVolume(~, ~, fig)
-    state = fig.UserData.visState;
-    if ~state.predictionsLoaded, return; end
-    mf = matlab.lang.makeValidName(state.primaryMetric);
-    if ~isfield(state.allData, mf), return; end
-
-    [volData,xD,yD,zD] = reshapeSoAToVolume(state.allData, mf);
-    volData = double(volData);
-    vMin = min(volData(:),[],"omitnan"); vMax = max(volData(:),[],"omitnan");
-    vR = vMax - vMin;
-    if vR > 0, volN = (volData-vMin)/vR; else, volN = zeros(size(volData)); end
-    volN(~isfinite(volN)) = 0;
-
-    cmap = loadColormapSafe(4095, state.colormapInverted);
-    eps_ = 1e-4; aMap = log(linspace(eps_,1,4095)); aMap = 1 - aMap/min(aMap);
-
-    lx = max(xD(:))-min(xD(:)); ly = max(yD(:))-min(yD(:)); lz = min(zD(:))-max(zD(:));
-    sx = lx/numel(xD); sy = ly/numel(yD); sz = lz/numel(zD);
-    tform = affinetform3d([sx 0 0 0;0 sy 0 0;0 0 sz 0;0 0 0 1]);
-
-    viewer = fig.UserData.handles.viewer3d;
-    hOld = fig.UserData.handles.volshow;
-    if ~isempty(hOld) && isvalid(hOld), delete(hOld); end
-
-    hVol = volshow(volN*4095, "Parent",viewer, "DisplayRangeMode","12-bit", ...
-        "RenderingStyle","GradientOpacity", "GradientOpacityValue",0.2, ...
-        "Colormap",cmap, "Alphamap",aMap, "Transformation",tform, "Interpolation","bilinear");
-    viewer.Lighting = "on"; viewer.Box = "off"; viewer.ScaleBar = "on";
-    viewer.SpatialUnits = "nm"; viewer.RenderingQuality = "high";
-    fig.UserData.handles.volshow = hVol;
-end
-
-function updateVisConfig(src, data, fig)
-    state = fig.UserData.visState;
-    fns = fieldnames(data);
-    for i = 1:numel(fns)
-        if isfield(state, fns{i}), state.(fns{i}) = data.(fns{i}); end
-    end
-    fig.UserData.visState = state;
-    sendEventToHTMLSource(src,"ConfigUpdated",struct("success",true));
-end
-
-function browseVisFile(src, data, fig)
-    state = fig.UserData.visState;
-    ft = string(data.type);
-    switch ft
-        case "model"
-            [f,p] = uigetfile({"*.mat","MAT files"},  "Select Model",  state.workDir);
-            if f~=0, sendEventToHTMLSource(src,"FileSelected",struct("type","model","path",fullfile(p,f))); end
-        case "predictions"
-            [f,p] = uigetfile({"*.mat","MAT files"},  "Select Predictions",state.workDir);
-            if f~=0, sendEventToHTMLSource(src,"FileSelected",struct("type","predictions","path",fullfile(p,f))); end
-        case "ri"
-            [f,p] = uigetfile({"*.csv","CSV files"},  "Select RI", state.workDir);
-            if f~=0, sendEventToHTMLSource(src,"FileSelected",struct("type","ri","path",fullfile(p,f))); end
-        case "workDir"
-            d = uigetdir(state.workDir, "Select Working Directory");
-            if d~=0
-                fig.UserData.visState.workDir = string(d);
-                sendEventToHTMLSource(src,"FileSelected",struct("type","workDir","path",d));
-            end
-        case "analyteSpectrum"
-            [f,p] = uigetfile({"*.dat;*.txt;*.csv","Spectrum files"},"Select Analyte",state.workDir);
-            if f~=0, sendEventToHTMLSource(src,"FileSelected",struct("type","analyteSpectrum","path",fullfile(p,f))); end
-    end
-end
-
-function loadVisAnalyte(src, data, fig)
-    state = fig.UserData.visState;
-    if isfield(data,"filePath") && ~isempty(data.filePath)
-        sf = string(data.filePath);
-    else
-        sf = state.analyteSpectrumFile;
-    end
-    if isempty(sf) || ~isfile(sf)
-        sendEventToHTMLSource(src,"Error",struct("message","File not found: "+sf)); return
-    end
-    as = loadAndNormalizeAnalyteSpectrum(sf);
-    state.analyteSpectrum = as; state.analyteSpectrumFile = sf; state.useAnalyteWeighting = true;
-    fig.UserData.visState = state;
-    sendEventToHTMLSource(src,"Status",struct("message","Analyte spectrum loaded!","progress",100));
-    sendEventToHTMLSource(src,"AnalyteSpectrumLoaded",struct("filePath",sf, ...
-        "shiftRange",[min(as.shift_cm) max(as.shift_cm)]));
-end
-
-function exportVisGraphics(src, data, fig)
-    state = fig.UserData.visState;
-    if ~state.predictionsLoaded
-        sendEventToHTMLSource(src,"Error",struct("message","No predictions loaded.")); return
-    end
-    expType = data.type; fmt = data.format;
-    [f,p] = uiputfile({"*.png";"*.pdf";"*.svg";"*.fig"}, "Export", ...
-        fullfile(state.workDir, sprintf("sers_%s.%s",expType,fmt)));
-    if f==0, return; end
-    fp = fullfile(p,f);
-    axes = fig.UserData.handles.visAxes;
-    switch expType
-        case "laser",    ax = axes.axLaser;
-        case "avg",      ax = axes.axAvg;
-        case "spectrum", ax = axes.axSpectrum;
-        case "slice",    ax = axes.axSlice;
-        otherwise
-            sendEventToHTMLSource(src,"ExportComplete",struct("path",fp)); return
-    end
-    exportgraphics(ax, fp, "Resolution", 300);
-    sendEventToHTMLSource(src,"ExportComplete",struct("path",fp));
-end
-
-function sendVisState(src, fig)
-    s = fig.UserData.visState;
-    sd = struct( ...
-        "workDir",s.workDir, "modelFile",s.modelFile, "predictionFile",s.predictionFile, ...
-        "availableMetrics",{s.availableMetrics}, "primaryMetric",s.primaryMetric, ...
-        "resolution",s.resolution, "lambdaLaser",s.lambdaLaser, ...
-        "pLimits",s.pLimits, "rLimits",s.rLimits, ...
-        "stokesShiftLimits",s.stokesShiftLimits, "stokesShiftResolution",s.stokesShiftResolution, ...
-        "colormapInverted",s.colormapInverted, "logScale",s.logScale, ...
-        "showGrid",s.showGrid, "interpolation",s.interpolation, ...
-        "currentSliceStokes",s.currentSliceStokes, "selectedPoint",s.selectedPoint, ...
-        "modelLoaded",s.modelLoaded, "predictionsLoaded",s.predictionsLoaded);
-    sendEventToHTMLSource(src, "StateUpdate", sd);
-end
-
-%% ########################################################################
-%   VIS STATE INITIALIZATION
-%  ########################################################################
-function state = initializeVisState()
-    state = struct();
-    state.workDir = string(pwd);
-    state.riCsvFile = "McPeak.csv"; state.riFile = "";
-    state.modelFile = ""; state.predictionFile = "";
-    state.availableMetrics = {"Absorptance","M_vol","M_surf","EF_vol","EF_surf"};
-    state.selectedMetrics = {"Absorptance","M_vol","M_surf"};
-    state.primaryMetric = "Absorptance";
-    state.resolution = 2; state.lambdaLaser = 785;
-    state.pLimits = [400 1400]; state.rLimits = [10 500];
-    state.stokesShiftLimits = [100 3600]; state.stokesShiftResolution = 5;
-    state.analyteSpectrumFile = ""; state.useAnalyteWeighting = false;
-    state.analyteSpectrum = struct();
-    state.colormapName = "AuroraAustralis"; state.colormapInverted = true;
-    state.logScale = false; state.showGrid = true; state.interpolation = "interp";
-    state.currentSliceStokes = 1000;
-    state.selectedPoint = struct("p",850,"r",100);
-    state.modelLoaded = false; state.predictionsLoaded = false;
-    state.allData = []; state.model = []; state.ri = [];
-end
-
-%% ########################################################################
-%   SHARED UTILITY FUNCTIONS
-%  ########################################################################
-
-function plotPcolor(ax, pGrid, rGrid, data2d, cmap, titleStr, state)
-%plotPcolor Render a 2-D pcolor map with consistent styling.
-    cla(ax);
-    pcolor(ax, pGrid, rGrid, data2d);
-    shading(ax, state.interpolation);
-    colormap(ax, cmap); colorbar(ax, "Color", "w");
-    ax.Title.String = titleStr; ax.Title.Color = "w"; ax.Title.FontSize = 14;
-    ax.XLabel.String = "Period (nm)"; ax.YLabel.String = "Radius (nm)";
-    if state.showGrid, grid(ax, "on"); end
-end
-
-function d = maybeLog(d, doLog)
-    if doLog && all(d(isfinite(d)) > 0), d = log10(d); end
-end
-
-function cmap = getVisColormap(fig, state)
-    cmap = getappdata(fig, "CustomColormap");
-    if isempty(cmap), cmap = parula(256); end
-    if state.colormapInverted, cmap = flipud(cmap); end
 end
 
 function cmap = loadColormapSafe(n, doFlip)

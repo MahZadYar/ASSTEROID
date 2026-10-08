@@ -9,6 +9,24 @@ function run_prediction_vis_app()
 % NOTE: This standalone app is maintained for backward compatibility.
 % The unified interface is available via run_sers_app (Stage 5 tab).
 
+    % Singleton guard: if an instance is already running, focus it
+    existing = findall(groot, "Tag", "ASSTEROID_PRED_VIS_APP");
+    if isempty(existing)
+        allFigs = findall(groot, "Type", "figure");
+        for k = 1:numel(allFigs)
+            if contains(string(allFigs(k).Name), "SERS Prediction Visualizer")
+                existing = allFigs(k);
+                break;
+            end
+        end
+    end
+    if ~isempty(existing) && isvalid(existing(1))
+        fig = existing(1);
+        uistack(fig, "top");
+        try focus(fig); catch; end
+        return;
+    end
+
     %% Create main figure
     screenSize = get(0, "ScreenSize");
     figWidth = min(1600, screenSize(3) - 100);
@@ -17,6 +35,7 @@ function run_prediction_vis_app()
     figY = (screenSize(4) - figHeight) / 2;
 
     fig = uifigure("Name", "SERS Prediction Visualizer", ...
+        "Tag", "ASSTEROID_PRED_VIS_APP", ...
         "Position", [figX figY figWidth figHeight], ...
         "Color", [0.15 0.15 0.18], ...
         "Resize", "on");
