@@ -1006,128 +1006,6 @@ function [modelFile, riCsvFile, dataFile, predictionFile] = resolveDbPaths(fig)
     [modelFile, riCsvFile, dataFile, predictionFile] = resolveDbBranchPaths(db, fig.UserData.workDir);
 end
 
-function rawFiles = resolveSimDataFile(fig)
-%resolveSimDataFile  Thin delegate — see resolveSimDataPath.
-    rawFiles = resolveSimDataPath(fig.UserData.db);
-end
-
-function riFile = resolveRiFile(fig)
-%resolveRiFile  Thin delegate — see resolveRiPath.
-    riFile = resolveRiPath(fig.UserData.db);
-end
-
-function preTrainedModelFile = resolvePretrainedModel(fig)
-%resolvePretrainedModel  Thin delegate — see resolvePretrainedModelPath.
-    preTrainedModelFile = resolvePretrainedModelPath(fig.UserData.db);
-end
-
-function analyteFile = resolveAnalyteFile(fig)
-%resolveAnalyteFile  Thin delegate — see resolveAnalyteSpectrumPath.
-    analyteFile = resolveAnalyteSpectrumPath(fig.UserData.db);
-end
-
-function ri = resolveRefractiveIndexStruct(fig, riCsvFile)
-%resolveRefractiveIndexStruct Robustly resolve a valid RI struct with nFunc/kFunc.
-    if nargin < 2
-        riCsvFile = "";
-    end
-
-    isValidRi = @(r) isstruct(r) && isfield(r, "nFunc") && isa(r.nFunc, "function_handle") ...
-        && isfield(r, "kFunc") && isa(r.kFunc, "function_handle");
-
-    % 1. Check existing visExport.ri
-    if isstruct(fig.UserData) && isfield(fig.UserData, "visExport") && isstruct(fig.UserData.visExport) ...
-            && isfield(fig.UserData.visExport, "ri") && ~isempty(fig.UserData.visExport.ri)
-        rCand = fig.UserData.visExport.ri;
-        if isValidRi(rCand)
-            ri = rCand;
-            return;
-        end
-    end
-
-    % 2. Check db.RI
-    if isstruct(fig.UserData) && isfield(fig.UserData, "db") && isstruct(fig.UserData.db) ...
-            && isfield(fig.UserData.db, "RI") && isstruct(fig.UserData.db.RI)
-        dbRi = fig.UserData.db.RI;
-        % Prefer fresh interpolants from raw vectors over stale deserialized handles
-        if isfield(dbRi, "lambda") && isfield(dbRi, "n") && isfield(dbRi, "k") && ~isempty(dbRi.lambda)
-            try
-                Fn = griddedInterpolant(double(dbRi.lambda(:)), double(dbRi.n(:)), 'linear', 'nearest');
-                Fk = griddedInterpolant(double(dbRi.lambda(:)), double(dbRi.k(:)), 'linear', 'nearest');
-                ri = dbRi;
-                ri.nFunc = @(lq) Fn(double(lq));
-                ri.kFunc = @(lq) Fk(double(lq));
-                fig.UserData.db.RI = ri;
-                return;
-            catch
-                % continue
-            end
-        elseif isValidRi(dbRi)
-            try
-                testVal = dbRi.nFunc(0.785);
-                if isfinite(testVal)
-                    ri = dbRi;
-                    return;
-                end
-            catch
-                % Stale serialized handle, fall through
-            end
-        elseif isfield(dbRi, "SourceFile") && strlength(string(dbRi.SourceFile)) > 0 && isfile(string(dbRi.SourceFile))
-            [~, ~, ext] = fileparts(string(dbRi.SourceFile));
-            if strcmpi(ext, ".csv")
-                try
-                    ri = load_gold_refractive_index(string(dbRi.SourceFile));
-                    if isValidRi(ri)
-                        ri.SourceFile = string(dbRi.SourceFile);
-                        fig.UserData.db.RI = ri;
-                        return;
-                    end
-                catch
-                    % continue
-                end
-            end
-        end
-    end
-
-    % 3. Check explicit riCsvFile path
-    if strlength(string(riCsvFile)) > 0 && isfile(string(riCsvFile))
-        [~, ~, ext] = fileparts(string(riCsvFile));
-        if strcmpi(ext, ".csv")
-            try
-                ri = load_gold_refractive_index(string(riCsvFile));
-                if isValidRi(ri)
-                    return;
-                end
-            catch
-                % continue
-            end
-        end
-    end
-
-    % 4. Check resolveRiFile(fig)
-    riFile = resolveRiFile(fig);
-    if strlength(riFile) > 0 && isfile(riFile)
-        [~, ~, ext] = fileparts(riFile);
-        if strcmpi(ext, ".csv")
-            try
-                ri = load_gold_refractive_index(riFile);
-                if isValidRi(ri)
-                    return;
-                end
-            catch
-                % continue
-            end
-        end
-    end
-
-    % 5. Built-in default gold RI fallback
-    try
-        ri = getDefaultRefractiveIndex(WavelengthUnit="um");
-    catch
-        ri = struct();
-    end
-end
-
 function [ok, model, ri] = ensureVisExportModelAndRi(fig, src, reporter)
 %ensureVisExportModelAndRi Ensure both trained model and RI are loaded and valid.
     ok = false;
@@ -1264,43 +1142,10 @@ function handleMainTabSelection(~, ~, fig)
     broadcastDbStatus(fig);
 end
 
-function resizeVisualizePanel(fig)
-%resizeVisualizePanel  Resize the Stage 6 Visualize tab group to fill its panel.
-    if isempty(fig) || ~isvalid(fig) || ~isstruct(fig.UserData) || ~isfield(fig.UserData, "handles")
-        return;
-    end
-    h = fig.UserData.handles;
-    if ~isfield(h, "visualizePanel") || ~isfield(h, "visualizeTabGroup")
-        return;
-    end
-    p = h.visualizePanel;
-    tg = h.visualizeTabGroup;
-    if isempty(p) || ~isvalid(p) || isempty(tg) || ~isvalid(tg)
-        return;
-    end
-    w = max(10, round(p.Position(3)));
-    h_ = max(10, round(p.Position(4)));
-    tg.Position = [1, 1, w, h_];
-end
-
 function ax = createDarkAxes(parent, xLabel, yLabel, titleStr)
 %createDarkAxes  uiaxes with the app's dark styling.
     ax = uiaxes(parent, "Units", "normalized", "Position", [0.05 0.05 0.9 0.9]);
     styleDarkAxes(ax, xLabel, yLabel, titleStr);
-end
-
-function styleDarkAxes(ax, xLabel, yLabel, titleStr)
-%styleDarkAxes  Apply the app's dark axes styling and labels.
-    ax.Color = [12, 16, 32]/255;
-    ax.XColor = [160, 178, 214]/255;
-    ax.YColor = [160, 178, 214]/255;
-    ax.GridColor = [46, 62, 98]/255;
-    ax.GridAlpha = 0.6;
-    ax.Box = "on";
-    ax.XGrid = "on"; ax.YGrid = "on";
-    xlabel(ax, xLabel, "Color", [248, 248, 248]/255, "FontWeight", "bold");
-    ylabel(ax, yLabel, "Color", [248, 248, 248]/255, "FontWeight", "bold");
-    title(ax, titleStr, "Color", [248, 248, 248]/255);
 end
 
 %% ========================================================================
@@ -1400,44 +1245,7 @@ function reporter = makeOptimizeReporter(fig, src)
     end
 end
 
-function sendOptimizeEvent(fig, eventName, payload, src)
-%sendOptimizeEvent Broadcast optimize events to both optimize panels once.
-    panels = getOptimizePanels(fig, src);
-    for i = 1:numel(panels)
-        try
-            sendEventToHTMLSource(panels(i), eventName, payload);
-        catch
-        end
-    end
-end
 
-function panels = getOptimizePanels(fig, src)
-%getOptimizePanels Return unique valid optimize uihtml handles.
-    candidates = gobjects(0);
-    if nargin >= 2 && ~isempty(src) && isvalid(src)
-        candidates(end+1) = src; %#ok<AGROW>
-    end
-    if isfield(fig.UserData, "handles")
-        h = fig.UserData.handles;
-        if isfield(h, "optimizeHtml") && ~isempty(h.optimizeHtml) && isvalid(h.optimizeHtml)
-            candidates(end+1) = h.optimizeHtml; %#ok<AGROW>
-        end
-        if isfield(h, "optimizeLeft") && ~isempty(h.optimizeLeft) && isvalid(h.optimizeLeft)
-            candidates(end+1) = h.optimizeLeft; %#ok<AGROW>
-        end
-        if isfield(h, "optimizeRight") && ~isempty(h.optimizeRight) && isvalid(h.optimizeRight)
-            candidates(end+1) = h.optimizeRight; %#ok<AGROW>
-        end
-    end
-
-    panels = gobjects(0);
-    for i = 1:numel(candidates)
-        c = candidates(i);
-        if isempty(panels) || ~any(panels == c)
-            panels(end+1) = c; %#ok<AGROW>
-        end
-    end
-end
 
 %% ========================================================================
 %   GLOBAL PROCESS MANAGEMENT & STOP SYSTEM
@@ -2466,17 +2274,6 @@ function updateSamplingViz(fig, cfg, samples, density, result)
     drawnow;
 end
 
-function samples = updateSamplesMetrics_local(samples, cfg)
-    if isempty(samples), return; end
-    names = string(cfg.metricNames);
-    if isempty(names), return; end
-    nP = samples.numPoints;
-    [metrics, resolvedNames] = extractSamplingMetrics(samples, names, nP);
-    samples.metrics = metrics;
-    samples.metricNames = cellstr(names);
-    samples.numMetrics = numel(names);
-    samples.resolvedMetricNames = resolvedNames;
-end
 
 %% ########################################################################
 %   STAGE 3 — TRAINING HANDLERS
@@ -5528,100 +5325,7 @@ function v = safeStruct(s, f)
         v = struct();
     end
 end
-function values = parseNumberList(rawValue, defaultValue)
-    if isstring(rawValue)
-        rawValue = char(rawValue);
-    end
-    if isempty(rawValue)
-        values = defaultValue;
-        return
-    end
-    tokens = regexp(rawValue, '[,;\s]+', 'split');
-    tokens = tokens(~cellfun('isempty', tokens));
-    if isempty(tokens)
-        values = defaultValue;
-        return
-    end
-    values = str2double(tokens);
-    values = values(isfinite(values));
-    if isempty(values)
-        values = defaultValue;
-        return
-    end
-    values = double(values(:)');
-end
-function args = parseNameValuePairs(rawValue)
-    args = {};
-    if rawValue == "" || strlength(rawValue) == 0
-        return;
-    end
-    tokens = split(string(rawValue), [";", newline]);
-    for i = 1:numel(tokens)
-        entry = strtrim(tokens(i));
-        if entry == ""
-            continue;
-        end
-        parts = split(entry, "=");
-        if numel(parts) < 2
-            continue;
-        end
-        name = strtrim(parts(1));
-        valueStr = strtrim(strjoin(parts(2:end), "="));
-        if name == ""
-            continue;
-        end
-        value = parseScalarValue(valueStr);
-        args(end+1:end+2) = {char(name), value}; %#ok<AGROW>
-    end
-end
 
-function value = parseScalarValue(valueStr)
-    valueStr = string(valueStr);
-    if valueStr == ""
-        value = "";
-        return;
-    end
-    lowerVal = lower(valueStr);
-    if lowerVal == "true"
-        value = true;
-        return;
-    elseif lowerVal == "false"
-        value = false;
-        return;
-    elseif lowerVal == "inf"
-        value = inf;
-        return;
-    elseif lowerVal == "nan"
-        value = NaN;
-        return;
-    end
-
-    if startsWith(valueStr, "\"") && endsWith(valueStr, "\"")
-        value = extractBetween(valueStr, 2, strlength(valueStr) - 1);
-        value = string(value);
-        return;
-    elseif startsWith(valueStr, "'") && endsWith(valueStr, "'")
-        value = extractBetween(valueStr, 2, strlength(valueStr) - 1);
-        value = string(value);
-        return;
-    end
-
-    if contains(valueStr, ",")
-        parts = split(valueStr, ",");
-        nums = str2double(strtrim(parts));
-        if all(isfinite(nums))
-            value = nums';
-            return;
-        end
-    end
-
-    numericValue = str2double(valueStr);
-    if isfinite(numericValue)
-        value = numericValue;
-    else
-        value = char(valueStr);
-    end
-end
 
 %% ########################################################################
 %   OPTIMIZATION WORKFLOW: ROBUSTNESS & STATE MANAGEMENT HELPERS

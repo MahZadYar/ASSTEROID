@@ -388,39 +388,33 @@ classdef TrainingController < handle
 
     %% Internal Helpers
     methods (Access = private)
-        function rawFiles = resolveSimDataFiles(obj)
-            rawFiles = strings(0, 1);
-            if ~isempty(obj.fig) && isvalid(obj.fig)
-                rawFiles = resolveSimDataFile(obj.fig);
+        function db = getDb(obj)
+            if ~isempty(obj.fig) && isvalid(obj.fig) && isstruct(obj.fig.UserData) ...
+                    && isfield(obj.fig.UserData, "db") && isstruct(obj.fig.UserData.db)
+                db = obj.fig.UserData.db;
             else
-                db_ = obj.session.db;
-                if isfield(db_, "Global") && isfield(db_.Global, "SimulationDataFile")
-                    rawFiles = string(db_.Global.SimulationDataFile);
-                end
+                db = obj.session.db;
+            end
+        end
+
+        function rawFiles = resolveSimDataFiles(obj)
+            rawFiles = resolveSimDataFile(obj.getDb());
+            if isempty(rawFiles) && ~isempty(obj.fig) && isvalid(obj.fig)
+                rawFiles = resolveSimDataFile(obj.fig);
             end
         end
 
         function riFile = resolveRiFile(obj)
-            riFile = "";
-            if ~isempty(obj.fig) && isvalid(obj.fig)
+            riFile = resolveRiFile(obj.getDb());
+            if riFile == "" && ~isempty(obj.fig) && isvalid(obj.fig)
                 riFile = resolveRiFile(obj.fig);
-            else
-                db_ = obj.session.db;
-                if isfield(db_, "Global") && isfield(db_.Global, "RefractiveIndexFile")
-                    riFile = string(db_.Global.RefractiveIndexFile);
-                end
             end
         end
 
         function modelFile = resolvePretrainedModel(obj)
-            modelFile = "";
-            if ~isempty(obj.fig) && isvalid(obj.fig)
+            modelFile = resolvePretrainedModel(obj.getDb());
+            if modelFile == "" && ~isempty(obj.fig) && isvalid(obj.fig)
                 modelFile = resolvePretrainedModel(obj.fig);
-            else
-                db_ = obj.session.db;
-                if isfield(db_, "Global") && isfield(db_.Global, "SurrogateModelFile")
-                    modelFile = string(db_.Global.SurrogateModelFile);
-                end
             end
         end
 

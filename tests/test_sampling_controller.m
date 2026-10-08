@@ -50,7 +50,12 @@ ctl.handleEvent("LoadData", struct("dataSource", "interpolation"));
 assert(ctl.samplingState.dataLoaded, "SamplingController should have dataLoaded=true after LoadData.");
 fprintf("  ✓ LoadData with DB simulation data succeeded.\n");
 
-%% 7. Clean up
+%% 7. Test PreviewDensity executes updateSamplesMetrics_local without error
+ctl.handleEvent("PreviewDensity", struct("metricNames", "EF_vol_avg"));
+assert(~isempty(ctl.samplingState.density), "PreviewDensity should construct density struct.");
+fprintf("  ✓ PreviewDensity executed updateSamplesMetrics_local successfully.\n");
+
+%% 8. Clean up
 try
     rmdir(testDir, "s");
 catch

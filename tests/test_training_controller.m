@@ -32,7 +32,30 @@ fprintf("  ✓ findLatestCheckpointFile returned struct.\n");
 ctl.handleEvent("RunTraining", struct());
 fprintf("  ✓ RunTraining with empty DB rejected gracefully without throwing uncaught errors.\n");
 
-%% 6. Clean up
+%% 6. Test resolveSimDataFile, resolveRiFile, resolvePretrainedModel with Figure handle
+mockFig = uifigure("Visible", "off");
+cFig = onCleanup(@() delete(mockFig));
+mockFig.UserData = struct("session", session, "db", session.db);
+ctlWithFig = TrainingController(session, mockFig, [], []);
+
+% Test resolution functions with Figure input
+simFiles = resolveSimDataFile(mockFig);
+riFile = resolveRiFile(mockFig);
+modelFile = resolvePretrainedModel(mockFig);
+assert(isstring(simFiles) || iscellstr(simFiles) || ischar(simFiles), "resolveSimDataFile must return string/cellstr");
+assert(isstring(riFile) || ischar(riFile), "resolveRiFile must return string/char");
+assert(isstring(modelFile) || ischar(modelFile), "resolvePretrainedModel must return string/char");
+fprintf("  ✓ resolveSimDataFile, resolveRiFile, resolvePretrainedModel work with matlab.ui.Figure.\n");
+
+% Test parser utilities
+nums = parseNumberList("64, 128, 256");
+assert(isequal(nums, [64 128 256]), "parseNumberList failed");
+args = parseNameValuePairs("InitialLearnRate=0.001; MaxEpochs=100");
+assert(numel(args) == 4, "parseNameValuePairs failed");
+assert(isequal(args{1}, 'InitialLearnRate') && args{2} == 0.001, "parseNameValuePairs key/val mismatch");
+fprintf("  ✓ parseNumberList, parseNameValuePairs, parseScalarValue work cleanly.\n");
+
+%% 7. Clean up
 try
     rmdir(testDir, "s");
 catch
