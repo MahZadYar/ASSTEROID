@@ -38,8 +38,9 @@ ASSTEROID/
 ├── setup_project.m              ← Path initialization (run once per session)
 │
 ├── src/                         ← Modular core library
+│   ├── app/                     ← Application controllers (v5.0 decoupled MVC) & session state
 │   ├── io/                      ← File I/O: sweep table parsers, dispersion loaders, analyte spectra
-│   ├── data/                    ← SoA database engine: merge, deduplicate, validate, HDF5 export
+│   ├── data/                    ← High-performance SoA database engine (~4GB), merge, validate
 │   ├── physics/                 ← SERS electrodynamics, ORT metrics, makima spectral integration
 │   ├── sampling/                ← Adaptive sampling: Laplacian curvature, density models, rejection
 │   ├── modeling/                ← ResNet surrogate architecture, Adam training, fmincon optimization
@@ -48,7 +49,7 @@ ASSTEROID/
 │   └── utils/                   ← Column mapping, alias management, unit/matrix helpers
 │
 ├── scripts/                     ← Executable command-line & app entry points
-│   ├── apps/                    ← GUI components (HTML5 controls + MATLAB callbacks)
+│   ├── apps/                    ← GUI components (HTML5 views, shared design tokens & JS bridge)
 │   ├── pipeline/                ← Standalone CLI batch workflows (Stages 1, 3, 4, 5)
 │   └── sampling/                ← Standalone adaptive sampling CLI (Stage 2)
 │

@@ -47,13 +47,15 @@ flowchart LR
 
 ### Workflow Suite
 
-| Stage | Workflow | Config Builder | Workflow Function | Visualizer |
+| Stage | Workflow | Config Builder / Engine | Workflow Function / Controller | Visualizer |
 |:---:|---|---|---|---|
-| 📥 Stage 1 | Ingestion & Sweep QA | `importSweepConfig` | `runImportSweepWorkflow` | `visualizeImportSummary` |
-| 🎯 Stage 2 | Adaptive Sampling | `adaptiveSamplingConfig` | `runAdaptiveSamplingWorkflow` | _(no viz)_ |
-| 🧠 Stage 3 | DNN Training | `trainingConfig` | `runTrainingWorkflow` | _(no viz)_ |
-| 🔮 Stage 4 | Prediction & Landscape | `predictionVisConfig` | `runPredictionVisWorkflow` | _(built-in)_ |
-| 🔍 Stage 5 | Maxima Localization | `localizeMaximaConfig` | `runLocalizationWorkflow` | `visualizeMaximaResults` |
+| 💾 Stage 0 | Master Database Management | `DatabaseEngine(workDir)` | `DatabaseController` / `DatabaseEngine` | `database_tab.html` Tree Inspector |
+| 📥 Stage 1 | Ingestion & Sweep QA | `importSweepConfig` | `runImportSweepWorkflow` / `ImportController` | `visualizeImportSummary` |
+| 🎯 Stage 2 | Adaptive Sampling | `adaptiveSamplingConfig` | `runAdaptiveSamplingWorkflow` / `SamplingController` | 2D Density & Curvature Overlay |
+| 🧠 Stage 3 | DNN Training | `trainingConfig` | `runTrainingWorkflow` / `TrainingController` | Real-time Loss & Validation Curves |
+| 🔮 Stage 4 | Prediction & Landscape | `predictionVisConfig` | `runPredictionVisWorkflow` / `PredictionController` | Sub-nm Metric Contour Maps |
+| 🔍 Stage 5 | Maxima Localization | `localizeMaximaConfig` | `runLocalizationWorkflow` / `OptimizeController` | `visualizeMaximaResults` / Trajectories |
+| 🌌 Stage 6 | Multi-Dimensional Vis & Export | `session.visState` | `VisualizeController` | 1D Spectra, 2D Maps, 3D `viewer3d` |
 
 ---
 
