@@ -64,6 +64,24 @@ classdef DatabaseController < handle
                             fig_.UserData.dbFile = sess.dbFile;
                             fig_.UserData.dbDirty = false;
                             fig_.UserData.workDir = sess.workDir;
+
+                            % Cache model and RI into visExport
+                            if isfield(fig_.UserData, "visExport") && isstruct(fig_.UserData.visExport)
+                                if isfield(sess.db, "Model") && isstruct(sess.db.Model)
+                                    if isfield(sess.db.Model, "Model") && isstruct(sess.db.Model.Model)
+                                        fig_.UserData.visExport.model = sess.db.Model.Model;
+                                        fig_.UserData.visExport.modelLoaded = true;
+                                    elseif isfield(sess.db.Model, "Net") && ~isempty(sess.db.Model.Net)
+                                        fig_.UserData.visExport.model = sess.db.Model;
+                                        fig_.UserData.visExport.modelLoaded = true;
+                                    end
+                                end
+                                if isfield(sess.db, "RI") && isstruct(sess.db.RI)
+                                    if isfield(fig_.UserData, "app") && isfield(fig_.UserData.app, "resolveRefractiveIndexStruct")
+                                        fig_.UserData.visExport.ri = fig_.UserData.app.resolveRefractiveIndexStruct();
+                                    end
+                                end
+                            end
                         end
 
                         obj.sendToHTML("LoadComplete", ...
@@ -195,10 +213,16 @@ classdef DatabaseController < handle
 
         function broadcastStatus(obj)
         % BROADCASTSTATUS Push updated session summary to all HTML panels.
+            fig_ = obj.fig;
+            if ~isempty(fig_) && isvalid(fig_) && isfield(fig_.UserData, "app") ...
+                    && isfield(fig_.UserData.app, "broadcastDbStatus")
+                obj.fig.UserData.app.broadcastDbStatus();
+                return;
+            end
+
             status = obj.session.getStatusStruct();
             obj.sendToHTML("DbStatus", status);
 
-            fig_ = obj.fig;
             if ~isempty(fig_) && isvalid(fig_) && isfield(fig_.UserData, "handles") ...
                     && isfield(fig_.UserData.handles, "htmlPanels")
                 panels = fig_.UserData.handles.htmlPanels;

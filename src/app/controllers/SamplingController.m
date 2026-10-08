@@ -548,6 +548,18 @@ classdef SamplingController < handle
                 if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "broadcastDbStatus")
                     obj.fig.UserData.app.broadcastDbStatus();
                 end
+            else
+                obj.sendToHTML("DbStatus", obj.session.getStatusStruct());
+            end
+
+            % If DB has simulation data, auto-load sampling data to populate axes and parameter dropdowns
+            db = obj.session.db;
+            if isfield(db, "Sim") && isstruct(db.Sim) && structRowCount(db.Sim) > 0
+                try
+                    obj.loadSamplingData(struct("dataSource", "interpolation"));
+                catch ME
+                    fprintf("[SamplingController] Auto-load data on refresh: %s\n", ME.message);
+                end
             end
         end
 
@@ -599,11 +611,23 @@ classdef SamplingController < handle
             if ~isempty(obj.fig) && isvalid(obj.fig) && isfield(obj.fig.UserData, "app") ...
                     && isfield(obj.fig.UserData.app, "resolveDbPaths")
                 [modelFile, riCsvFile, dataFile, predictionFile] = obj.fig.UserData.app.resolveDbPaths();
-            elseif isfield(obj.session.db, "Global")
+            end
+            % Fallback: inspect session.db directly via resolveDbBranchPaths
+            if (dataFile == "" || modelFile == "") && isstruct(obj.session.db) && ~isempty(fieldnames(obj.session.db))
+                try
+                    [mF, rF, dF, pF] = resolveDbBranchPaths(obj.session.db, obj.session.workDir);
+                    if dataFile == "", dataFile = dF; end
+                    if modelFile == "", modelFile = mF; end
+                    if riCsvFile == "", riCsvFile = rF; end
+                    if predictionFile == "", predictionFile = pF; end
+                catch
+                end
+            end
+            if isfield(obj.session.db, "Global")
                 g = obj.session.db.Global;
-                if isfield(g, "SurrogateModelFile"), modelFile = string(g.SurrogateModelFile); end
-                if isfield(g, "RefractiveIndexFile"), riCsvFile = string(g.RefractiveIndexFile); end
-                if isfield(g, "SimulationDataFile"), dataFile = string(g.SimulationDataFile); end
+                if modelFile == "" && isfield(g, "SurrogateModelFile"), modelFile = string(g.SurrogateModelFile); end
+                if riCsvFile == "" && isfield(g, "RefractiveIndexFile"), riCsvFile = string(g.RefractiveIndexFile); end
+                if dataFile == "" && isfield(g, "SimulationDataFile"), dataFile = string(g.SimulationDataFile); end
             end
         end
 

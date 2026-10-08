@@ -493,6 +493,9 @@ function loadDbFile(fig, dbPath)
         if isfield(fig.UserData.db.Model, "Model") && isstruct(fig.UserData.db.Model.Model)
             fig.UserData.visExport.model = fig.UserData.db.Model.Model;
             fig.UserData.visExport.modelLoaded = true;
+        elseif isfield(fig.UserData.db.Model, "Net") && ~isempty(fig.UserData.db.Model.Net)
+            fig.UserData.visExport.model = fig.UserData.db.Model;
+            fig.UserData.visExport.modelLoaded = true;
         end
     end
 
@@ -507,6 +510,22 @@ function loadDbFile(fig, dbPath)
         fig.UserData.workDir = string(fig.UserData.db.Global.WorkDir);
     else
         fig.UserData.workDir = string(fileparts(dbPath));
+    end
+
+    % Sync with AssteroidSession if available
+    if isfield(fig.UserData, "session") && ~isempty(fig.UserData.session) && isvalid(fig.UserData.session)
+        fig.UserData.session.db = db;
+        fig.UserData.session.dbFile = string(dbPath);
+        fig.UserData.session.dbDirty = false;
+        fig.UserData.session.workDir = fig.UserData.workDir;
+        if isfield(db, "Model") && isstruct(db.Model) && ...
+                ((isfield(db.Model, "Model") && ~isempty(db.Model.Model)) || ...
+                 (isfield(db.Model, "Net") && ~isempty(db.Model.Net)))
+            fig.UserData.session.modelLoaded = true;
+        end
+        if isfield(db, "RI") && isstruct(db.RI) && isfield(db.RI, "lambda") && ~isempty(db.RI.lambda)
+            fig.UserData.session.riLoaded = true;
+        end
     end
 
     if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "mainTabGroup") && ...
@@ -533,9 +552,11 @@ function saveDbFile(fig)
     info = DatabaseEngine.saveDatabase(fig.UserData.db, fig.UserData.dbFile, reporter);
 
     fig.UserData.dbDirty = false;
+    if isfield(fig.UserData, "session") && ~isempty(fig.UserData.session) && isvalid(fig.UserData.session)
+        fig.UserData.session.dbDirty = false;
+    end
 
-    if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "dbHtml") ...
-            && isvalid(fig.UserData.handles.dbHtml)
+    if isfield(fig.UserData.handles, "dbHtml") && isvalid(fig.UserData.handles.dbHtml)
         sendEventToHTMLSource(fig.UserData.handles.dbHtml, "SaveComplete", ...
             sprintf("Database saved in %.2f s (Size: %s, %.1f MB/s).", ...
                 info.elapsed, info.sizeString, info.rateMBs));
@@ -565,6 +586,10 @@ end
 function markDbDirty(fig)
 %markDbDirty  Flag the database as having unsaved changes.
     fig.UserData.dbDirty = true;
+    if isfield(fig.UserData, "session") && ~isempty(fig.UserData.session) && isvalid(fig.UserData.session)
+        fig.UserData.session.db = fig.UserData.db;
+        fig.UserData.session.dbDirty = true;
+    end
     broadcastDbStatus(fig);
 end
 
@@ -597,6 +622,16 @@ end
 function status = buildDbStatusStruct(fig)
 %buildDbStatusStruct  Build a struct summarizing the current DB state.
     db = fig.UserData.db;
+    if (isempty(db) || ~isstruct(db)) && isfield(fig.UserData, "session") ...
+            && ~isempty(fig.UserData.session) && isvalid(fig.UserData.session) ...
+            && ~isempty(fig.UserData.session.db) && isstruct(fig.UserData.session.db)
+        db = fig.UserData.session.db;
+        fig.UserData.db = db;
+        fig.UserData.dbFile = fig.UserData.session.dbFile;
+        fig.UserData.dbDirty = fig.UserData.session.dbDirty;
+        fig.UserData.workDir = fig.UserData.session.workDir;
+    end
+
     status = struct( ...
         "dbFile",        fig.UserData.dbFile, ...
         "dbDirty",       fig.UserData.dbDirty, ...
@@ -642,7 +677,8 @@ function status = buildDbStatusStruct(fig)
     % Model branch
     if isfield(db, "Model") && isstruct(db.Model)
         m = db.Model;
-        hasNet = isfield(m, "Net") && ~isempty(m.Net);
+        hasNet = (isfield(m, "Net") && ~isempty(m.Net)) || ...
+                 (isfield(m, "Model") && ~isempty(m.Model));
         hasNetFile = isfield(m, "NetFile") && strlength(string(m.NetFile)) > 0;
         status.hasModel = hasNet || hasNetFile;
         if hasNetFile
@@ -960,7 +996,14 @@ end
 %  ========================================================================
 function [modelFile, riCsvFile, dataFile, predictionFile] = resolveDbPaths(fig)
 %resolveDbPaths  Thin delegate — see resolveDbBranchPaths.
-    [modelFile, riCsvFile, dataFile, predictionFile] = resolveDbBranchPaths(fig.UserData.db, fig.UserData.workDir);
+    db = fig.UserData.db;
+    if (isempty(db) || ~isstruct(db)) && isfield(fig.UserData, "session") ...
+            && ~isempty(fig.UserData.session) && isvalid(fig.UserData.session) ...
+            && ~isempty(fig.UserData.session.db) && isstruct(fig.UserData.session.db)
+        db = fig.UserData.session.db;
+        fig.UserData.db = db;
+    end
+    [modelFile, riCsvFile, dataFile, predictionFile] = resolveDbBranchPaths(db, fig.UserData.workDir);
 end
 
 function rawFiles = resolveSimDataFile(fig)
@@ -1218,6 +1261,7 @@ function handleMainTabSelection(~, ~, fig)
 %handleMainTabSelection  Ensure deferred-layout tabs expand properly on switch.
     drawnow;
     resizeVisualizePanel(fig);
+    broadcastDbStatus(fig);
 end
 
 function resizeVisualizePanel(fig)
@@ -5577,43 +5621,6 @@ function value = parseScalarValue(valueStr)
     else
         value = char(valueStr);
     end
-end
-function r = ternaryVal(cond, trueF, falseV)
-    if cond, r = trueF(); else, r = falseV; end
-end
-function v = padVec(v, n)
-    if isempty(v), v = ones(1, n); return; end
-    if iscell(v)
-        while isscalar(v) && iscell(v{1})
-            v = v{1};
-        end
-        try
-            v = cell2mat(v);
-        catch
-            v = cellfun(@double, v);
-        end
-    end
-    v = double(v(:)');
-    if numel(v) < n
-        v = [v, ones(1, n - numel(v))];
-    elseif numel(v) > n
-        v = v(1:n);
-    end
-end
-function names = sanitiseMetricList(raw)
-    if isempty(raw), names = string.empty(1, 0); return; end
-    if iscell(raw)
-        while isscalar(raw) && iscell(raw{1})
-            raw = raw{1};
-        end
-    end
-    names = string(raw);
-    names = names(~ismissing(names) & strlength(strtrim(names)) > 0);
-    names = reshape(names, 1, []);
-end
-function rgb = hex2rgb(hex)
-    hex = char(hex); if hex(1)=="#", hex = hex(2:end); end
-    rgb = [hex2dec(hex(1:2)) hex2dec(hex(3:4)) hex2dec(hex(5:6))]/255;
 end
 
 %% ########################################################################

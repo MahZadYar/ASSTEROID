@@ -31,11 +31,16 @@ classdef AssteroidSession < handle
             "activeStage",   "")
     end
 
+    properties (Dependent)
+        dirty
+    end
+
     events
         DatabaseLoaded
         DatabaseSaved
         BranchModified
         ModelLoaded
+        RiLoaded
         ProcessStateChanged
     end
 
@@ -77,6 +82,19 @@ classdef AssteroidSession < handle
                     obj.model = obj.db.Model.Model;
                     obj.modelLoaded = true;
                     notify(obj, "ModelLoaded");
+                elseif isfield(obj.db.Model, "Net") && ~isempty(obj.db.Model.Net)
+                    obj.model = obj.db.Model;
+                    obj.modelLoaded = true;
+                    notify(obj, "ModelLoaded");
+                end
+            end
+
+            % Check for embedded RI
+            if isfield(obj.db, "RI") && isstruct(obj.db.RI)
+                if isfield(obj.db.RI, "lambda") && ~isempty(obj.db.RI.lambda)
+                    obj.ri = obj.db.RI;
+                    obj.riLoaded = true;
+                    notify(obj, "RiLoaded");
                 end
             end
 
@@ -198,12 +216,32 @@ classdef AssteroidSession < handle
                 if isfield(g, "Description"), status.description = string(g.Description); end
                 if isfield(g, "PaperDOI"),    status.paperDOI    = string(g.PaperDOI);    end
                 if isfield(g, "SimFile"),     status.simFile     = string(g.SimFile);     end
+                if isfield(g, "AnalyteSpectrumFile") && strlength(string(g.AnalyteSpectrumFile)) > 0
+                    status.hasAnalyte = true;
+                    status.analyteFile = string(g.AnalyteSpectrumFile);
+                end
             end
 
             if isfield(db_, "Sim") && isstruct(db_.Sim)
                 n = structRowCount(db_.Sim);
                 status.simEntries = n;
                 status.hasSimData = n > 0;
+            end
+
+            if isfield(db_, "Model") && isstruct(db_.Model)
+                m = db_.Model;
+                hasNet = isfield(m, "Net") && ~isempty(m.Net);
+                hasNetFile = isfield(m, "NetFile") && strlength(string(m.NetFile)) > 0;
+                hasInner = isfield(m, "Model") && ~isempty(m.Model);
+                status.hasModel = obj.modelLoaded || hasNet || hasNetFile || hasInner;
+                if hasNetFile
+                    status.modelFile = string(m.NetFile);
+                end
+            end
+
+            if isfield(db_, "RI") && isstruct(db_.RI)
+                hasLambda = isfield(db_.RI, "lambda") && ~isempty(db_.RI.lambda);
+                status.hasRI = obj.riLoaded || hasLambda;
             end
 
             if isfield(db_, "Pred") && isstruct(db_.Pred)
@@ -223,6 +261,33 @@ classdef AssteroidSession < handle
                 status.hasOptima = nOpt > 0;
                 status.optimaCount = nOpt;
             end
+        end
+
+        function tf = hasSimData(obj)
+        % HASSIMDATA True if session has a non-empty simulation data branch.
+            tf = isfield(obj.db, "Sim") && isstruct(obj.db.Sim) && structRowCount(obj.db.Sim) > 0;
+        end
+
+        function tf = hasModel(obj)
+        % HASMODEL True if session has a valid DNN surrogate model loaded or stored.
+            tf = obj.modelLoaded || (isfield(obj.db, "Model") && isstruct(obj.db.Model) && ...
+                ((isfield(obj.db.Model, "Net") && ~isempty(obj.db.Model.Net)) || ...
+                 (isfield(obj.db.Model, "Model") && ~isempty(obj.db.Model.Model)) || ...
+                 (isfield(obj.db.Model, "NetFile") && strlength(string(obj.db.Model.NetFile)) > 0)));
+        end
+
+        function tf = hasRI(obj)
+        % HASRI True if session has valid refractive index data loaded or stored.
+            tf = obj.riLoaded || (isfield(obj.db, "RI") && isstruct(obj.db.RI) && ...
+                isfield(obj.db.RI, "lambda") && ~isempty(obj.db.RI.lambda));
+        end
+
+        function val = get.dirty(obj)
+            val = obj.dbDirty;
+        end
+
+        function set.dirty(obj, val)
+            obj.dbDirty = logical(val);
         end
     end
 end
