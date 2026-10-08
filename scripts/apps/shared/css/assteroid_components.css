@@ -1,0 +1,439 @@
+/**
+ * ☄️ ASSTEROID Shared UI Components
+ * Layout containers, panels, form controls, buttons, tables, badges, and progress widgets.
+ */
+
+/* ==========================================================================
+   App Containers & Layout
+   ========================================================================== */
+.app-container {
+    display: flex;
+    height: 100vh;
+    width: 100%;
+}
+
+.control-panel {
+    width: 420px;
+    min-width: 420px;
+    flex-shrink: 0;
+    z-index: 10;
+    background: var(--bg-primary);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    padding: 12px;
+}
+
+.main-panel {
+    flex: 1;
+    min-width: 0;
+    background: var(--bg-primary);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 12px;
+}
+
+.main-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.steps-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    min-height: 0;
+}
+
+/* ==========================================================================
+   Typography & Headers
+   ========================================================================== */
+h2 {
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+}
+
+.tab-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px 8px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.tab-header h2 {
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+/* ==========================================================================
+   Sections & Accordions
+   ========================================================================== */
+.section {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: 12px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+}
+
+.section-title {
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+}
+
+.section-title::before {
+    content: '\25B8 ';
+    margin-right: 4px;
+}
+
+.section-title.open::before {
+    content: '\25BE ';
+}
+
+/* Step Accordions */
+.step {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    margin: 0 auto 10px auto;
+    max-width: 1400px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+
+.step-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--bg-tertiary);
+    cursor: pointer;
+    user-select: none;
+}
+
+.step-number {
+    width: 22px;
+    height: 22px;
+    background: var(--accent);
+    color: #000;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+}
+
+.step-header.completed .step-number { background: var(--success); }
+.step-header.active .step-number { background: var(--accent); }
+.step-header.inactive .step-number { background: var(--text-secondary); }
+
+.step-title {
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+}
+
+.step-toggle::before { content: '▾'; color: var(--text-secondary); }
+.step-header.collapsed .step-toggle::before { content: '▸'; }
+
+.step-content {
+    padding: 12px;
+    display: block;
+}
+
+.step-header.collapsed + .step-content {
+    display: none;
+}
+
+/* ==========================================================================
+   Form Fields & Inputs
+   ========================================================================== */
+.field {
+    margin-bottom: 8px;
+}
+
+.field label {
+    display: block;
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    margin-bottom: 3px;
+    font-weight: 500;
+}
+
+.field-row {
+    display: flex;
+    gap: 8px;
+}
+
+.field-row .field {
+    flex: 1;
+}
+
+.field input[type="text"],
+.field input[type="number"],
+.field select {
+    width: 100%;
+    padding: 6px 8px;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: var(--font-size-base);
+    outline: none;
+    transition: border-color var(--transition-fast);
+}
+
+.field input:focus,
+.field select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent-glow);
+}
+
+.browse-row {
+    display: flex;
+    gap: 4px;
+}
+
+.browse-row input {
+    flex: 1;
+}
+
+.browse-row button {
+    padding: 6px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    white-space: nowrap;
+    transition: background var(--transition-fast);
+}
+
+.browse-row button:hover {
+    background: var(--accent);
+    color: #000;
+}
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+button {
+    font-family: inherit;
+}
+
+.btn-primary {
+    width: 100%;
+    padding: 9px;
+    margin-top: 6px;
+    background: var(--accent);
+    color: var(--text-inverse);
+    border: none;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    font-size: var(--font-size-base);
+    cursor: pointer;
+    transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+    box-shadow: 0 0 10px var(--accent-glow);
+}
+
+.btn-primary:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.btn-secondary {
+    padding: 6px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    transition: all var(--transition-fast);
+}
+
+.btn-secondary:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 6px var(--accent-subtle);
+}
+
+.btn-purple {
+    background: var(--purple-bright);
+    color: #ffffff;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition-fast), box-shadow var(--transition-fast);
+}
+.btn-purple:hover:not(:disabled) {
+    background: var(--pal-b50);
+    box-shadow: 0 0 10px var(--ai-border);
+}
+
+.btn-gold {
+    background: var(--gold-bright);
+    color: var(--text-inverse);
+    border: none;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background var(--transition-fast), box-shadow var(--transition-fast);
+}
+.btn-gold:hover:not(:disabled) {
+    background: var(--gold-base);
+    box-shadow: 0 0 10px var(--warning-border);
+}
+
+.btn-stop {
+    background: var(--error);
+    color: #ffffff;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 5px 12px;
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.btn-stop:hover {
+    opacity: 0.92;
+    box-shadow: 0 0 10px var(--error-border);
+}
+
+/* ==========================================================================
+   Badges, Status Indicators, & Progress
+   ========================================================================== */
+.req-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+}
+
+.req-ok {
+    background: var(--success-bg);
+    color: var(--success);
+    border: 1px solid var(--success-border);
+}
+
+.req-missing {
+    background: var(--error-bg);
+    color: var(--error);
+    border: 1px solid var(--error-border);
+}
+
+.req-optional {
+    background: rgba(160, 178, 214, 0.12);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-idle     { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border); }
+.status-running  { background: var(--accent-subtle); color: var(--accent); border: 1px solid var(--accent); box-shadow: 0 0 6px var(--accent-subtle); }
+.status-complete { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
+.status-error    { background: var(--error-bg); color: var(--error); border: 1px solid var(--error-border); }
+
+/* Palette Theme Badges */
+.badge-blue   { background: var(--info-bg); color: var(--blue-bright); border: 1px solid var(--info-border); }
+.badge-purple { background: var(--ai-bg); color: var(--purple-bright); border: 1px solid var(--ai-border); }
+.badge-teal   { background: var(--success-bg); color: var(--accent); border: 1px solid var(--success-border); }
+.badge-gold   { background: var(--warning-bg); color: var(--gold-bright); border: 1px solid var(--warning-border); }
+
+.progress-container {
+    margin: 8px 0;
+}
+
+.progress-bar-bg {
+    width: 100%;
+    height: 6px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent) 0%, var(--accent-hover) 100%);
+    box-shadow: 0 0 8px var(--accent-glow);
+    transition: width 0.2s ease;
+}
+
+/* ==========================================================================
+   Console / Log Display
+   ========================================================================== */
+.log-box {
+    background: var(--panel-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--text-secondary);
+    max-height: 120px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+/* ==========================================================================
+   Scrollbars
+   ========================================================================== */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+}
+::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent);
+}

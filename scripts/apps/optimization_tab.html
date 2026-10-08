@@ -2,21 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="stylesheet" href="shared/css/assteroid_tokens.css">
+<link rel="stylesheet" href="shared/css/assteroid_components.css">
+<script src="shared/js/matlab_bridge.js"></script>
 <style>
-    :root {
-        --bg-primary: #0d1419;
-        --bg-secondary: #0f1b2e;
-        --bg-tertiary: #132b42;
-        --text-primary: #f0f8fa;
-        --text-secondary: #7fa8b0;
-        --accent: #00e8ff;
-        --accent-hover: #33f5ff;
-        --success: #1fb8a8;
-        --warning: #ffb74d;
-        --error: #ff6b6b;
-        --border: #1b5055;
-        --input-bg: #0f1f2a;
-    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
         font-family: 'Segoe UI', system-ui, sans-serif;
@@ -29,10 +18,121 @@
         display: flex;
         flex-direction: column;
     }
+
+    /* View Switcher Bar */
+    .view-switch-bar {
+        display: flex;
+        background: var(--bg-tertiary);
+        border-bottom: 1px solid var(--border);
+        padding: 4px 8px;
+        gap: 4px;
+        flex-shrink: 0;
+    }
+    .view-btn {
+        flex: 1;
+        padding: 4px 6px;
+        font-size: 11px;
+        font-weight: 600;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: all 0.15s ease;
+        text-align: center;
+        white-space: nowrap;
+    }
+    .view-btn:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text-primary);
+    }
+    .view-btn.active {
+        background: var(--bg-primary);
+        border-color: var(--border);
+        color: var(--accent);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+
+    /* View Mode: Split (Default Unified) */
+    body.view-mode-split .steps-container {
+        flex: 1 1 50%;
+        max-height: 52%;
+        min-height: 160px;
+        border-bottom: 1px solid var(--border);
+    }
+    body.view-mode-split .bottom-panel {
+        flex: 1 1 50%;
+        min-height: 180px;
+        display: flex !important;
+    }
+    body.view-mode-split .bottom-right-section {
+        flex: 1;
+        display: flex !important;
+        min-height: 100px;
+    }
+    body.view-mode-split #seedsTableSection {
+        display: flex !important;
+    }
+    body.view-mode-split .bottom-left-section {
+        max-height: 100px;
+        min-height: 50px;
+        flex-shrink: 0;
+        border-top: 1px solid var(--border);
+    }
+
+    /* View Mode: Settings / Config Only */
+    body.view-mode-config .steps-container {
+        flex: 1;
+        display: block !important;
+        max-height: none !important;
+    }
+    body.view-mode-config .bottom-panel {
+        display: none !important;
+    }
+
+    /* View Mode: Results Table Only */
+    body.view-mode-results .steps-container {
+        display: none !important;
+    }
+    body.view-mode-results .bottom-panel {
+        flex: 1;
+        display: flex !important;
+    }
+    body.view-mode-results .bottom-right-section {
+        flex: 1;
+        display: flex !important;
+        border-top: none;
+    }
+    body.view-mode-results #seedsTableSection {
+        display: flex !important;
+    }
+    body.view-mode-results .bottom-left-section {
+        display: none !important;
+    }
+
+    /* View Mode: Console Only */
+    body.view-mode-console .steps-container {
+        display: none !important;
+    }
+    body.view-mode-console .bottom-panel {
+        flex: 1;
+        display: flex !important;
+    }
+    body.view-mode-console #seedsTableSection {
+        display: none !important;
+    }
+    body.view-mode-console .bottom-left-section {
+        flex: 1;
+        display: flex !important;
+        border-top: none;
+    }
+
+    /* Legacy Backward Compatibility */
+    body.panel-left .steps-container { flex: 1; display: block !important; }
     body.panel-left .bottom-panel { display: none !important; }
     body.panel-right .steps-container { display: none !important; }
     body.panel-right .main-container { display: flex; flex-direction: column; }
-    body.panel-right .bottom-panel { display: flex !important; flex: 1; }
+    body.panel-right .bottom-panel { flex: 1; display: flex !important; }
     body.panel-right .bottom-right-section { display: flex !important; border-top: none; }
     body.panel-right #seedsTableSection { display: flex !important; }
     body.panel-right .bottom-left-section { flex: 1; border-top: 1px solid var(--border); }
@@ -340,7 +440,7 @@
 function setup(htmlComponent) {
     window.htmlComponent = htmlComponent;
     window.hasPreview = false;
-    window.panelMode = "left";
+    window.panelMode = "split";
     try {
         if (htmlComponent.Data && htmlComponent.Data.mode) {
             window.panelMode = htmlComponent.Data.mode;
@@ -508,16 +608,36 @@ function notifyMetricChange() {
     });
 }
 
+function setViewMode(mode) {
+    window.currentViewMode = mode;
+    document.body.classList.remove('view-mode-split', 'view-mode-config', 'view-mode-results', 'view-mode-console', 'panel-left', 'panel-right');
+    document.body.classList.add('view-mode-' + mode);
+    
+    var buttons = document.querySelectorAll('.view-btn');
+    buttons.forEach(function(b) { b.classList.remove('active'); });
+    var idMap = {
+        'split': 'btnViewSplit',
+        'config': 'btnViewConfig',
+        'results': 'btnViewResults',
+        'console': 'btnViewConsole'
+    };
+    var activeBtn = document.getElementById(idMap[mode]);
+    if (activeBtn) activeBtn.classList.add('active');
+}
+
 function applyPanelMode() {
     if (window.panelMode === "right") {
-        document.body.classList.remove("panel-left");
-        document.body.classList.add("panel-right");
+        setViewMode("results");
         var section = document.getElementById("seedsTableSection");
         if (section) section.classList.remove("hidden");
         switchBottomTab("current");
+    } else if (window.panelMode === "left") {
+        setViewMode("config");
     } else {
-        document.body.classList.remove("panel-right");
-        document.body.classList.add("panel-left");
+        setViewMode("split");
+        var section = document.getElementById("seedsTableSection");
+        if (section) section.classList.remove("hidden");
+        switchBottomTab("current");
     }
 }
 
@@ -1288,7 +1408,7 @@ function toggleAllDbOptima(masterCb) {
 </script>
 </head>
 <body>
-    <div id="dbStatusBanner" style="display:none;background:#132b42;border:1px solid #1b5055;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:11px;color:#7fa8b0;"></div>
+    <div id="dbStatusBanner" style="display:none;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);padding:6px 10px;margin-bottom:8px;font-size:var(--font-size-sm);color:var(--text-secondary);"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px 8px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
         <h2 style="margin:0;padding:0;border:none;">🔍 Stage 5 — Optimization</h2>
         <div style="display:flex;gap:6px;">
@@ -1296,6 +1416,13 @@ function toggleAllDbOptima(masterCb) {
             <button class="btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="window.htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
             <button class="btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="window.htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
         </div>
+    </div>
+
+    <div class="view-switch-bar">
+        <button class="view-btn active" id="btnViewSplit" onclick="setViewMode('split')">🗂️ Split View</button>
+        <button class="view-btn" id="btnViewConfig" onclick="setViewMode('config')">⚙️ Settings</button>
+        <button class="view-btn" id="btnViewResults" onclick="setViewMode('results')">🎯 Optima Table</button>
+        <button class="view-btn" id="btnViewConsole" onclick="setViewMode('console')">💻 Console</button>
     </div>
 
     <div class="main-container">

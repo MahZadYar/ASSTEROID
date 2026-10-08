@@ -4,21 +4,10 @@
 <meta charset="UTF-8">
 <title>ASSTEROID — Stage 6 Visualize</title>
 <meta name="description" content="Visualize simulation, interpolation and prediction data stored in the ASSTEROID database as 1D spectra, 2D maps or 3D volumes.">
+<link rel="stylesheet" href="shared/css/assteroid_tokens.css">
+<link rel="stylesheet" href="shared/css/assteroid_components.css">
+<script src="shared/js/matlab_bridge.js"></script>
 <style>
-    :root {
-        --bg-primary: #0d1419;
-        --bg-secondary: #0f1b2e;
-        --bg-tertiary: #132b42;
-        --text-primary: #f0f8fa;
-        --text-secondary: #7fa8b0;
-        --accent: #00e8ff;
-        --accent-hover: #33f5ff;
-        --success: #1fb8a8;
-        --warning: #ffb74d;
-        --error: #ff6b6b;
-        --border: #1b5055;
-        --input-bg: #0f1f2a;
-    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
         font-family: 'Segoe UI', system-ui, sans-serif;

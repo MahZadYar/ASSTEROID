@@ -2,21 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="stylesheet" href="shared/css/assteroid_tokens.css">
+<link rel="stylesheet" href="shared/css/assteroid_components.css">
+<script src="shared/js/matlab_bridge.js"></script>
 <style>
-    :root {
-        --bg-primary: #0d1419;
-        --bg-secondary: #0f1b2e;
-        --bg-tertiary: #132b42;
-        --text-primary: #f0f8fa;
-        --text-secondary: #7fa8b0;
-        --accent: #00e8ff;
-        --accent-hover: #33f5ff;
-        --success: #1fb8a8;
-        --warning: #ffb74d;
-        --error: #ff6b6b;
-        --border: #1b5055;
-        --input-bg: #0f1f2a;
-    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
         font-family: 'Segoe UI', system-ui, sans-serif;
@@ -690,7 +679,7 @@ function toggleSection(el) {
 <div class="app-container">
     <!-- LEFT PANEL: Controls -->
     <div class="control-panel">
-        <div id="dbStatusBanner" style="display:none;background:#132b42;border:1px solid #1b5055;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:11px;color:#7fa8b0;"></div>
+        <div id="dbStatusBanner" style="display:none;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);padding:6px 10px;margin-bottom:8px;font-size:var(--font-size-sm);color:var(--text-secondary);"></div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);">
             <h2 style="margin:0;padding:0;border:none;">📥 Stage 1 — Ingestion & QA</h2>
             <div style="display:flex;gap:6px;align-items:center;">

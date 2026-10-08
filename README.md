@@ -3,6 +3,7 @@
 **Adaptive Sampling, Surrogate Training, Exploration and Refinement for Optimal Inverse Design**
 
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2023b%2B%20%7C%20R2026a-blue.svg)](https://www.mathworks.com/products/matlab.html)
+[![Version](https://img.shields.io/badge/Version-5.0-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.1021%2Facsnano.XXXXXXX-orange.svg)](#citation)
 [![Zenodo](https://img.shields.io/badge/Data-10.5281%2Fzenodo.XXXXXXX-blue.svg)](#dataset--trained-models)

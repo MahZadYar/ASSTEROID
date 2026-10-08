@@ -4,22 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Adaptive Parameter Sampling</title>
+    <link rel="stylesheet" href="shared/css/assteroid_tokens.css">
+    <link rel="stylesheet" href="shared/css/assteroid_components.css">
+    <script src="shared/js/matlab_bridge.js"></script>
     <style>
-        :root {
-            --bg-primary: #0d1419;
-            --bg-secondary: #0f1b2e;
-            --bg-tertiary: #132b42;
-            --text-primary: #f0f8fa;
-            --text-secondary: #7fa8b0;
-            --accent: #00e8ff;
-            --accent-hover: #33f5ff;
-            --success: #1fb8a8;
-            --warning: #ffb74d;
-            --error: #ff6b6b;
-            --border: #1b5055;
-            --input-bg: #0f1f2a;
-        }
-
         * {
             margin: 0;
             padding: 0;
@@ -748,7 +736,7 @@
     </style>
 </head>
 <body>
-    <div id="dbStatusBanner" style="display:none;background:#132b42;border:1px solid #1b5055;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:11px;color:#7fa8b0;"></div>
+    <div id="dbStatusBanner" style="display:none;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);padding:6px 10px;margin-bottom:8px;font-size:var(--font-size-sm);color:var(--text-secondary);"></div>
     <div class="app-container">
         <!-- Left Panel: Controls -->
         <div class="control-panel">
@@ -1124,15 +1112,15 @@
                             <div class="form-group">
                                 <label>Original Color</label>
                                 <div class="color-picker-group">
-                                    <input type="color" id="originalColor" value="#ef4444">
-                                    <span>Red</span>
+                                    <input type="color" id="originalColor" value="#ebb34f">
+                                    <span>Gold</span>
                                 </div>
                             </div>
                             <div class="form-group">
                                 <label>Generated Color</label>
                                 <div class="color-picker-group">
-                                    <input type="color" id="generatedColor" value="#10b981">
-                                    <span>Green</span>
+                                    <input type="color" id="generatedColor" value="#48b2ac">
+                                    <span>Teal</span>
                                 </div>
                             </div>
                         </div>

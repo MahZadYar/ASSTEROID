@@ -20,6 +20,9 @@ function setup_project()
         fullfile(root, "src", "sampling")
         fullfile(root, "src", "utils")
         fullfile(root, "src", "orchestration")
+        fullfile(root, "src", "app")
+        fullfile(root, "src", "app", "controllers")
+        fullfile(root, "src", "app", "state")
     };
 
     % ---- Script folders (entry points) ------------------------------------

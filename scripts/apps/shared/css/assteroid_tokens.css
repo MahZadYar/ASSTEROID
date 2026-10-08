@@ -1,0 +1,191 @@
+/**
+ * ☄️ ASSTEROID Design Tokens
+ * Master CSS custom properties generated from docs/Pallette.svg
+ *
+ * Primary Color Palette (Middle Wide Column with Increasing Brightness):
+ *   1. Cobalt Blue:   #241ec3 (A40)
+ *   2. Electric Violet:#7f00e0 (B50)
+ *   3. SERS Teal:     #27928d (C60)
+ *   4. Luminous Gold: #c9942c (D70)
+ *
+ * Left / Right columns provide darker & brighter variants for layered UI depth.
+ */
+:root {
+    /* =========================================================================
+       ATOMIC PALETTE SCALES (from docs/Pallette.svg)
+       ========================================================================= */
+
+    /* Row A: Blue Family */
+    --pal-a10: #000117;
+    --pal-a12: #020023;
+    --pal-a15: #030033;
+    --pal-a20: #080050;
+    --pal-a30: #16008e;
+    --pal-a40: #241ec3; /* ★ PRIMARY BLUE (Wide Column) */
+    --pal-a50: #384ae0;
+    --pal-a60: #5d78da;
+    --pal-a70: #809aec;
+    --pal-a80: #a7bbf9;
+    --pal-a90: #d1ddff;
+
+    /* Row B: Purple / Violet Family */
+    --pal-b10: #060011;
+    --pal-b12: #0a0019;
+    --pal-b15: #120026;
+    --pal-b20: #1f003e;
+    --pal-b30: #3d0070;
+    --pal-b40: #5d00a6;
+    --pal-b50: #7f00e0; /* ★ PRIMARY PURPLE (Wide Column) */
+    --pal-b60: #994ef3;
+    --pal-b70: #af8aed;
+    --pal-b80: #c8aef9;
+    --pal-b90: #e3d6ff;
+    --pal-b95: #f1ebff;
+
+    /* Row C: Teal / Cyan Family */
+    --pal-c12: #000808;
+    --pal-c15: #000e0e;
+    --pal-c20: #001b1a;
+    --pal-c30: #003634;
+    --pal-c40: #005350;
+    --pal-c50: #00736e;
+    --pal-c60: #27928d; /* ★ PRIMARY TEAL (Wide Column) */
+    --pal-c70: #48b2ac;
+    --pal-c80: #6bd1cb;
+    --pal-c90: #a0efe9;
+    --pal-c95: #c2fcf7;
+    --pal-c98: #e4fffc;
+
+    /* Row D: Amber / Gold Family */
+    --pal-d15: #110a00;
+    --pal-d20: #201300;
+    --pal-d30: #3e2900;
+    --pal-d40: #5f4100;
+    --pal-d50: #825b00;
+    --pal-d60: #a77600;
+    --pal-d70: #c9942c; /* ★ PRIMARY GOLD (Wide Column) */
+    --pal-d80: #ebb34f;
+    --pal-d90: #fcd99f;
+    --pal-d95: #ffeccd;
+    --pal-d98: #fff8eb;
+
+    /* Row G: Neutral Grayscale Family */
+    --pal-g10: #030303;
+    --pal-g12: #060606;
+    --pal-g15: #0b0b0b;
+    --pal-g20: #161616;
+    --pal-g30: #2e2e2e;
+    --pal-g40: #484848;
+    --pal-g50: #636363;
+    --pal-g60: #808080;
+    --pal-g70: #9e9e9e;
+    --pal-g80: #bebebe;
+    --pal-g90: #dedede;
+    --pal-g95: #eeeeee;
+    --pal-g98: #f8f8f8;
+    --pal-black: #000000;
+    --pal-white: #ffffff;
+
+    /* =========================================================================
+       SEMANTIC APPLICATION THEME MAPPINGS
+       ========================================================================= */
+
+    /* Layered Backgrounds (Deep Midnight Blue-Black from A10, A12, G15) */
+    --bg-primary: #060812;
+    --bg-secondary: #0c1020;
+    --bg-tertiary: #131a33;
+    --input-bg: #080b18;
+    --panel-bg: #04050d;
+    --card-bg: #0c1020;
+
+    /* Text Hierarchy */
+    --text-primary: #f8f8f8;   /* G98 */
+    --text-secondary: #a0b2d6; /* Tinted A80/G70 */
+    --text-muted: #636363;     /* G50 */
+    --text-inverse: #04050d;
+    --text-accent: #6bd1cb;    /* C80 */
+    --text-gold: #ebb34f;      /* D80 */
+    --text-purple: #af8aed;    /* B70 */
+
+    /* Primary Brand Accents (Teal Row C) */
+    --accent: #48b2ac;         /* C70 - High-contrast readable teal */
+    --accent-hover: #6bd1cb;   /* C80 - Radiant hover state */
+    --accent-active: #27928d;  /* C60 - Primary Wide Base */
+    --accent-glow: rgba(107, 209, 203, 0.35);
+    --accent-subtle: rgba(72, 178, 172, 0.14);
+
+    /* Secondary Brand Accents (Cobalt Blue Row A) */
+    --blue-base: #241ec3;      /* A40 - Primary Blue */
+    --blue-bright: #5d78da;    /* A60 */
+    --blue-soft: #809aec;      /* A70 */
+    --info: #5d78da;           /* A60 */
+    --info-bg: rgba(93, 120, 218, 0.16);
+    --info-border: rgba(93, 120, 218, 0.45);
+
+    /* Tertiary Brand Accents (Purple / AI Surrogate Row B) */
+    --purple-base: #7f00e0;    /* B50 - Primary Purple */
+    --purple-bright: #994ef3;  /* B60 */
+    --purple-soft: #af8aed;    /* B70 */
+    --ai-accent: #994ef3;
+    --ai-bg: rgba(153, 78, 243, 0.16);
+    --ai-border: rgba(153, 78, 243, 0.45);
+
+    /* Quaternary Brand Accents (Gold / Optima Maxima Row D) */
+    --gold-base: #c9942c;      /* D70 - Primary Gold */
+    --gold-bright: #ebb34f;    /* D80 */
+    --gold-soft: #fcd99f;      /* D90 */
+    --warning: #ebb34f;        /* D80 */
+    --warning-bg: rgba(235, 179, 79, 0.16);
+    --warning-border: rgba(235, 179, 79, 0.45);
+
+    /* Semantic Status Indicators */
+    --success: #48b2ac;        /* C70 Teal */
+    --success-bg: rgba(72, 178, 172, 0.16);
+    --success-border: rgba(72, 178, 172, 0.45);
+    --error: #e64a6f;          /* High-visibility balanced crimson */
+    --error-bg: rgba(230, 74, 111, 0.16);
+    --error-border: rgba(230, 74, 111, 0.45);
+
+    /* Borders & Outlines */
+    --border: #162038;         /* Deep cosmic blue border */
+    --border-light: #233256;   /* Active border */
+    --border-subtle: rgba(72, 178, 172, 0.22);
+    --border-focus: #48b2ac;   /* Teal focus ring */
+
+    /* Typography */
+    --font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
+    --font-mono: 'Consolas', 'Fira Code', 'JetBrains Mono', monospace;
+    --font-size-xs: 10px;
+    --font-size-sm: 11px;
+    --font-size-base: 12px;
+    --font-size-md: 13px;
+    --font-size-lg: 15px;
+
+    /* Spacing & Radii */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-full: 9999px;
+
+    /* Transitions */
+    --transition-fast: 0.15s ease;
+    --transition-normal: 0.25s ease;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--font-family);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: var(--font-size-md);
+    overflow: hidden;
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+}

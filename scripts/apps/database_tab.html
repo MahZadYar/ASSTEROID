@@ -2,21 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="stylesheet" href="shared/css/assteroid_tokens.css">
+<link rel="stylesheet" href="shared/css/assteroid_components.css">
+<script src="shared/js/matlab_bridge.js"></script>
 <style>
-    :root {
-        --bg-primary: #0d1419;
-        --bg-secondary: #0f1b2e;
-        --bg-tertiary: #132b42;
-        --text-primary: #f0f8fa;
-        --text-secondary: #7fa8b0;
-        --accent: #00e8ff;
-        --accent-hover: #33f5ff;
-        --success: #1fb8a8;
-        --warning: #ffb74d;
-        --error: #ff6b6b;
-        --border: #1b5055;
-        --input-bg: #0f1f2a;
-    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
         font-family: 'Segoe UI', system-ui, sans-serif;
@@ -323,13 +312,27 @@ function setup(htmlComponent) {
         appendLog(event.Data || "Export complete.");
     });
     htmlComponent.addEventListener("SaveComplete", function(event) {
-        appendLog(event.Data || "Saved.");
+        var msg = (typeof event.Data === "string") ? event.Data : (event.Data ? event.Data.message : "Database saved.");
+        appendLog(msg);
+        var btn = document.getElementById("btnSave");
+        if (btn) { btn.disabled = false; btn.textContent = "Save"; }
+        if (window.showToast) showToast(msg, "success");
     });
     htmlComponent.addEventListener("LoadComplete", function(event) {
-        appendLog(event.Data || "Loaded.");
+        var msg = (typeof event.Data === "string") ? event.Data : (event.Data ? event.Data.message : "Database loaded.");
+        appendLog(msg);
+        var btn = document.getElementById("btnLoad");
+        if (btn) { btn.disabled = false; btn.textContent = "Load Database"; }
+        if (window.showToast) showToast(msg, "success");
     });
     htmlComponent.addEventListener("Error", function(event) {
-        appendLog("ERROR: " + (event.Data || "Unknown error"));
+        var errMsg = event.Data || "Unknown error";
+        appendLog("ERROR: " + errMsg);
+        var btnLoad = document.getElementById("btnLoad");
+        if (btnLoad) { btnLoad.disabled = false; btnLoad.textContent = "Load Database"; }
+        var btnSave = document.getElementById("btnSave");
+        if (btnSave) { btnSave.disabled = false; btnSave.textContent = "Save"; }
+        if (window.showToast) showToast(errMsg, "error");
     });
     htmlComponent.addEventListener("DbTree", function(event) {
         renderTree(event.Data);
@@ -372,10 +375,17 @@ function browseDb() {
 function loadDb() {
     var path = document.getElementById("dbFile").value;
     if (!path) { appendLog("No file selected."); return; }
+    appendLog("Initiating database load: '" + path + "'...");
+    var btn = document.getElementById("btnLoad");
+    if (btn) { btn.disabled = true; btn.textContent = "Loading..."; }
     window.htmlComponent.sendEventToMATLAB("LoadDatabase", { path: path });
 }
 
 function saveDb() {
+    var path = document.getElementById("dbFile").value || "database.mat";
+    appendLog("Initiating database save: '" + path + "'...");
+    var btn = document.getElementById("btnSave");
+    if (btn) { btn.disabled = true; btn.textContent = "Saving..."; }
     window.htmlComponent.sendEventToMATLAB("SaveDatabase", {});
 }
 
@@ -664,7 +674,7 @@ function buildTreeNode(node, startOpen) {
                     <button onclick="browseDb()">Browse</button>
                 </div>
             </div>
-            <button class="btn-primary" onclick="loadDb()">Load Database</button>
+            <button class="btn-primary" id="btnLoad" onclick="loadDb()">Load Database</button>
             <div class="btn-row">
                 <button class="btn-secondary" id="btnSave" onclick="saveDb()" disabled>Save</button>
                 <button class="btn-secondary" onclick="saveDbAs()">Save As...</button>

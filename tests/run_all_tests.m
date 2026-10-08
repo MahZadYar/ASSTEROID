@@ -5,8 +5,9 @@ function summary = run_all_tests()
 %   reporting individual execution status, elapsed duration, and aggregate statistics.
 %   Each test runs in isolated scope to prevent workspace pollution or 'clear' side-effects.
 
-    setup_project;
     testDir = fileparts(mfilename('fullpath'));
+    addpath(fileparts(testDir));
+    setup_project;
     testFiles = dir(fullfile(testDir, "test_*.m"));
     
     numTests = numel(testFiles);

@@ -47,10 +47,13 @@ function figOut = assteroid_app(workFolder)
 
     % Singleton guard: if an instance is already running, focus it
     existing = findall(groot, "Tag", "ASSTEROID_MAIN_APP");
+    if ~isempty(existing)
+        existing = existing(isvalid(existing));
+    end
     if isempty(existing)
         allFigs = findall(groot, "Type", "figure");
         for k = 1:numel(allFigs)
-            if contains(string(allFigs(k).Name), "ASSTEROID")
+            if isvalid(allFigs(k)) && contains(string(allFigs(k).Name), "ASSTEROID")
                 existing = allFigs(k);
                 break;
             end
@@ -74,19 +77,33 @@ function figOut = assteroid_app(workFolder)
     fig = uifigure("Name", "☄️ ASSTEROID — Optimal Inverse Design Platform", ...
         "Tag", "ASSTEROID_MAIN_APP", ...
         "Position", [(screenSize(3)-figW)/2, (screenSize(4)-figH)/2, figW, figH], ...
-        "Color", [0.05 0.08 0.10], ...
+        "Color", [6, 8, 18]/255, ...
         "Resize", "on", ...
         "CloseRequestFcn", @onAppClose);
     figOut = fig;
 
     %% Shared state stored on figure -----------------------------------------
+    session = AssteroidSession(workFolder);
     fig.UserData = struct( ...
+        "session",      session, ...
         "workDir",      workFolder, ...
         "handles",      struct(), ...
         "db",           struct(), ...
         "dbFile",       "", ...
         "dbDirty",      false, ...
         "process",      struct("isRunning", false, "stopRequested", false, "activeStage", ""));
+    fig.UserData.app = struct( ...
+        "broadcastDbStatus", @() broadcastDbStatus(fig), ...
+        "isProcessStopRequested", @() isProcessStopRequested(fig), ...
+        "setProcessRunning", @(r, s) setProcessRunning(fig, r, s), ...
+        "requestProcessStop", @() requestProcessStop(fig), ...
+        "notifyProcessStopped", @(s, m) notifyProcessStopped(fig, s, m), ...
+        "saveDbFile", @() saveDbFile(fig), ...
+        "markDbDirty", @() markDbDirty(fig), ...
+        "resolveDbPaths", @() resolveDbPaths(fig), ...
+        "resolveAnalyteFile", @() resolveAnalyteFile(fig), ...
+        "openInVisualizeTab", @(b, m) openInVisualizeTab(fig, b, m), ...
+        "ensureVisExportModelAndRi", @(h, r) ensureVisExportModelAndRi(fig, h, r));
 
     %% Main tab group ---------------------------------------------------------
     tabGroup = uitabgroup(fig, ...
@@ -94,7 +111,7 @@ function figOut = assteroid_app(workFolder)
         "Position", [0 0 1 1], ...
         "SelectionChangedFcn", @(src, ev) handleMainTabSelection(src, ev, fig));
 
-    tabColors = [0.05 0.08 0.10];
+    tabColors = [6, 8, 18]/255;
 
     %% ====================================================================
     %  STAGE 0 — Database Manager
@@ -102,6 +119,8 @@ function figOut = assteroid_app(workFolder)
     tab0 = uitab(tabGroup, "Title", "💾 0 Database", "BackgroundColor", tabColors);
     fig.UserData.handles.dbTab = tab0;
     [h0, ~] = buildImportTabLayout(tab0, "database_tab.html");
+    dbController = DatabaseController(session, fig, h0);
+    fig.UserData.handles.dbController = dbController;
     h0.HTMLEventReceivedFcn = @(src, ev) handleDatabaseEvent(src, ev, fig);
     fig.UserData.handles.dbHtml = h0;
 
@@ -110,6 +129,10 @@ function figOut = assteroid_app(workFolder)
     %  ====================================================================
     tab1 = uitab(tabGroup, "Title", "📥 1 Import", "BackgroundColor", tabColors);
     [h1, visPanel1] = buildImportTabLayout(tab1, "import_tab.html");
+    importController = ImportController(session, fig, h1, visPanel1);
+    fig.UserData.handles.importController = importController;
+    fig.UserData.handles.importHtml = h1;
+    fig.UserData.handles.importVisPanel = visPanel1;
     h1.HTMLEventReceivedFcn = @(src, ev) handleImportEvent(src, ev, fig, visPanel1);
 
     %% ====================================================================
@@ -121,17 +144,19 @@ function figOut = assteroid_app(workFolder)
     ax2 = uiaxes(visPanel2, ...
         "Units",     "normalized", ...
         "Position",  [0.05 0.05 0.9 0.9], ...
-        "Color",     [0.06 0.10 0.16], ...
-        "XColor",    [0.7 0.75 0.8], ...
-        "YColor",    [0.7 0.75 0.8], ...
-        "GridColor", [0.3 0.35 0.4], ...
-        "GridAlpha", 0.5, ...
+        "Color",     [12, 16, 32]/255, ...
+        "XColor",    [160, 178, 214]/255, ...
+        "YColor",    [160, 178, 214]/255, ...
+        "GridColor", [46, 62, 98]/255, ...
+        "GridAlpha", 0.6, ...
         "Box",       "on");
     ax2.XGrid = "on"; ax2.YGrid = "on";
-    xlabel(ax2, "Period (nm)", "Color", [0.9 0.92 0.95], "FontWeight", "bold");
-    ylabel(ax2, "Radius (nm)", "Color", [0.9 0.92 0.95], "FontWeight", "bold");
-    title(ax2, "Sampling Density & Generated Points", "Color",[0.9 0.92 0.95]);
+    xlabel(ax2, "Period (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
+    ylabel(ax2, "Radius (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
+    title(ax2, "Sampling Density & Generated Points", "Color", [248, 248, 248]/255);
 
+    samplingController = SamplingController(session, fig, h2, ax2);
+    fig.UserData.handles.samplingController = samplingController;
     fig.UserData.handles.samplingAx = ax2;
     fig.UserData.handles.samplingHtml = h2;
     fig.UserData.sampling = struct( ...
@@ -145,6 +170,10 @@ function figOut = assteroid_app(workFolder)
     %  ====================================================================
     tab3 = uitab(tabGroup, "Title", "🧠 3 Training", "BackgroundColor", tabColors);
     [h3, visPanel3] = buildTabLayout(tab3, "training_tab.html");
+    trainController = TrainingController(session, fig, h3, visPanel3);
+    fig.UserData.handles.trainingController = trainController;
+    fig.UserData.handles.trainingHtml = h3;
+    fig.UserData.handles.trainingVisPanel = visPanel3;
     h3.HTMLEventReceivedFcn = @(src, ev) handleTrainingEvent(src, ev, fig, visPanel3);
 
     %% ====================================================================
@@ -154,6 +183,8 @@ function figOut = assteroid_app(workFolder)
     % Full-width HTML: prediction / interpolation only. Rendering lives in
     % Stage 6 (Visualize).
     [h4, ~] = buildImportTabLayout(tab4, "visualization_export_tab.html");
+    predController = PredictionController(session, fig, h4);
+    fig.UserData.handles.predController = predController;
     fig.UserData.handles.visExportHtml = h4;
     fig.UserData.training = struct("isRunning", false, "stopRequested", false);
 
@@ -169,36 +200,31 @@ function figOut = assteroid_app(workFolder)
     %  STAGE 5 — Optimization
     %  ====================================================================
     tab5 = uitab(tabGroup, "Title", "🔍 5 Optimize", "BackgroundColor", tabColors);
-    [h5Left, h5Right, visPanel5] = buildOptimizeTabLayout(tab5, "optimization_tab.html");
+    [h5, visPanel5] = buildOptimizeTabLayout(tab5, "optimization_tab.html");
 
     % Create axes in visualization panel
     ax5opt = uiaxes(visPanel5, ...
         "Units",     "normalized", ...
         "Position",  [0.05 0.05 0.9 0.9], ...
-        "Color",     [0.06 0.10 0.16], ...
-        "XColor",    [0.7 0.75 0.8], ...
-        "YColor",    [0.7 0.75 0.8], ...
-        "GridColor", [0.3 0.35 0.4], ...
-        "GridAlpha", 0.5, ...
+        "Color",     [12, 16, 32]/255, ...
+        "XColor",    [160, 178, 214]/255, ...
+        "YColor",    [160, 178, 214]/255, ...
+        "GridColor", [46, 62, 98]/255, ...
+        "GridAlpha", 0.6, ...
         "Box",       "on");
     ax5opt.XGrid = "on"; ax5opt.YGrid = "on";
-    xlabel(ax5opt, "Period (nm)", "Color", [0.9 0.92 0.95], "FontWeight", "bold");
-    ylabel(ax5opt, "Radius (nm)", "Color", [0.9 0.92 0.95], "FontWeight", "bold");
-    title(ax5opt, "Optimization Landscape", "Color", [0.9 0.92 0.95]);
+    xlabel(ax5opt, "Period (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
+    ylabel(ax5opt, "Radius (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
+    title(ax5opt, "Optimization Landscape", "Color", [248, 248, 248]/255);
 
-    h5Left.HTMLEventReceivedFcn = @(src, ev) handleOptimizeEvent(src, ev, fig, ax5opt);
-    h5Right.HTMLEventReceivedFcn = @(src, ev) handleOptimizeEvent(src, ev, fig, ax5opt);
+    optController = OptimizeController(session, fig, h5, ax5opt);
+    fig.UserData.handles.optimizeController = optController;
+    fig.UserData.handles.optimizeAx = ax5opt;
+    fig.UserData.handles.optimizeHtml = h5;
+    fig.UserData.handles.optimizeLeft = h5;
+    fig.UserData.handles.optimizeRight = h5;
 
-    fig.UserData.handles.optimizeLeft = h5Left;
-    fig.UserData.handles.optimizeRight = h5Right;
-
-    drawnow;
-    sendEventToHTMLSource(h5Left, "PanelMode", struct("mode", "left"));
-    sendEventToHTMLSource(h5Right, "PanelMode", struct("mode", "right"));
-    pause(0.08);
-    drawnow;
-    sendEventToHTMLSource(h5Left, "PanelMode", struct("mode", "left"));
-    sendEventToHTMLSource(h5Right, "PanelMode", struct("mode", "right"));
+    h5.HTMLEventReceivedFcn = @(src, ev) handleOptimizeEvent(src, ev, fig, ax5opt);
 
     %% ====================================================================
     %  STAGE 6 — Visualize (1D spectra / 2D maps / 3D volumes)
@@ -213,13 +239,13 @@ function figOut = assteroid_app(workFolder)
         "Units", "pixels", ...
         "Position", [1, 1, max(10, round(visPanel6.Position(3))), max(10, round(visPanel6.Position(4)))]);
 
-    tab6a = uitab(visTabGroup6, "Title", "1D Spectra", "BackgroundColor", [0.06 0.08 0.10]);
+    tab6a = uitab(visTabGroup6, "Title", "1D Spectra", "BackgroundColor", [12, 16, 32]/255);
     ax6a = createDarkAxes(tab6a, "Wavelength (nm)", "Metric value", "1D Spectra");
 
-    tab6b = uitab(visTabGroup6, "Title", "2D Map", "BackgroundColor", [0.06 0.08 0.10]);
+    tab6b = uitab(visTabGroup6, "Title", "2D Map", "BackgroundColor", [12, 16, 32]/255);
     ax6b = createDarkAxes(tab6b, "Period (nm)", "Radius (nm)", "2D Map");
 
-    tab6c = uitab(visTabGroup6, "Title", "3D Volume", "BackgroundColor", [0.06 0.08 0.10]);
+    tab6c = uitab(visTabGroup6, "Title", "3D Volume", "BackgroundColor", [12, 16, 32]/255);
     viewer6 = viewer3d(tab6c, ...
         "Units", "normalized", ...
         "Position", [0 0 1 1], ...
@@ -237,6 +263,9 @@ function figOut = assteroid_app(workFolder)
     fig.UserData.handles.visualizeAx2D     = ax6b;
     fig.UserData.handles.visualizeViewer   = viewer6;
 
+    visController = VisualizeController(session, fig, h6, ax6a, ax6b, viewer6);
+    fig.UserData.handles.visController     = visController;
+
     % Transient render state (never written to the database)
     fig.UserData.visualize = struct( ...
         "dataPredictor", [], "dataPredictorKey", "", ...
@@ -245,7 +274,7 @@ function figOut = assteroid_app(workFolder)
     h6.HTMLEventReceivedFcn = @(src, ev) handleVisualizeEvent(src, ev, fig);
 
     %% Store all HTML handles -------------------------------------------------
-    fig.UserData.handles.htmlPanels = [h0, h1, h2, h3, h4, h5Left, h5Right, h6];
+    fig.UserData.handles.htmlPanels = [h0, h1, h2, h3, h4, h5, h5, h6];
 
     %% Ensure Stage 0 Database tab is the initially selected tab --------------
     tabGroup.SelectedTab = tab0;
@@ -272,6 +301,11 @@ end
 %  ########################################################################
 function handleDatabaseEvent(src, event, fig)
 %handleDatabaseEvent  Dispatch events from the Database tab HTML panel.
+    if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "dbController") ...
+            && ~isempty(fig.UserData.handles.dbController)
+        fig.UserData.handles.dbController.handleEvent(event.HTMLEventName, event.HTMLEventData);
+        return;
+    end
     name = event.HTMLEventName;
     data = event.HTMLEventData;
     try
@@ -446,17 +480,11 @@ end
 %   DATABASE HELPER FUNCTIONS
 %  ========================================================================
 function loadDbFile(fig, dbPath)
-%loadDbFile  Load a database .mat file into the app state.
-    S = load(dbPath);
+%loadDbFile  Load a database .mat file into the app state using DatabaseEngine.
+    reporter = @(msg, type) sendDbLogMessage(fig, msg, type);
+    [db, info] = DatabaseEngine.loadDatabase(dbPath, reporter);
 
-    if isfield(S, "db") && isstruct(S.db)
-        fig.UserData.db = S.db;
-    elseif isfield(S, "allData")
-        fig.UserData.db = loadLegacyDatabase(dbPath);
-    else
-        error("loadDbFile:InvalidFile", "File does not contain 'db' or 'allData': %s", dbPath);
-    end
-
+    fig.UserData.db = db;
     fig.UserData.dbFile = string(dbPath);
     fig.UserData.dbDirty = false;
 
@@ -486,25 +514,52 @@ function loadDbFile(fig, dbPath)
         fig.UserData.handles.mainTabGroup.SelectedTab = fig.UserData.handles.dbTab;
     end
 
+    if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "dbHtml") ...
+            && isvalid(fig.UserData.handles.dbHtml)
+        sendEventToHTMLSource(fig.UserData.handles.dbHtml, "LoadComplete", ...
+            sprintf("Database loaded: %s (%.2f s, %s)", dbPath, info.elapsed, info.sizeString));
+    end
+
     broadcastDbStatus(fig);
 end
 
 function saveDbFile(fig)
-%saveDbFile  Persist the in-memory db struct to disk.
+%saveDbFile  Persist the in-memory db struct to disk using DatabaseEngine.
     if fig.UserData.dbFile == ""
         error("saveDbFile:NoPath", "No save path set. Use Save As first.");
     end
 
-    % Update timestamp
-    if isfield(fig.UserData.db, "Global")
-        fig.UserData.db.Global.DateModified = string(datetime("now", "Format", "yyyy-MM-dd HH:mm:ss"));
-        fig.UserData.db.Global.WorkDir = fig.UserData.workDir;
+    reporter = @(msg, type) sendDbLogMessage(fig, msg, type);
+    info = DatabaseEngine.saveDatabase(fig.UserData.db, fig.UserData.dbFile, reporter);
+
+    fig.UserData.dbDirty = false;
+
+    if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "dbHtml") ...
+            && isvalid(fig.UserData.handles.dbHtml)
+        sendEventToHTMLSource(fig.UserData.handles.dbHtml, "SaveComplete", ...
+            sprintf("Database saved in %.2f s (Size: %s, %.1f MB/s).", ...
+                info.elapsed, info.sizeString, info.rateMBs));
     end
 
-    db = fig.UserData.db; %#ok<NASGU>
-    save(fig.UserData.dbFile, "db", "-v7.3");
-    fig.UserData.dbDirty = false;
     broadcastDbStatus(fig);
+end
+
+function sendDbLogMessage(fig, msg, ~)
+%sendDbLogMessage  Forward database engine log notifications to UI panels.
+    if ~isvalid(fig), return; end
+    if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "htmlPanels")
+        panels = fig.UserData.handles.htmlPanels;
+        for i = 1:numel(panels)
+            if isvalid(panels(i))
+                try
+                    sendEventToHTMLSource(panels(i), "Progress", ...
+                        struct("message", string(msg), "fraction", []));
+                catch
+                end
+            end
+        end
+    end
+    fprintf("[DatabaseEngine] %s\n", msg);
 end
 
 function markDbDirty(fig)
@@ -1192,16 +1247,16 @@ end
 
 function styleDarkAxes(ax, xLabel, yLabel, titleStr)
 %styleDarkAxes  Apply the app's dark axes styling and labels.
-    ax.Color = [0.06 0.10 0.16];
-    ax.XColor = [0.7 0.75 0.8];
-    ax.YColor = [0.7 0.75 0.8];
-    ax.GridColor = [0.3 0.35 0.4];
-    ax.GridAlpha = 0.5;
+    ax.Color = [12, 16, 32]/255;
+    ax.XColor = [160, 178, 214]/255;
+    ax.YColor = [160, 178, 214]/255;
+    ax.GridColor = [46, 62, 98]/255;
+    ax.GridAlpha = 0.6;
     ax.Box = "on";
     ax.XGrid = "on"; ax.YGrid = "on";
-    xlabel(ax, xLabel, "Color", [0.9 0.92 0.95], "FontWeight", "bold");
-    ylabel(ax, yLabel, "Color", [0.9 0.92 0.95], "FontWeight", "bold");
-    title(ax, titleStr, "Color", [0.9 0.92 0.95]);
+    xlabel(ax, xLabel, "Color", [248, 248, 248]/255, "FontWeight", "bold");
+    ylabel(ax, yLabel, "Color", [248, 248, 248]/255, "FontWeight", "bold");
+    title(ax, titleStr, "Color", [248, 248, 248]/255);
 end
 
 %% ========================================================================
@@ -1221,7 +1276,7 @@ function [h, visPanel] = buildTabLayout(parentTab, htmlFile)
 
     % Visualization panel
     visPanel = uipanel(grid, ...
-        "BackgroundColor", [0.05 0.06 0.08], ...
+        "BackgroundColor", [6, 8, 18]/255, ...
         "BorderType", "none");
     visPanel.Layout.Column = 2;
 end
@@ -1245,35 +1300,36 @@ function [h, visPanel] = buildImportTabLayout(parentTab, htmlFile)
     % Create a visPanel for QA plots — hidden by default.
     % runImportPipeline can show this by adjusting grid.ColumnWidth.
     visPanel = uipanel(parentTab, ...
-        "BackgroundColor", [0.05 0.06 0.08], ...
+        "BackgroundColor", [6, 8, 18]/255, ...
         "BorderType", "none", ...
         "Visible", "off");
 end
 
-function [hLeft, hRight, visPanel] = buildOptimizeTabLayout(parentTab, htmlFile)
-%buildOptimizeTabLayout Create left-settings / center-visualization / right-results split.
-    grid = uigridlayout(parentTab, [1 3]);
-    grid.ColumnWidth = {400, "1x", 430};
+function varargout = buildOptimizeTabLayout(parentTab, htmlFile)
+%buildOptimizeTabLayout Create unified left-settings/results panel and right-visualization axes.
+    grid = uigridlayout(parentTab, [1 2]);
+    grid.ColumnWidth = {480, "1x"};
     grid.Padding = [0 0 0 0];
     grid.ColumnSpacing = 0;
     grid.BackgroundColor = parentTab.BackgroundColor;
 
     htmlPath = fullfile(fileparts(mfilename("fullpath")), htmlFile);
 
-    hLeft = uihtml(grid);
-    hLeft.Layout.Column = 1;
-    hLeft.HTMLSource = htmlPath;
-    hLeft.Data = struct("mode", "left");
+    hUnified = uihtml(grid);
+    hUnified.Layout.Column = 1;
+    hUnified.HTMLSource = htmlPath;
+    hUnified.Data = struct("mode", "unified");
 
     visPanel = uipanel(grid, ...
-        "BackgroundColor", [0.05 0.06 0.08], ...
+        "BackgroundColor", [6, 8, 18]/255, ...
         "BorderType", "none");
     visPanel.Layout.Column = 2;
 
-    hRight = uihtml(grid);
-    hRight.Layout.Column = 3;
-    hRight.HTMLSource = htmlPath;
-    hRight.Data = struct("mode", "right");
+    if nargout >= 3
+        varargout = {hUnified, hUnified, visPanel};
+    else
+        varargout = {hUnified, visPanel};
+    end
 end
 
 %% ========================================================================
@@ -1319,6 +1375,9 @@ function panels = getOptimizePanels(fig, src)
     end
     if isfield(fig.UserData, "handles")
         h = fig.UserData.handles;
+        if isfield(h, "optimizeHtml") && ~isempty(h.optimizeHtml) && isvalid(h.optimizeHtml)
+            candidates(end+1) = h.optimizeHtml; %#ok<AGROW>
+        end
         if isfield(h, "optimizeLeft") && ~isempty(h.optimizeLeft) && isvalid(h.optimizeLeft)
             candidates(end+1) = h.optimizeLeft; %#ok<AGROW>
         end
@@ -1544,6 +1603,11 @@ end
 %   STAGE 1 — IMPORT HANDLERS
 %  ########################################################################
 function handleImportEvent(src, event, fig, visPanel)
+    if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "importController") ...
+            && ~isempty(fig.UserData.handles.importController)
+        fig.UserData.handles.importController.handleEvent(event.HTMLEventName, event.HTMLEventData);
+        return;
+    end
     name = event.HTMLEventName;
     data = event.HTMLEventData;
     try
@@ -1829,6 +1893,11 @@ end
 %   STAGE 2 — ADAPTIVE SAMPLING HANDLERS
 %  ########################################################################
 function handleSamplingEvent(src, event, fig)
+    if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "samplingController") ...
+            && ~isempty(fig.UserData.handles.samplingController)
+        fig.UserData.handles.samplingController.handleEvent(event.HTMLEventName, event.HTMLEventData);
+        return;
+    end
     name = event.HTMLEventName;
     data = event.HTMLEventData;
     try
@@ -2195,7 +2264,7 @@ function highlightNanPoints_app(src, fig, eventData)
             "DisplayName", sprintf("Failed/NaN Points (%d)", nanRes.count), ...
             "Tag", "NAN_HIGHLIGHT_POINTS");
         uistack(hScat, "top");
-        legend(ax, "show", "TextColor", [0.8 0.85 0.9], "Location", "northeast");
+        legend(ax, "show", "TextColor", [160, 178, 214]/255, "Location", "northeast");
     catch ME
         fprintf("[Sampling] Highlight NaN points error: %s\n", ME.message);
     end
@@ -2207,7 +2276,7 @@ function resetSampling(src, fig)
         "result",[], "dataLoaded",false, "samplingComplete",false);
     ax = fig.UserData.handles.samplingAx;
     cla(ax);
-    title(ax, "Sampling Density & Generated Points", "Color", [0.9 0.92 0.95]);
+    title(ax, "Sampling Density & Generated Points", "Color", [248, 248, 248]/255);
     sendEventToHTMLSource(src, "StatusUpdate", "Reset complete");
 end
 
@@ -2289,8 +2358,8 @@ function cfg = buildSamplingCfgFromEvent(ev, fig)
     cfg.yAxisParam     = yParam;
     cfg.showOriginal   = gf("showOriginal",true);
     cfg.showGenerated  = gf("showGenerated",true);
-    cfg.originalColor  = gs("originalColor","#ef4444");
-    cfg.generatedColor = gs("generatedColor","#10b981");
+    cfg.originalColor  = gs("originalColor","#ebb34f");
+    cfg.generatedColor = gs("generatedColor","#48b2ac");
     cfg.pointSize      = gf("pointSize",30);
     cfg.colormap       = gs("colormap","custom");
     cfg.useManualRange = isfield(ev,"autoDetectRanges") && ~ev.autoDetectRanges;
@@ -2319,7 +2388,7 @@ function updateSamplingViz(fig, cfg, samples, density, result)
         cmap = getappdata(fig,"CustomColormap");
         if isempty(cmap), cmap = parula(256); end
         colormap(ax,cmap);
-        cb = colorbar(ax); cb.Color = [0.7 0.75 0.8];
+        cb = colorbar(ax); cb.Color = [160, 178, 214]/255;
         clim(ax, [0 1]);
     else
         view(ax,2);
@@ -2371,6 +2440,13 @@ end
 function handleTrainingEvent(src, event, fig, visPanel)
     name = event.HTMLEventName;
     data = event.HTMLEventData;
+
+    if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "trainingController") ...
+            && ~isempty(fig.UserData.handles.trainingController)
+        fig.UserData.handles.trainingController.handleEvent(name, data);
+        return;
+    end
+
     try
         switch name
             case "RunTraining"
@@ -2728,6 +2804,13 @@ end
 function handleOptimizeEvent(src, event, fig, ax)
     name = event.HTMLEventName;
     data = event.HTMLEventData;
+
+    if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "optimizeController") ...
+            && ~isempty(fig.UserData.handles.optimizeController)
+        fig.UserData.handles.optimizeController.handleEvent(name, data);
+        return;
+    end
+
     try
         switch name
             case "RunOptimize"
@@ -3265,15 +3348,7 @@ function runOptimizePipeline(src, d, fig, ax)
 
     results = runLocalizationWorkflow(cfg, reporter);
 
-    % Shut down the process-based parallel pool to free worker processes
-    try
-        pool = gcp('nocreate');
-        if ~isempty(pool)
-            delete(pool);
-            fprintf("[Optimize] Parallel pool shut down.\n");
-        end
-    catch
-    end
+    % Retain process-based pool across session runs (torn down cleanly on app exit via onAppClose)
 
     % Store results in app state for later export
     if ~isfield(fig.UserData, "optimize")
@@ -4222,6 +4297,11 @@ end
 %   STAGE 4 — PREDICTION & VISUALIZATION HANDLERS
 %  ########################################################################
 function handleVisExportEvent(src, event, fig)
+    if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "predController") ...
+            && ~isempty(fig.UserData.handles.predController)
+        fig.UserData.handles.predController.handleEvent(event.HTMLEventName, event.HTMLEventData);
+        return;
+    end
     name = event.HTMLEventName;
     data = event.HTMLEventData;
     try
@@ -4746,6 +4826,11 @@ function handleVisualizeEvent(src, event, fig)
 %handleVisualizeEvent  Dispatch events from the Stage 6 Visualize panel.
 %   All renders are transient: nothing produced here is written to the
 %   database.
+    if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "visController") ...
+            && ~isempty(fig.UserData.handles.visController)
+        fig.UserData.handles.visController.handleEvent(event.HTMLEventName, event.HTMLEventData);
+        return;
+    end
     name = event.HTMLEventName;
     data = event.HTMLEventData;
     try
