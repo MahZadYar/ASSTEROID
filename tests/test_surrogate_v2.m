@@ -57,9 +57,26 @@ failures = check(failures, max(abs(mean(ds.YTrain))) < 1e-8 && max(abs(std(ds.YT
     'train targets z-scored');
 tt = ds.targetTransform;
 Yphys = ds.denormalize(ds.YTest);
-Yref = expm1(ds.YTest .* tt.Std + tt.Mean);
-relErr = max(abs(Yphys - max(Yref, 0)) ./ max(1, abs(Yref)), [], 'all');
-failures = check(failures, relErr < 1e-12, 'denormalize inverts log1p + z-score', sprintf('(%.1e)', relErr));
+Ztest = ds.YTest .* tt.Std + tt.Mean;
+Yref = zeros(size(Ztest));
+for c = 1:size(Ztest, 2)
+    useLog = isfield(tt, 'targetLogTransform') && numel(tt.targetLogTransform) >= c && tt.targetLogTransform(c);
+    baseVal = 10;
+    if isfield(tt, 'targetLogBase') && numel(tt.targetLogBase) >= c
+        baseVal = tt.targetLogBase(c);
+    end
+    if useLog
+        if baseVal == 10
+            Yref(:, c) = 10.^(max(Ztest(:, c), 0)) - 1;
+        else
+            Yref(:, c) = expm1(max(Ztest(:, c), 0));
+        end
+    else
+        Yref(:, c) = max(Ztest(:, c), 0);
+    end
+end
+relErr = max(abs(Yphys - Yref) ./ max(1, abs(Yref)), [], 'all');
+failures = check(failures, relErr < 1e-12, 'denormalize inverts target-specific scaling', sprintf('(%.1e)', relErr));
 failures = check(failures, all(Yphys(:) >= 0), 'reconstructed targets non-negative');
 
 %% 3. Legacy model
@@ -176,6 +193,20 @@ for t = 1:numel(m2.targetNames)
     d2 = abs(diff(y, 2)); rngY = max(y) - min(y);
     fprintf('  %-12s max|d2y|/range = %.2e on 0.1 nm grid\n', m2.targetNames{t}, max(d2) / max(rngY, eps));
 end
+
+%% 8. Multi-tier performance evaluation metrics
+fprintf('\n[8] Multi-tier evaluation metrics\n');
+yTrueMock = Yphys(1:min(500, size(Yphys, 1)), :);
+yPredMock = yTrueMock .* (1 + 0.05 * randn(size(yTrueMock)));
+xMock = ds.XTest(1:min(500, size(ds.XTest, 1)), 1:2);
+mockOptima = table([650; 800], [300; 450], [150; 225], ...
+    'VariableNames', {'period', 'diameter', 'radius'});
+mockDs = struct('XTest', xMock, 'YTest', yTrueMock, 'YPred', yPredMock, 'targetNames', ds.targetNames);
+rep = computeSurrogateEvaluationMetrics([], mockDs, mockOptima);
+failures = check(failures, isfield(rep, 'globalBiased') && isfield(rep, 'globalUnbiased') && isfield(rep, 'roiCombined'), ...
+    'report contains globalBiased, globalUnbiased, and roiCombined tiers');
+failures = check(failures, isfield(rep, 'latexSummary') && strlength(rep.latexSummary) > 50, ...
+    'report contains generated latexSummary');
 
 %% Summary
 fprintf('\n=== %d failure(s) ===\n', numel(failures));

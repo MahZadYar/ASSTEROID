@@ -80,7 +80,16 @@ for tf = targetFields
 end
 
 targetNames = targetFields;
-targetLogMask = repmat(opts.TargetLogTransform, 1, numel(targetFields));
+% Target-specific log transform: near-field and intensity metrics use log10(1+y),
+% while bounded energy ratios (e.g. Absorptance) remain on their linear physical scale.
+logFieldNames = ["EF_vol", "EF_surf", "M_vol", "M_surf", "intW_vol", "intW_t"];
+if islogical(opts.TargetLogTransform) && isscalar(opts.TargetLogTransform) && opts.TargetLogTransform
+    targetLogMask = ismember(string(targetFields), logFieldNames);
+elseif islogical(opts.TargetLogTransform) && isscalar(opts.TargetLogTransform) && ~opts.TargetLogTransform
+    targetLogMask = false(1, numel(targetFields));
+else
+    targetLogMask = logical(opts.TargetLogTransform);
+end
 requiredFields = [{'lambda'}, targetFields];
 for f = requiredFields
     if ~isfield(allData, f{1})
@@ -268,40 +277,17 @@ for idx = 1:numRows
     selectedIdx = cellfun(@(name) find(strcmp(allTargetFieldOrder, name), 1, 'first'), targetFields);
     targetMatrix = metricsAtRowValid(:, selectedIdx);
     
-    % Apply log1p transformation to specified targets
+    % Apply log transformation to specified targets (using decimal log: log10(1 + y))
     if any(targetLogMask)
         logInput = targetMatrix(:, targetLogMask);
         
-        % Check for values that would cause -Inf after log1p
-        if any(logInput(:) <= -1)
-            tooSmallMask = logInput <= -1;
-            [badRows, badCols] = find(tooSmallMask);
-            numBad = numel(badRows);
-            
-            % Show diagnostics
-            fprintf('  WARNING: Found %d target values ≤ -1 (would cause -Inf)\n', numBad);
-            for i = 1:min(3, numBad)
-                targetIdx = find(targetLogMask);
-                actualCol = targetIdx(badCols(i));
-                if actualCol <= numel(targetFields)
-                    colName = targetFields{actualCol};
-                else
-                    colName = sprintf('target_%d', actualCol);
-                end
-                fprintf('    Sample %d, %s: value = %.6e\n', badRows(i), colName, logInput(badRows(i), badCols(i)));
-            end
-            if numBad > 3
-                fprintf('    ... and %d more problematic values\n', numBad - 3);
-            end
-            
-            % Safety clamp with larger epsilon
-            safetyEps = 100 * eps(1);  % More conservative clamping
-            fprintf('    Clamping to -1 + %.3e\n', safetyEps);
-            logInput = max(logInput, -1 + safetyEps);
+        % Enhancement and intensity metrics are physically non-negative
+        if any(logInput(:) < 0)
+            logInput = max(logInput, 0);
         end
         
-        % Apply log1p transformation
-        targetMatrix(:, targetLogMask) = log1p(logInput);
+        % Apply decimal log10(1 + y) transformation
+        targetMatrix(:, targetLogMask) = log10(1 + logInput);
         
         % Validate no -Inf or NaN after transformation
         transformedValid = targetMatrix(:, targetLogMask);
@@ -311,7 +297,7 @@ for idx = 1:numRows
             numInf = sum(infMask(:));
             numNaN = sum(nanMask(:));
             error('prepare_training_dataset:TargetTransformFailed', ...
-                'After log1p: found %d -Inf and %d NaN values in targets.', numInf, numNaN);
+                'After log10(1+y): found %d -Inf and %d NaN values in targets.', numInf, numNaN);
         end
     end
     
@@ -529,7 +515,7 @@ dataset.targetFieldMap = targetFields;
 dataset.scale = scale;
 targetLogActive = any(targetLogMask);
 dataset.normalize = @(Xraw) normalizeFeatures(Xraw, featureCenter, featureScale, featureLogMask);
-dataset.denormalize = @(Ytrans) denormalizeModelTargets(Ytrans, targetLogActive);
+dataset.denormalize = @(Ytrans) denormalizeModelTargets(Ytrans, targetLogMask, [], [], 10);
 dataset.transformFeatures = @(Xraw) transformFeatures(Xraw, featureLogMask);
 dataset.inputCenter = featureCenter;
 dataset.inputScale = featureScale;
@@ -568,16 +554,21 @@ schema.FeatureNames = names;
 schema.FeatureMean = mu;
 schema.FeatureStd = sd;
 
-% Targets are already log1p-compressed (if enabled); z-score each channel.
+% Targets: log10-compressed for near-field factors, linear for bounded ratios; z-score each channel.
 muZ = mean(dataset.YTrain, 1);
 sdZ = std(dataset.YTrain, 0, 1);
 sdZ(~isfinite(sdZ) | sdZ < 1e-12) = 1;
-tt = struct('Name', "log1p_zscore", 'Log1p', targetLogActive, 'Mean', muZ, 'Std', sdZ);
+tt = struct('Name', "target_specific_zscore", ...
+            'LogMask', dataset.targetLogMask, ...
+            'LogBase', 10, ...
+            'Log1p', dataset.targetLogMask, ...  % backward compat
+            'Mean', muZ, ...
+            'Std', sdZ);
 dataset.YTrain      = (dataset.YTrain - muZ) ./ sdZ;
 dataset.YValidation = (dataset.YValidation - muZ) ./ sdZ;
 dataset.YTest       = (dataset.YTest - muZ) ./ sdZ;
 
-fprintf('  v2 target standardisation (log1p space): mean = [%s], std = [%s]\n', ...
+fprintf('  v2 target standardisation (target-specific log10/linear space): mean = [%s], std = [%s]\n', ...
     strjoin(compose('%.3f', muZ), ', '), strjoin(compose('%.3f', sdZ), ', '));
 
 dataset.featureSchema = schema;
@@ -585,7 +576,7 @@ dataset.targetTransform = tt;
 dataset.baseFeatureNames = cellstr(schema.BaseInputs);
 dataset.featureNames = cellstr(names);
 dataset.normalize = @(Xraw) standardizeModelFeatures(Xraw, schema);
-dataset.denormalize = @(Z) denormalizeModelTargets(Z, targetLogActive, muZ, sdZ);
+dataset.denormalize = @(Z) denormalizeModelTargets(Z, dataset.targetLogMask, muZ, sdZ, 10);
 dataset.transformFeatures = @(Xraw) buildPhysicsFeatures(Xraw, schema);
 dataset.inputCenter = mu;
 dataset.inputScale = sd;

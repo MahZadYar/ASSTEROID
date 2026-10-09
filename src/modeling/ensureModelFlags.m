@@ -55,11 +55,23 @@ model.inputSize = numel(schema.FeatureMean);
 model.featureNames = cellstr(string(schema.FeatureNames));
 model.FeatureLogTransform = true;
 model.IncludeRatios = false;          % ratios are built inside buildPhysicsFeatures
-model.TargetLogTransform = logical(tt.Log1p);
+
+logMask = logical(tt.Log1p);
+if isfield(tt, "LogMask") && ~isempty(tt.LogMask)
+    logMask = logical(tt.LogMask);
+end
+logBase = 10;
+if isfield(tt, "LogBase") && ~isempty(tt.LogBase)
+    logBase = tt.LogBase;
+elseif isscalar(logMask) && logMask
+    logBase = exp(1); % legacy default
+end
+
+model.TargetLogTransform = logMask;
 model.inputPreprocessing = "physics_v2";
 model.normalizeIncludesRatios = false;
 model.normalize = @(Xraw) standardizeModelFeatures(Xraw, schema);
-model.denormalize = @(Z) denormalizeModelTargets(Z, logical(tt.Log1p), tt.Mean, tt.Std);
+model.denormalize = @(Z) denormalizeModelTargets(Z, logMask, tt.Mean, tt.Std, logBase);
 model.flags = struct( ...
     "FeatureSchema", "v2_physics", ...
     "FeatureLogTransform", true, ...

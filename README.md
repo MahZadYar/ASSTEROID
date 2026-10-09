@@ -3,7 +3,7 @@
 **Adaptive Sampling, Surrogate Training, Exploration and Refinement for Optimal Inverse Design**
 
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2023b%2B%20%7C%20R2026a-blue.svg)](https://www.mathworks.com/products/matlab.html)
-[![Version](https://img.shields.io/badge/Version-5.0-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
+[![Version](https://img.shields.io/badge/Version-5.1-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.1021%2Facsnano.XXXXXXX-orange.svg)](#citation)
 [![Zenodo](https://img.shields.io/badge/Data-10.5281%2Fzenodo.XXXXXXX-blue.svg)](#dataset--trained-models)
@@ -18,7 +18,7 @@ While ASSTEROID is demonstrated on the rational geometric design of Nanoparticle
 1. 💾 **Master Database Management**: Programmatic state tracking, interactive data tree inspection, and metadata archiving.
 2. 📥 **Automated Data Ingestion & QA**: Parsing multi-parameter solver outputs into high-performance Structure-of-Arrays (SoA) datasets with electromagnetic passivity verification.
 3. 🎯 **Curvature- & Density-Aware Adaptive Sampling**: Directing subsequent simulation batches toward informative, high-enhancement modal regions using 9-point discrete Laplacian curvature operators and dual-tier minimum-distance rejection sampling.
-4. 🧠 **Physics-Informed Deep Residual Surrogates**: Training multi-task ResNets featuring explicit material dispersion ($n, k$), geometric scale invariance, and multi-decade $\text{log1p}$ target compression.
+4. 🧠 **Physics-Informed Deep Residual Surrogates**: Training multi-task ResNets featuring explicit material dispersion ($n, k$), geometric scale invariance, target-specific scaling (linear for $A_L$, decadic $\log_{10}(1+y)$ for near-field Raman proxies), Layer Normalization, and a three-tier performance evaluation suite (Empirical, Inverse Density Weighted, and Modal Optima RoI).
 5. 🔮 **Dense Landscape Exploration & Spectral Integration**: Ultra-dense sub-nanometer grid inference coupled with Modified Akima piecewise cubic Hermite interpolation (`makima`) for continuous figures of merit.
 6. 🔍 **Topology-Aware Multimodal Optimization**: Detecting discrete stationary points ($\nabla F \approx 0$, $\nabla^2 F < 0$), interactive seed curation/tagging, and continuous constrained gradient refinement via `fmincon` (SQP/Interior-Point) using analytical automatic differentiation (`dlgradient`).
 7. 🌌 **Multi-Dimensional 3D Visualization & Export**: Rendering 1D spectra, 2D scattered/contour maps, 3D volume slices, and exporting to HDF5, ONNX, and relational MAT tables.
@@ -82,7 +82,7 @@ flowchart LR
     end
 
     subgraph S3 ["🧠 Stage 3: Surrogate Learning"]
-        SoA --> Feat["Physics Feature Engine<br/>8-In / 3-Out (log1p)"]
+        SoA --> Feat["Physics Feature Engine<br/>8-In / 3-Head (Target-Specific)"]
         Feat --> ResNet["Deep Residual ResNet<br/>Adam + Checkpointing"]
         ResNet --> NetFile[("Trained Model<br/>sers_dnn_model.mat")]
     end
@@ -158,7 +158,7 @@ flowchart TD
 #### 🧠 Stage 3: Physics-Informed Deep Surrogate Training
 * **CLI Entry Point:** [`scripts/pipeline/run_dnn_pipeline.m`](scripts/pipeline/run_dnn_pipeline.m)
 * **Core Orchestrator:** [`src/orchestration/runTrainingWorkflow.m`](src/orchestration/runTrainingWorkflow.m)
-* **Function:** Trains an 8-input, 3-head residual neural network (ResNet) mapping geometric scale ($\log P, \log r, \log \lambda$), complex experimental gold dispersion ($n(\lambda), k(\lambda)$), and electrodynamic ratios ($P/\lambda, r/\lambda, P/r$) to optical absorbance ($A$), cell-normalized volume enhancement ($\text{EF}_V^{\text{cell}}$), and surface enhancement ($\text{EF}_S^{\text{cell}}$). Employs multi-decade $\text{log1p}$ target compression, GELU activations, batch normalization, and Adam optimization with automated checkpointing.
+* **Function:** Trains an 8-input, 3-head residual neural network (ResNet) mapping geometric scale ($\log P, \log r, \log \lambda$), complex experimental gold dispersion ($n(\lambda), k(\lambda)$), and electrodynamic ratios ($P/\lambda, r/\lambda, g_{\text{norm}}$) to optical absorbance ($A$), cell-normalized volume enhancement ($\text{EF}_V^{\text{cell}}$), and surface enhancement ($\text{EF}_S^{\text{cell}}$). Employs target-specific standardization (linear for $A$, decadic $\log_{10}(1+y)$ for near-field enhancement factors), Layer Normalization, GELU activations, and Adam optimization with automated checkpointing. Computes a three-tier performance audit (Empirical Holdout, Inverse Density Weighted global design-space expectation, and Resonance Optima Regions of Interest) with automated LaTeX table generation.
 
 #### 🔮 Stage 4: Dense Landscape Prediction & Spectral Efficacy
 * **CLI Entry Point:** [`scripts/pipeline/run_prediction_vis.m`](scripts/pipeline/run_prediction_vis.m)
@@ -206,7 +206,7 @@ classDiagram
         +struct Interp (Uniform Interpolant Grid)
         +struct Pred (Dense Surrogate Predictions)
         +struct Optima (Converged Mode Optima)
-        +struct Model (Trained ResNet &amp; Metadata)
+        +struct Model (Trained ResNet, Metadata &amp; PerformanceReport)
         +struct RI (Au Optical Dispersion)
     }
     class SoABranch {

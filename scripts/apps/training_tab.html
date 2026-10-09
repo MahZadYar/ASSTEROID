@@ -615,7 +615,82 @@ function toggleSection(el) {
     content.style.display = content.style.display === "none" ? "block" : "none";
 }
 
+var currentLatexSummary = "";
 
+function renderPerformanceReport(data) {
+    if (!data || !data.hasReport) return;
+    var card = document.getElementById("perfReportCard");
+    if (card) card.style.display = "block";
+    
+    var tbody = document.getElementById("perfReportBody");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+    
+    currentLatexSummary = data.latexSummary || "";
+    
+    var targets = data.targets || [];
+    for (var i = 0; i < targets.length; i++) {
+        var t = targets[i];
+        var tr = document.createElement("tr");
+        tr.style.borderBottom = "1px solid var(--border)";
+        
+        var roiNRMSEStr = (t.roiNRMSE === null || t.roiNRMSE === undefined || isNaN(t.roiNRMSE)) ? "—" : t.roiNRMSE.toFixed(2) + "%";
+        var roiR2Str = (t.roiR2 === null || t.roiR2 === undefined || isNaN(t.roiR2)) ? "—" : t.roiR2.toFixed(4);
+        
+        tr.innerHTML = 
+            "<td style='padding:6px 8px; font-weight:600; color:var(--text-primary);'>" + (t.name || "") + "</td>" +
+            "<td style='padding:6px 8px;'>" + Number(t.holdoutNRMSE || 0).toFixed(2) + "%</td>" +
+            "<td style='padding:6px 8px;'>" + Number(t.holdoutNRMSLE || 0).toFixed(2) + "%</td>" +
+            "<td style='padding:6px 8px; font-weight:600; color:var(--accent);'>" + Number(t.holdoutR2 || 0).toFixed(4) + "</td>" +
+            "<td style='padding:6px 8px;'>" + Number(t.idwNRMSE || 0).toFixed(2) + "%</td>" +
+            "<td style='padding:6px 8px;'>" + Number(t.idwR2 || 0).toFixed(4) + "</td>" +
+            "<td style='padding:6px 8px; color:var(--success); font-weight:600;'>" + roiNRMSEStr + "</td>" +
+            "<td style='padding:6px 8px; color:var(--success); font-weight:600;'>" + roiR2Str + "</td>";
+        tbody.appendChild(tr);
+    }
+    
+    var meta = document.getElementById("perfReportMeta");
+    if (meta) {
+        meta.textContent = "Evaluated on " + (data.numTestSamples || 0) + " test holdout points (" + (data.numRoiSamples || 0) + " within modal optima basins).";
+    }
+}
+
+function evaluateMetricsNow() {
+    appendLog("Requesting three-tier generalization metrics evaluation...");
+    if (window.sendToMATLAB) {
+        window.sendToMATLAB("EvaluateModelPerformance", {});
+    } else if (window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("EvaluateModelPerformance", {});
+    }
+}
+
+function copyLatexTable() {
+    if (!currentLatexSummary) {
+        if (window.showToast) window.showToast("No LaTeX summary available yet. Train or re-evaluate first.", "warning");
+        else alert("No LaTeX summary available yet.");
+        return;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(currentLatexSummary).then(function() {
+            if (window.showToast) window.showToast("LaTeX table copied to clipboard!", "success");
+            var fb = document.getElementById("copyFeedback");
+            if (fb) { fb.style.display = "block"; setTimeout(function() { fb.style.display = "none"; }, 3000); }
+        }).catch(function(err) {
+            console.error("Clipboard copy failed: ", err);
+        });
+    }
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    if (window.AssteroidBridge && window.AssteroidBridge.init) {
+        window.AssteroidBridge.init("Stage3_Training");
+    }
+    if (window.onMATLABEvent) {
+        window.onMATLABEvent("TrainingPerformanceReport", function(payload) {
+            renderPerformanceReport(payload);
+        });
+    }
+});
 </script>
 </head>
 <body>
@@ -1230,6 +1305,47 @@ function toggleSection(el) {
             <div id="progressBar" class="progress-bar"></div>
         </div>
         <pre id="progressLog" style="margin-top:6px; min-height:40px;"></pre>
+    </div>
+
+    <!-- Generalization & Performance Report -->
+    <div class="section" id="perfReportCard" style="display:none; margin-top:10px;">
+        <div class="section-title open" onclick="toggleSection(this)">
+            📊 Generalization & Performance Report (Three-Tier)
+        </div>
+        <div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;">
+                Evaluates surrogate fidelity across: <strong>Tier 1</strong> (Holdout Test Split), <strong>Tier 2</strong> (Unbiased Inverse Density Weighting, IDW), and <strong>Tier 3</strong> (Modal Optima Region of Interest, RoI).
+            </div>
+            
+            <div style="overflow-x:auto;">
+                <table id="perfReportTable" style="width:100%; border-collapse:collapse; font-size:11px; text-align:left;">
+                    <thead>
+                        <tr style="border-bottom:1px solid var(--border); background:var(--bg-tertiary);">
+                            <th style="padding:6px 8px;">Target</th>
+                            <th style="padding:6px 8px;" title="Test Holdout NRMSE">Holdout NRMSE</th>
+                            <th style="padding:6px 8px;" title="Test Holdout N-RMSLE">Holdout N-RMSLE</th>
+                            <th style="padding:6px 8px;" title="Test Holdout R^2">Holdout R²</th>
+                            <th style="padding:6px 8px;" title="Inverse Density Weighted NRMSE">IDW NRMSE</th>
+                            <th style="padding:6px 8px;" title="Inverse Density Weighted R^2">IDW R²</th>
+                            <th style="padding:6px 8px;" title="Modal Optima Region of Interest NRMSE">RoI NRMSE</th>
+                            <th style="padding:6px 8px;" title="Modal Optima Region of Interest R^2">RoI R²</th>
+                        </tr>
+                    </thead>
+                    <tbody id="perfReportBody">
+                        <!-- Populated dynamically -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+                <span id="perfReportMeta" style="font-size:10px; color:var(--text-secondary);"></span>
+                <div style="display:flex; gap:6px;">
+                    <button type="button" class="btn-secondary" onclick="evaluateMetricsNow()" style="padding:4px 8px; font-size:11px;">🔄 Re-evaluate</button>
+                    <button type="button" class="btn-secondary" id="btnCopyLatex" onclick="copyLatexTable()" style="padding:4px 8px; font-size:11px;">📋 Copy LaTeX</button>
+                </div>
+            </div>
+            <div id="copyFeedback" style="display:none; font-size:10px; color:var(--success); margin-top:4px; text-align:right;">✓ LaTeX table copied to clipboard!</div>
+        </div>
     </div>
 </body>
 </html>

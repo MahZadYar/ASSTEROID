@@ -74,7 +74,7 @@ end
 % ill-defined (standardised targets cross zero), so RMSE is monitored.
 trainMetricsList = "rmse";
 % Evaluation metrics, computed in physical units after denormalisation.
-metricsList = ["rmse", "mae", "rsquared", "mape"];
+metricsList = ["rmse", "mae", "nrmse", "nrmsle", "rsquared", "mape"];
 opts = struct();
 opts.MaxEpochs = options.MaxEpochs;
 opts.MiniBatchSize = options.MiniBatchSize;
@@ -1022,6 +1022,17 @@ for mIdx = 1:numel(metricsList)
         case "mse"
             diffValues = YPred - YTrue;
             values = mean(diffValues.^2, 1, 'omitnan');
+        case "nrmse"
+            diffValues = YPred - YTrue;
+            rmseVals = sqrt(mean(diffValues.^2, 1, 'omitnan'));
+            yRange = max(YTrue, [], 1, 'omitnan') - min(YTrue, [], 1, 'omitnan');
+            values = (rmseVals ./ max(yRange, eps)) * 100;
+        case "nrmsle"
+            logPred = log10(max(YPred, 0) + 1);
+            logTrue = log10(max(YTrue, 0) + 1);
+            rmsleVals = sqrt(mean((logPred - logTrue).^2, 1, 'omitnan'));
+            logRange = max(logTrue, [], 1, 'omitnan') - min(logTrue, [], 1, 'omitnan');
+            values = (rmsleVals ./ max(logRange, eps)) * 100;
         case "rsquared"
             meanTrue = mean(YTrue, 1, 'omitnan');
             ssTot = sum((YTrue - meanTrue).^2, 1, 'omitnan');
@@ -1106,6 +1117,10 @@ switch metricKey
         label = 'MAE';
     case "mse"
         label = 'MSE';
+    case "nrmse"
+        label = 'NRMSE (%)';
+    case "nrmsle"
+        label = 'N-RMSLE (%)';
     case "rsquared"
         label = 'R^2';
     case "mape"

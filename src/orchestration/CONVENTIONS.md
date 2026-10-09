@@ -153,3 +153,25 @@ All HTML panels use the AuroraAustralis-derived colour theme (`--accent: #00e8ff
 
 Standalone launchers (`run_prediction_vis_app.m`, `run_adaptive_sampling_app.m`)
 are kept for backward compatibility but include deprecation notices.
+
+---
+
+## Surrogate Model Evaluation & Reporting Conventions
+
+### Target-Specific Scaling & Invertibility
+- **`prepare_training_dataset.m`**: Applies physics-aware target scaling via the `tt` struct:
+  - Far-field absorptance (`Absorptance`): Preserved linearly (`tt.targetLogTransform(1) = false`).
+  - Near-field Raman proxies (`EF_vol`, `EF_surf`): Decadic pseudo-log compression $\log_{10}(1+y)$ (`tt.targetLogTransform(2:3) = true`, `tt.targetLogBase(2:3) = 10`).
+- **`denormalizeModelTargets.m`**: Handles channel-specific inversion and enforces strict physical non-negativity ($\widehat{Y} \ge 0$) via clamping before decadic power expansion.
+
+### Multi-Tier Performance Framework (`computeSurrogateEvaluationMetrics.m`)
+Because adaptive sampling concentrates observations in high-gradient resonant regimes, surrogate accuracy is audited across three complementary tiers:
+1. **Tier 1: Empirical Holdout (Biased Test Split)**: Evaluates standard holdout generalization ($R^2$, NRMSE normalized by $\bar{y}_{\text{test}}$, and N-RMSLE normalized by $\ln(1 + \bar{y}_{\text{test}})$).
+2. **Tier 2: Inverse Density Weighting (IDW Global Expectation)**: Corrects for adaptive sampling concentration using $k$-nearest-neighbor density weights $w_i = 1/\rho(P_i, D_i)$ in normalized geometric space, recovering the unbiased design-space expectation without a dense uniform simulation grid.
+3. **Tier 3: Region of Interest (RoI) Local Optima**: Audits predictive fidelity strictly within parametric neighborhoods ($R_{\text{roi}} = 20\,\text{nm}$) bounding verified modal optima (`db.Optima`).
+
+### Database Persistence & UI Integration
+- **`db.Model.PerformanceReport`**: Persists the structured evaluation results, per-tier metrics, sample counts, and auto-generated publication-ready LaTeX table code.
+- **`runTrainingWorkflow.m`**: Automatically invokes `computeSurrogateEvaluationMetrics` upon training completion, populating both `results.performanceReport` and `db.Model.PerformanceReport`.
+- **Stage 3 Training Tab (`training_tab.html`)**: Features an interactive Performance Audit Card with multi-tier display, re-evaluation trigger, and one-click LaTeX table clipboard copy.
+

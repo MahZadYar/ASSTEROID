@@ -305,6 +305,20 @@ end
             db.Model.Performance = dbPerf;
         end
 
+        % Three-tier comprehensive evaluation report (Holdout, IDW Unbiased, RoI Optima)
+        dbOptima = [];
+        if isfield(db, "Optima") && isstruct(db.Optima)
+            dbOptima = db.Optima;
+        end
+        try
+            perfReport = computeSurrogateEvaluationMetrics(model, dataset, dbOptima, Verbose=false);
+            db.Model.PerformanceReport = perfReport;
+            model.performanceReport = perfReport;
+        catch ME_perf
+            reporter.warn(sprintf("Three-tier evaluation computation: %s", ME_perf.message));
+            perfReport = struct();
+        end
+
         % Training splits (indices)
         if isfield(dataset, 'trainIdx')
             db.Model.Splits = struct( ...
@@ -315,6 +329,14 @@ end
 
         save(dbFile, "db", "-v7.3"); %#ok<NASGU>
         reporter.complete("PackDB", sprintf("Saved db.Model to %s", dbFile));
+    else
+        % If databaseFile wasn't specified, still compute performance report for results
+        try
+            perfReport = computeSurrogateEvaluationMetrics(model, dataset, [], Verbose=false);
+            model.performanceReport = perfReport;
+        catch
+            perfReport = struct();
+        end
     end
 
     %% Assemble results
@@ -323,6 +345,10 @@ end
     results.dataset      = dataset;
     results.summary      = summary;
     results.cfg          = cfg;
+    results.db           = db;
+    if exist('perfReport', 'var') && ~isempty(fieldnames(perfReport))
+        results.performanceReport = perfReport;
+    end
     results.elapsedTotal = toc(totalTimer);
 
     reporter.info(sprintf("Training workflow complete in %.1f s.", results.elapsedTotal));

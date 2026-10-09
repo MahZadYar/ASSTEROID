@@ -69,6 +69,8 @@ classdef TrainingController < handle
                         workDir = obj.session.workDir;
                         res = obj.findLatestCheckpointFile(workDir);
                         obj.sendToHTML("LatestCheckpointFound", res);
+                    case "EvaluateModelPerformance"
+                        obj.evaluateModelPerformance(eventData);
                     otherwise
                         fprintf("[TrainingController] Unknown event: %s\n", eventName);
                 end
@@ -271,6 +273,15 @@ classdef TrainingController < handle
             end
 
             obj.session.markDirty();
+
+            % Dispatch three-tier performance report to UI if available
+            if isfield(results, "performanceReport") && isstruct(results.performanceReport) ...
+                    && ~isempty(fieldnames(results.performanceReport))
+                obj.sendPerformanceReport(results.performanceReport);
+            elseif isfield(obj.session.db, "Model") && isfield(obj.session.db.Model, "PerformanceReport") ...
+                    && isstruct(obj.session.db.Model.PerformanceReport)
+                obj.sendPerformanceReport(obj.session.db.Model.PerformanceReport);
+            end
 
             % Sync legacy figure state for backward compatibility
             if ~isempty(obj.fig) && isvalid(obj.fig)
@@ -522,6 +533,119 @@ classdef TrainingController < handle
             if isfield(s, f) && ~isempty(s.(f))
                 v = logical(s.(f));
             end
+        end
+
+        function sendPerformanceReport(obj, perfReport)
+        % SENDPERFORMANCEREPORT Format and push three-tier metrics to HTML.
+            if isempty(perfReport) || ~isstruct(perfReport) || ~isfield(perfReport, "globalBiased")
+                return;
+            end
+
+            try
+                tblB = perfReport.globalBiased;
+                tblU = perfReport.globalUnbiased;
+                tblR = [];
+                if isfield(perfReport, "roiCombined") && ~isempty(perfReport.roiCombined)
+                    tblR = perfReport.roiCombined;
+                end
+
+                nTargets = height(tblB);
+                targetRows = cell(nTargets, 1);
+
+                for k = 1:nTargets
+                    tName = string(tblB.Target{k});
+                    rowStruct = struct( ...
+                        'name', tName, ...
+                        'holdoutNRMSE', round(double(tblB.NRMSE_Pct(k)), 2), ...
+                        'holdoutNRMSLE', round(double(tblB.N_RMSLE_Pct(k)), 2), ...
+                        'holdoutR2', round(double(tblB.R2(k)), 4), ...
+                        'idwNRMSE', round(double(tblU.IDW_NRMSE_Pct(k)), 2), ...
+                        'idwR2', round(double(tblU.IDW_R2(k)), 4), ...
+                        'roiNRMSE', NaN, ...
+                        'roiR2', NaN);
+
+                    if ~isempty(tblR) && ismember("Target", tblR.Properties.VariableNames)
+                        rIdx = find(string(tblR.Target) == tName, 1);
+                        if ~isempty(rIdx)
+                            rowStruct.roiNRMSE = round(double(tblR.RoI_NRMSE_Pct(rIdx)), 2);
+                            rowStruct.roiR2 = round(double(tblR.RoI_R2(rIdx)), 4);
+                        end
+                    end
+                    targetRows{k} = rowStruct;
+                end
+
+                ts = "";
+                if isfield(perfReport, "timestamp"), ts = string(perfReport.timestamp); end
+                numTest = 0;
+                if isfield(perfReport, "numTestSamples"), numTest = double(perfReport.numTestSamples); end
+                numRoi = 0;
+                if isfield(perfReport, "numRoiSamples"), numRoi = double(perfReport.numRoiSamples); end
+                latex = "";
+                if isfield(perfReport, "latexSummary"), latex = string(perfReport.latexSummary); end
+
+                payload = struct( ...
+                    'hasReport', true, ...
+                    'timestamp', ts, ...
+                    'numTestSamples', numTest, ...
+                    'numRoiSamples', numRoi, ...
+                    'latexSummary', latex, ...
+                    'targets', {targetRows});
+
+                obj.sendToHTML("TrainingPerformanceReport", payload);
+            catch ME_send
+                fprintf("[TrainingController] Error sending performance report: %s\n", ME_send.message);
+            end
+        end
+
+        function evaluateModelPerformance(obj, ~)
+        % EVALUATEMODELPERFORMANCE Evaluate three-tier metrics for currently loaded model.
+            if ~obj.session.modelLoaded && (~isfield(obj.session.db, "Model") || isempty(fieldnames(obj.session.db.Model)))
+                obj.sendToHTML("TrainError", "No trained model loaded in session or db.Model.");
+                return;
+            end
+
+            % Check simulation data
+            simData = [];
+            if isfield(obj.session.db, "Sim") && isstruct(obj.session.db.Sim) && ~isempty(fieldnames(obj.session.db.Sim))
+                simData = obj.session.db.Sim;
+            end
+            if isempty(simData)
+                obj.sendToHTML("TrainError", "Simulation data required for evaluation (db.Sim is empty).");
+                return;
+            end
+
+            model = obj.session.model;
+            if isempty(model) && isfield(obj.session.db.Model, "Model")
+                model = obj.session.db.Model.Model;
+            end
+
+            ri = getDefaultRefractiveIndex(SearchDir=obj.session.workDir, WavelengthUnit="um");
+            targetFields = ["Absorptance", "EF_vol", "EF_surf"];
+            if isfield(model, "targetNames") && ~isempty(model.targetNames)
+                targetFields = string(model.targetNames);
+            end
+
+            ds = prepare_training_dataset(simData, ri, TargetFields=targetFields);
+
+            dbOptima = [];
+            if isfield(obj.session.db, "Optima") && isstruct(obj.session.db.Optima)
+                dbOptima = obj.session.db.Optima;
+            end
+
+            perfReport = computeSurrogateEvaluationMetrics(model, ds, dbOptima, Verbose=true);
+
+            % Update session state
+            if ~isfield(obj.session.db, "Model") || ~isstruct(obj.session.db.Model)
+                obj.session.db.Model = struct();
+            end
+            obj.session.db.Model.PerformanceReport = perfReport;
+            if ~isempty(obj.session.model)
+                obj.session.model.performanceReport = perfReport;
+            end
+            obj.session.markDirty();
+
+            obj.sendPerformanceReport(perfReport);
+            obj.sendToHTML("Progress", struct("message", "Generalization metrics evaluated successfully."));
         end
     end
 end
