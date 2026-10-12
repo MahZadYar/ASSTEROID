@@ -590,17 +590,20 @@ function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runLocalM
         end
         accepted = false;
         basinRejectCounts = zeros(maxSeeds, 1);
+        pCenter = pSeed;
+        rCenter = rSeed;
+        shrinkCount = 0;
 
         for attempt = 1:maxRetryCount
             if isobject(reporter) && ismethod(reporter, "isStopRequested") && reporter.isStopRequested()
                 error("Process:Terminated", "Optimization terminated by user.");
             end
-            shrinkScale = retryShrink^(attempt - 1);
+            shrinkScale = retryShrink^shrinkCount;
             attemptPadP = max(cfg.minLocalWindow, localPadP * shrinkScale);
             attemptPadR = max(cfg.minLocalWindow, localPadR * shrinkScale);
 
-            pStartLocal = [max(pBounds(1), pSeed - attemptPadP), min(pBounds(2), pSeed + attemptPadP)];
-            rStartLocal = [max(rBounds(1), rSeed - attemptPadR), min(rBounds(2), rSeed + attemptPadR)];
+            pStartLocal = [max(pBounds(1), pCenter - attemptPadP), min(pBounds(2), pCenter + attemptPadP)];
+            rStartLocal = [max(rBounds(1), rCenter - attemptPadR), min(rBounds(2), rCenter + attemptPadR)];
 
             rStartLocal(1) = max(rStartLocal(1), ratioLowerVal * pStartLocal(1));
             if isfinite(ratioUpperVal)
@@ -615,7 +618,7 @@ function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runLocalM
 
             reporter.progress("Metric_" + primaryMetric, seedIdx / maxSeeds, ...
                 sprintf("Refining %s (%d/%d) at [p=%.4f, r=%.4f] with local starts + global destination (attempt %d/%d)", ...
-                seedLabel, seedIdx, maxSeeds, pSeed, rSeed, attempt, maxRetryCount));
+                seedLabel, seedIdx, maxSeeds, pCenter, rCenter, attempt, maxRetryCount));
             reporter.info(sprintf(...
                 "[Metric_%s] %s attempt %d bounds: start p=[%.4f, %.4f], r=[%.4f, %.4f] | destination p=[%.4f, %.4f], r=[%.4f, %.4f]", ...
                 primaryMetric, seedLabel, attempt, pStartLocal(1), pStartLocal(2), rStartLocal(1), rStartLocal(2), ...
@@ -624,7 +627,7 @@ function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runLocalM
             try
                 [localMax, localSolutions, localMsOutput, localAllRuns] = find_local_maxima(model, ri, subsampledLambda, ...
                     'MetricName', primaryMetric, ...
-                    'InitialPoints', [pSeed, rSeed], ...
+                    'InitialPoints', [pCenter, rCenter], ...
                     'FunctionTolerance', cfg.functionTolerance, ...
                     'StepTolerance', cfg.stepTolerance, ...
                     'MaxIterations', cfg.maxIterations, ...
@@ -659,7 +662,7 @@ function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runLocalM
                     try
                         [localMax, localSolutions, localMsOutput, localAllRuns] = find_local_maxima(model, ri, subsampledLambda, ...
                             'MetricName', primaryMetric, ...
-                            'InitialPoints', [pSeed, rSeed], ...
+                            'InitialPoints', [pCenter, rCenter], ...
                             'FunctionTolerance', cfg.functionTolerance, ...
                             'StepTolerance', cfg.stepTolerance, ...
                             'MaxIterations', cfg.maxIterations, ...
@@ -793,6 +796,9 @@ function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runLocalM
 
             % Border rejection: solution at the local window edge would have escaped
             % further if not bounded — discard as non-converged interior optimum
+            wasBorderRejected = false;
+            borderDriftP = pCenter;
+            borderDriftR = rCenter;
             if ~isempty(localMax) && isfield(cfg, 'borderRejectFraction') && cfg.borderRejectFraction > 0
                 borderFrac = cfg.borderRejectFraction;
                 windowWidthP = pStartLocal(2) - pStartLocal(1);
@@ -803,12 +809,16 @@ function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runLocalM
                 for rowIdx = 1:height(localMax)
                     pR = localMax.P_um(rowIdx);
                     rR = localMax.R_um(rowIdx);
-                    atBorder = pR <= pStartLocal(1) + borderTolP || ...
-                               pR >= pStartLocal(2) - borderTolP || ...
-                               rR <= rStartLocal(1) + borderTolR || ...
-                               rR >= rStartLocal(2) - borderTolR;
+                    atBorderP = (pStartLocal(1) > pBounds(1) + 1e-6 && pR <= pStartLocal(1) + borderTolP) || ...
+                                (pStartLocal(2) < pBounds(2) - 1e-6 && pR >= pStartLocal(2) - borderTolP);
+                    atBorderR = (rStartLocal(1) > rBounds(1) + 1e-6 && rR <= rStartLocal(1) + borderTolR) || ...
+                                (rStartLocal(2) < rBounds(2) - 1e-6 && rR >= rStartLocal(2) - borderTolR);
+                    atBorder = atBorderP || atBorderR;
                     if atBorder
                         validBorder(rowIdx) = false;
+                        wasBorderRejected = true;
+                        borderDriftP = pR;
+                        borderDriftR = rR;
                         reporter.info(sprintf( ...
                             "[Metric_%s] %s attempt %d: Rejected at-border solution [p=%.4f, r=%.4f]" + ...
                             " (window p=[%.4f, %.4f] r=[%.4f, %.4f], tol=%.1f%%)", ...
@@ -967,9 +977,24 @@ function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runLocalM
             end
 
             if attempt < maxRetryCount
-                reporter.warn("Metric_" + primaryMetric, sprintf(...
-                    "%s produced no in-basin maxima at attempt %d/%d; shrinking start window by %.2f and retrying.", ...
-                    seedLabel, attempt, maxRetryCount, retryShrink));
+                if wasBorderRejected
+                    % Optimum hit local window boundary while remaining in basin:
+                    % Recenter search window around drifted point to follow gradient ridge
+                    pCenter = borderDriftP;
+                    rCenter = borderDriftR;
+                    reporter.info(sprintf(...
+                        "[Metric_%s] %s: Recentering search window around drifted point [p=%.4f, r=%.4f] for attempt %d/%d.", ...
+                        primaryMetric, seedLabel, pCenter, rCenter, attempt + 1, maxRetryCount));
+                else
+                    % Non-border rejection (e.g. hopped to neighbor basin or solver failure):
+                    % Revert center to initial seed and shrink window to keep search localized
+                    pCenter = pSeed;
+                    rCenter = rSeed;
+                    shrinkCount = shrinkCount + 1;
+                    reporter.warn("Metric_" + primaryMetric, sprintf(...
+                        "%s produced no in-basin maxima at attempt %d/%d; shrinking start window by %.2f and retrying.", ...
+                        seedLabel, attempt, maxRetryCount, retryShrink));
+                end
             end
         end
 
