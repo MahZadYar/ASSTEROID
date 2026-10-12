@@ -63,6 +63,38 @@ function values = evaluateMetricAtPoints(results, baseMetric, seeds)
         end
     end
     if isempty(metricRes) || ~isfield(metricRes, "avgMetricGrid") || isempty(metricRes.avgMetricGrid)
+        % Fallback: reconstruct 2D grid from allData SoA directly
+        if isfield(results, "allData") && isstruct(results.allData)
+            allData = results.allData;
+            variant = "avg";
+            if isfield(evalCfg, "metricVariant"), variant = string(evalCfg.metricVariant); end
+            if variant == "weighted", vField = "analyte";
+            elseif variant == "laser", vField = "laser";
+            else, vField = "avg"; end
+            avgFieldName = char(resolveDerivedMetricField(baseMetric, vField, allData));
+            if isfield(allData, avgFieldName) && isfield(allData, "period") && isfield(allData, "radius")
+                P = double(allData.period(:));
+                R = double(allData.radius(:));
+                V = double(allData.(avgFieldName)(:));
+                pUniq = unique(P);
+                rUniq = unique(R);
+                if numel(pUniq) >= 2 && numel(rUniq) >= 2
+                    [pGrid, rGrid] = meshgrid(pUniq, rUniq);
+                    zGrid = NaN(size(pGrid));
+                    for k = 1:numel(P)
+                        pi = find(abs(pUniq - P(k)) < 1e-6, 1);
+                        ri = find(abs(rUniq - R(k)) < 1e-6, 1);
+                        if ~isempty(pi) && ~isempty(ri)
+                            zGrid(ri, pi) = V(k);
+                        end
+                    end
+                    pVals = arrayfun(@(s) double(s.P), seeds(:));
+                    rVals = arrayfun(@(s) double(s.R), seeds(:));
+                    values = interp2(pGrid, rGrid, zGrid, pVals, rVals, "linear", NaN);
+                    return;
+                end
+            end
+        end
         return;
     end
     pSamplesNm = metricRes.pSamples * 1e3;

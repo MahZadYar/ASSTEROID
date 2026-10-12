@@ -154,8 +154,10 @@ function cfg = localizeMaximaConfig(options)
 
     % Data source
     cfg.dataSource = options.DataSource;
+    cfg.DataSource = options.DataSource;
     cfg.dataFile = options.DataFile;
     cfg.discreteOnly = options.DiscreteOnly;
+    cfg.DiscreteOnly = options.DiscreteOnly;
 
     % File paths
     cfg.workDir = options.WorkDir;
@@ -186,11 +188,13 @@ function cfg = localizeMaximaConfig(options)
 
     % Prediction control
     cfg.recomputePredictions = options.RecomputePredictions;
+    cfg.RecomputePredictions = options.RecomputePredictions;
 
     % MultiStart
     cfg.numLocalMaxima = options.NumLocalMaxima;
     cfg.multiStartPoints = options.MultiStartPoints;
     cfg.multiStartUseParallel = options.MultiStartUseParallel;
+    cfg.MultiStartUseParallel = options.MultiStartUseParallel;
     cfg.showIterationPaths = options.ShowIterationPaths;
     cfg.multiStartDisplay = options.MultiStartDisplay;
     cfg.functionTolerance = options.FunctionTolerance;

@@ -281,6 +281,35 @@ function results = runLocalizationWorkflow(cfg, reporter)
         primaryMetricAvgField = char(resolveDerivedMetricField(primaryMetric, metricFieldVariant, allData));
         candidateField = primaryMetricAvgField;
 
+        % Ensure candidate field exists in allData (derive on the fly if missing)
+        if ~isfield(allData, candidateField) && isfield(allData, primaryMetric)
+            specMat = double(allData.(primaryMetric));
+            if metricFieldVariant == "laser"
+                laserWl = cfg.lambdaLaser;
+                if isfield(allData, "LaserWl") && isscalar(allData.LaserWl)
+                    laserWl = double(allData.LaserWl);
+                elseif isfield(allData, "LaserWavelength") && isscalar(allData.LaserWavelength)
+                    laserWl = double(allData.LaserWavelength);
+                end
+                if isfield(allData, "lambda") && ~isempty(allData.lambda)
+                    lamVec = allData.lambda(1, :);
+                    if max(lamVec) < 50, lamVec = lamVec * 1e3; end
+                    [~, lIdx] = min(abs(lamVec - laserWl));
+                else
+                    lIdx = 1;
+                end
+                allData.(candidateField) = specMat(:, lIdx);
+            elseif metricFieldVariant == "analyte"
+                if isstruct(analyteSpec) && isfield(analyteSpec, "intensity") && ~isempty(analyteWeights)
+                    allData.(candidateField) = specMat * analyteWeights(:);
+                else
+                    allData.(candidateField) = mean(specMat, 2, "omitnan");
+                end
+            else
+                allData.(candidateField) = mean(specMat, 2, "omitnan");
+            end
+        end
+
         reporter.start("Metric_" + primaryMetric, ...
             sprintf("Processing metric %d/%d: %s", metricIdx, numMetrics, primaryMetric));
 

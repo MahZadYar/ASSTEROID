@@ -3532,7 +3532,7 @@ function runOptimizePipeline(src, d, fig, ax)
     end
 
     spatialResolution = gridSpatialRes;
-    stokesShiftResolution = gridStokesRes;
+    stokesShiftResolution = safeNum(d, "fineTuneSpectralResolution", gridStokesRes);
     tuningRadiusNm = safeNum(d, "refinementRadius", 10);
     if tuningRadiusNm <= 0
         tuningRadiusNm = 20;

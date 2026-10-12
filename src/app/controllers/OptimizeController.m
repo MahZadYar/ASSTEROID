@@ -13,6 +13,7 @@ classdef OptimizeController < handle
         fig           = []
         htmlComponent = []
         axesHandle    = []
+        localOptimizeState = struct()
     end
 
     methods
@@ -103,7 +104,11 @@ classdef OptimizeController < handle
             rMax = obj.safeNum(d, "radiusMax", 450);
             sMin = obj.safeNum(d, "stokesShiftMin", 100);
             sMax = obj.safeNum(d, "stokesShiftMax", 3600);
-            sRes = obj.safeNum(d, "stokesShiftResolution", 5);
+            sRes = obj.safeNum(d, "fineTuneSpectralResolution", obj.safeNum(d, "stokesShiftResolution", 5));
+            if metricVariant == "laser"
+                sMin = 0;
+                sMax = 0;
+            end
             spatialRes = obj.safeNum(d, "spatialResolution", 2);
 
             linkMetrics = true;
@@ -185,7 +190,11 @@ classdef OptimizeController < handle
             rMax = obj.safeNum(d, "radiusMax", 450);
             sMin = obj.safeNum(d, "stokesShiftMin", 100);
             sMax = obj.safeNum(d, "stokesShiftMax", 3600);
-            sRes = obj.safeNum(d, "stokesShiftResolution", 5);
+            sRes = obj.safeNum(d, "fineTuneSpectralResolution", obj.safeNum(d, "stokesShiftResolution", 5));
+            if metricVariant == "laser"
+                sMin = 0;
+                sMax = 0;
+            end
             spatialRes = obj.safeNum(d, "spatialResolution", 2);
 
             linkMetrics = true;
@@ -247,9 +256,27 @@ classdef OptimizeController < handle
                 obj.session.db.Pred = obj.fig.UserData.db.Pred;
             end
 
+            % If still missing, check predictionFile on disk
+            if (~isfield(obj.session.db, "Pred") || structRowCount(obj.session.db.Pred) == 0)
+                [~, ~, ~, predictionFile] = obj.resolvePaths();
+                if strlength(predictionFile) > 0 && isfile(predictionFile)
+                    loaded = load(predictionFile);
+                    if isfield(loaded, "allData"), obj.session.db.Pred = loaded.allData;
+                    elseif isfield(loaded, "predictions"), obj.session.db.Pred = loaded.predictions;
+                    elseif isfield(loaded, "db") && isfield(loaded.db, "Pred"), obj.session.db.Pred = loaded.db.Pred;
+                    else, obj.session.db.Pred = loaded;
+                    end
+                    if ~isempty(obj.fig) && isvalid(obj.fig)
+                        obj.fig.UserData.db.Pred = obj.session.db.Pred;
+                    end
+                end
+            end
+
             % Re-use cached predictions when available
             if isfield(obj.session.db, "Pred") && structRowCount(obj.session.db.Pred) > 0
-                cfg.cachedAllData = extractBranchAsSoA(obj.session.db, "Pred");
+                predData = extractBranchAsSoA(obj.session.db, "Pred");
+                predData = obj.ensureDerivedMetricSlice(predData, baseMetric, metricVariant, laserWl);
+                cfg.cachedAllData = predData;
                 if cfg.dataSource == "predictions"
                     cfg.recomputePredictions = false;
                 end
@@ -260,7 +287,7 @@ classdef OptimizeController < handle
                 cfg.skipGridGeneration = true;
 
                 % Ensure process-based parallel pool is ready
-                if ~forceTraceMode && cfg.MultiStartUseParallel
+                if ~forceTraceMode && cfg.multiStartUseParallel
                     try
                         pool = gcp('nocreate');
                         if isempty(pool) || isa(pool, 'parallel.ThreadPool')
@@ -340,25 +367,48 @@ classdef OptimizeController < handle
         end
 
         function updateSeeds(obj, d)
-        % UPDATESEEDS Re-plot heatmap with updated seed coordinates.
+        % UPDATESEEDS Re-plot heatmap with updated seed coordinates and annotations.
             seeds = [];
             if isfield(d, "seeds"), seeds = d.seeds; end
             if isempty(seeds), return; end
 
             seedsNorm = normalizeSeedInput(seeds);
-            obj.updateOptimizeState("currentSeeds", seedsNorm);
 
             ax = obj.getAxes();
             lastRes = obj.getOptimizeState("lastResults");
+            if isempty(lastRes)
+                lastRes = obj.getOptimizeState("previewResults");
+            end
+
             baseMetric = obj.getOptimizeState("baseMetric");
             if isempty(baseMetric), baseMetric = "EF_vol"; end
             metricVariant = obj.getOptimizeState("metricVariant");
             if isempty(metricVariant), metricVariant = "avg"; end
 
+            % Re-evaluate metric values for updated seeds if results exist
+            if ~isempty(lastRes)
+                try
+                    if ~isfield(lastRes, "cfg") || ~isstruct(lastRes.cfg)
+                        lastRes.cfg = struct();
+                    end
+                    lastRes.cfg.metricVariant = metricVariant;
+                    vals = evaluateMetricAtPoints(lastRes, baseMetric, seedsNorm);
+                    for i = 1:numel(seedsNorm)
+                        if i <= numel(vals) && isfinite(vals(i))
+                            seedsNorm(i).Value = vals(i);
+                        end
+                    end
+                catch ME_eval
+                    fprintf("[OptimizeController] Re-evaluate seeds warning: %s\n", ME_eval.message);
+                end
+            end
+
+            obj.updateOptimizeState("currentSeeds", seedsNorm);
+
             if ~isempty(lastRes) && ~isempty(ax) && isvalid(ax)
                 try
                     delete(allchild(ax));
-                    plotOptimizeHeatmap(lastRes, baseMetric, metricVariant, ax, seedsNorm, [], [], false);
+                    plotOptimizeHeatmap(lastRes, baseMetric, metricVariant, ax, [], seedsNorm, [], false);
                 catch ME
                     fprintf("[OptimizeController] Update plot warning: %s\n", ME.message);
                 end
@@ -539,36 +589,130 @@ classdef OptimizeController < handle
         end
 
         function exportResults(obj, d)
-        % EXPORTRESULTS Export optimization results to MAT or CSV.
+        % EXPORTRESULTS Export optima list and values to MAT or CSV.
+            seeds = [];
+            if isfield(d, "seeds") && ~isempty(d.seeds)
+                seeds = d.seeds;
+            end
+            if isempty(seeds)
+                seeds = obj.getOptimizeState("currentSeeds");
+            end
+            if isempty(seeds)
+                seeds = obj.getOptimizeState("refinedOptima");
+            end
+
             lastRes = obj.getOptimizeState("lastResults");
             if isempty(lastRes)
-                obj.sendError("No optimization results available to export.");
+                lastRes = obj.getOptimizeState("previewResults");
+            end
+
+            if isempty(seeds) && ~isempty(lastRes) && isfield(lastRes, "optima") && ~isempty(lastRes.optima)
+                seeds = lastRes.optima;
+            end
+
+            if isempty(seeds)
+                obj.sendError("No optima available to export. Initialize or fine-tune seeds first.");
+                obj.sendToHTML("ExportCanceled", struct());
                 return;
             end
 
-            format = obj.safeStr(d, "format", "mat");
+            seedsNorm = normalizeSeedInput(seeds);
+            if isempty(seedsNorm)
+                obj.sendError("No valid optima found to export.");
+                obj.sendToHTML("ExportCanceled", struct());
+                return;
+            end
+
+            baseMetric = obj.safeStr(d, "metric", "");
+            if baseMetric == "", baseMetric = obj.getOptimizeState("baseMetric"); end
+            if isempty(baseMetric) || baseMetric == "", baseMetric = "EF_vol"; end
+
+            metricVariant = obj.safeStr(d, "metricVariant", "");
+            if metricVariant == "", metricVariant = obj.getOptimizeState("metricVariant"); end
+            if isempty(metricVariant) || metricVariant == "", metricVariant = "avg"; end
+
+            laserWl = obj.safeNum(d, "laserWavelength", 785);
+
+            % Re-evaluate metric values if missing
+            needsEval = any(arrayfun(@(s) ~isfield(s, "Value") || ~isfinite(s.Value), seedsNorm));
+            if needsEval && ~isempty(lastRes)
+                try
+                    if ~isfield(lastRes, "cfg") || ~isstruct(lastRes.cfg)
+                        lastRes.cfg = struct();
+                    end
+                    lastRes.cfg.metricVariant = metricVariant;
+                    vals = evaluateMetricAtPoints(lastRes, baseMetric, seedsNorm);
+                    for i = 1:numel(seedsNorm)
+                        if (~isfield(seedsNorm(i), "Value") || ~isfinite(seedsNorm(i).Value)) && ...
+                                i <= numel(vals) && isfinite(vals(i))
+                            seedsNorm(i).Value = vals(i);
+                        end
+                    end
+                catch
+                end
+            end
+
+            % Resolve export format: support both exportFormat (UI) and format (API/tests)
+            exportFmt = "";
+            if isfield(d, "exportFormat"), exportFmt = lower(string(d.exportFormat)); end
+            if exportFmt == "" && isfield(d, "format"), exportFmt = lower(string(d.format)); end
+            if exportFmt == "", exportFmt = "mat"; end
+
             exportPath = "";
             if isfield(d, "path") && strlength(string(d.path)) > 0
                 exportPath = string(d.path);
             else
-                defaultName = "optimization_results." + format;
-                [file, path] = uiputfile("*." + format, "Export Optimization Results", ...
+                defaultName = "optima_results." + exportFmt;
+                filterStr = "*." + exportFmt;
+                [file, path] = uiputfile(filterStr, "Export Optima Results", ...
                     fullfile(obj.session.workDir, defaultName));
-                if file ~= 0
-                    exportPath = fullfile(path, file);
+                if isequal(file, 0) || isequal(path, 0)
+                    obj.sendToHTML("ExportCanceled", struct());
+                    return;
+                end
+                exportPath = string(fullfile(path, file));
+            end
+
+            if exportPath == ""
+                obj.sendToHTML("ExportCanceled", struct());
+                return;
+            end
+
+            % Construct clean optima table
+            nRows = numel(seedsNorm);
+            Tag = strings(nRows, 1);
+            Period_nm = zeros(nRows, 1);
+            Radius_nm = zeros(nRows, 1);
+            MetricName = repmat(string(baseMetric), nRows, 1);
+            MetricVariant = repmat(string(metricVariant), nRows, 1);
+            MetricValue = NaN(nRows, 1);
+            LaserWavelength_nm = repmat(double(laserWl), nRows, 1);
+
+            for i = 1:nRows
+                s = seedsNorm(i);
+                if isfield(s, "Tag") && strlength(string(s.Tag)) > 0
+                    Tag(i) = string(s.Tag);
+                else
+                    Tag(i) = "Optimum " + string(i);
+                end
+                Period_nm(i) = double(s.P);
+                Radius_nm(i) = double(s.R);
+                if isfield(s, "Value") && isfinite(s.Value)
+                    MetricValue(i) = double(s.Value);
                 end
             end
 
-            if exportPath == "", return; end
+            optimaTable = table(Tag, Period_nm, Radius_nm, MetricName, MetricVariant, ...
+                MetricValue, LaserWavelength_nm);
 
-            if format == "csv"
-                T = struct2table(lastRes.optimaTable);
-                writetable(T, exportPath);
+            if exportFmt == "csv"
+                writetable(optimaTable, exportPath);
             else
-                save(exportPath, "lastRes", "-v7.3");
+                optima = table2struct(optimaTable);
+                save(exportPath, "optima", "optimaTable");
             end
 
-            obj.sendToHTML("ExportComplete", struct("path", exportPath));
+            obj.sendToHTML("ExportComplete", struct("path", exportPath, "count", nRows));
         end
 
         function generateDensePredictions(obj, d)
@@ -659,6 +803,31 @@ classdef OptimizeController < handle
             v = obj.safeStr(d, "metricVariant", "avg");
             obj.syncMetricState(m, v);
         end
+
+        function updateOptimizeState(obj, key, val)
+        % UPDATEOPTIMIZESTATE Store state value in local state and fig.UserData.
+            obj.localOptimizeState.(key) = val;
+            if ~isempty(obj.fig) && isvalid(obj.fig)
+                if ~isfield(obj.fig.UserData, "optimize")
+                    obj.fig.UserData.optimize = struct();
+                end
+                obj.fig.UserData.optimize.(key) = val;
+            end
+        end
+
+        function val = getOptimizeState(obj, key)
+        % GETOPTIMIZESTATE Retrieve state value from fig.UserData or local state.
+            val = [];
+            if ~isempty(obj.fig) && isvalid(obj.fig) && isfield(obj.fig.UserData, "optimize")
+                if isfield(obj.fig.UserData.optimize, key)
+                    val = obj.fig.UserData.optimize.(key);
+                    return;
+                end
+            end
+            if isfield(obj.localOptimizeState, key)
+                val = obj.localOptimizeState.(key);
+            end
+        end
     end
 
     %% Internal Helpers
@@ -697,7 +866,9 @@ classdef OptimizeController < handle
 
             allData = extractBranchAsSoA(obj.session.db, "Pred");
 
-            % Resolve derived metric field name
+            laserWl = obj.safeNum(d, "laserWavelength", 785);
+            allData = obj.ensureDerivedMetricSlice(allData, baseMetric, metricVariant, laserWl);
+
             if metricVariant == "weighted"
                 variantForField = "analyte";
             elseif metricVariant == "laser"
@@ -706,48 +877,6 @@ classdef OptimizeController < handle
                 variantForField = "avg";
             end
             avgFieldName = resolveDerivedMetricField(baseMetric, variantForField, allData);
-
-            % If derived field not present, compute from existing spectral tensor (no fresh evaluation)
-            if ~isfield(allData, avgFieldName) && isfield(allData, baseMetric)
-                specMat = double(allData.(baseMetric));
-                if variantForField == "laser"
-                    laserWl = obj.safeNum(d, "laserWavelength", 785);
-                    if isfield(allData, "LaserWl") && isscalar(allData.LaserWl)
-                        laserWl = double(allData.LaserWl);
-                    elseif isfield(allData, "LaserWavelength") && isscalar(allData.LaserWavelength)
-                        laserWl = double(allData.LaserWavelength);
-                    end
-                    if isfield(allData, "lambda") && ~isempty(allData.lambda)
-                        lamVec = allData.lambda(1, :);
-                        if max(lamVec) < 50, lamVec = lamVec * 1e3; end % um -> nm
-                        [~, lIdx] = min(abs(lamVec - laserWl));
-                    else
-                        lIdx = 1;
-                    end
-                    allData.(avgFieldName) = specMat(:, lIdx);
-                elseif variantForField == "avg"
-                    allData.(avgFieldName) = mean(specMat, 2, "omitnan");
-                elseif variantForField == "analyte"
-                    analyteSpec = [];
-                    try
-                        analyteSpec = getDefaultAnalyteSpectrum();
-                    catch
-                    end
-                    if isstruct(analyteSpec) && isfield(analyteSpec, "shift_cm") && isfield(allData, "RamanShift")
-                        shifts = allData.RamanShift(:)';
-                        aw = interp1(analyteSpec.shift_cm(:), analyteSpec.intensity(:), shifts, "makima", 0);
-                        aw = max(0, aw);
-                        if sum(aw) > 0
-                            weights = aw / sum(aw);
-                            allData.(avgFieldName) = specMat * weights(:);
-                        else
-                            allData.(avgFieldName) = mean(specMat, 2, "omitnan");
-                        end
-                    else
-                        allData.(avgFieldName) = mean(specMat, 2, "omitnan");
-                    end
-                end
-            end
 
             if ~isfield(allData, avgFieldName)
                 obj.sendError(sprintf("Metric '%s' (%s) not found in db.Pred.", baseMetric, metricVariant));
@@ -804,6 +933,63 @@ classdef OptimizeController < handle
             rep.complete("Preview", sprintf("Loaded %d pre-computed points from db.Pred. Heatmap preview ready.", structRowCount(allData)));
         end
 
+        function allData = ensureDerivedMetricSlice(obj, allData, baseMetric, metricVariant, laserWl)
+        % ENSUREDERIVEDMETRICSLICE Derive required 2D metric slice on the fly if missing.
+            if nargin < 5 || isempty(laserWl)
+                laserWl = 785;
+            end
+
+            if metricVariant == "weighted"
+                variantForField = "analyte";
+            elseif metricVariant == "laser"
+                variantForField = "laser";
+            else
+                variantForField = "avg";
+            end
+
+            avgFieldName = resolveDerivedMetricField(baseMetric, variantForField, allData);
+
+            if ~isfield(allData, avgFieldName) && isfield(allData, baseMetric)
+                specMat = double(allData.(baseMetric));
+                if variantForField == "laser"
+                    if isfield(allData, "LaserWl") && isscalar(allData.LaserWl)
+                        laserWl = double(allData.LaserWl);
+                    elseif isfield(allData, "LaserWavelength") && isscalar(allData.LaserWavelength)
+                        laserWl = double(allData.LaserWavelength);
+                    end
+                    if isfield(allData, "lambda") && ~isempty(allData.lambda)
+                        lamVec = allData.lambda(1, :);
+                        if max(lamVec) < 50, lamVec = lamVec * 1e3; end % um -> nm
+                        [~, lIdx] = min(abs(lamVec - laserWl));
+                    else
+                        lIdx = 1;
+                    end
+                    allData.(avgFieldName) = specMat(:, lIdx);
+                elseif variantForField == "avg"
+                    allData.(avgFieldName) = mean(specMat, 2, "omitnan");
+                elseif variantForField == "analyte"
+                    analyteSpec = [];
+                    try
+                        analyteSpec = getDefaultAnalyteSpectrum();
+                    catch
+                    end
+                    if isstruct(analyteSpec) && isfield(analyteSpec, "shift_cm") && isfield(allData, "RamanShift")
+                        shifts = allData.RamanShift(:)';
+                        aw = interp1(analyteSpec.shift_cm(:), analyteSpec.intensity(:), shifts, "makima", 0);
+                        aw = max(0, aw);
+                        if sum(aw) > 0
+                            weights = aw / sum(aw);
+                            allData.(avgFieldName) = specMat * weights(:);
+                        else
+                            allData.(avgFieldName) = mean(specMat, 2, "omitnan");
+                        end
+                    else
+                        allData.(avgFieldName) = mean(specMat, 2, "omitnan");
+                    end
+                end
+            end
+        end
+
         function [modelFile, riCsvFile, dataFile, predictionFile] = resolvePaths(obj)
             modelFile = ""; riCsvFile = ""; dataFile = ""; predictionFile = "";
             if ~isempty(obj.fig) && isvalid(obj.fig) && isfield(obj.fig.UserData, "app") ...
@@ -831,23 +1017,6 @@ classdef OptimizeController < handle
             obj.updateOptimizeState("metricVariant", metricVariant);
         end
 
-        function updateOptimizeState(obj, key, val)
-            if ~isempty(obj.fig) && isvalid(obj.fig)
-                if ~isfield(obj.fig.UserData, "optimize")
-                    obj.fig.UserData.optimize = struct();
-                end
-                obj.fig.UserData.optimize.(key) = val;
-            end
-        end
-
-        function val = getOptimizeState(obj, key)
-            val = [];
-            if ~isempty(obj.fig) && isvalid(obj.fig) && isfield(obj.fig.UserData, "optimize")
-                if isfield(obj.fig.UserData.optimize, key)
-                    val = obj.fig.UserData.optimize.(key);
-                end
-            end
-        end
 
         function sendToHTML(obj, eventName, payload)
             if ~isempty(obj.htmlComponent) && isvalid(obj.htmlComponent)

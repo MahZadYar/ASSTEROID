@@ -507,8 +507,18 @@ function setup(htmlComponent) {
         handleSeedsRefined(event.Data);
     });
     htmlComponent.addEventListener("ExportComplete", function(event) {
+        var d = event.Data || {};
         setStatus("done", "Exported");
-        appendLog("Results exported to: " + (event.Data.path || "file"));
+        var msg = "Optima exported to: " + (d.path || "file");
+        if (d.count !== undefined) {
+            msg += " (" + d.count + " optima)";
+        }
+        appendLog(msg);
+        enableButtons(true);
+    });
+    htmlComponent.addEventListener("ExportCanceled", function(event) {
+        setStatus("ready", "Ready");
+        appendLog("Export canceled.");
         enableButtons(true);
     });
     htmlComponent.addEventListener("PredictionsGenerated", function(event) {
@@ -654,6 +664,13 @@ function initializeEmptySeedTable() {
 
 function collectConfig() {
     var linked = chk("linkMetricsToGrid");
+    var sRes = num("fineTuneSpectralResolution");
+    if (!isFinite(sRes) || sRes <= 0) sRes = num("stokesShiftResolution") || 5;
+    var sMin = num("fineTuneStokesMin");
+    if (!isFinite(sMin)) sMin = num("stokesShiftMin");
+    var sMax = num("fineTuneStokesMax");
+    if (!isFinite(sMax)) sMax = num("stokesShiftMax");
+
     return {
         dataSource: getDataSource(),
         discreteOnly: chk("discreteOnly"),
@@ -662,13 +679,14 @@ function collectConfig() {
         periodMax: num("periodMax"),
         radiusMin: num("radiusMin"),
         radiusMax: num("radiusMax"),
-        stokesShiftMin: num("stokesShiftMin"),
-        stokesShiftMax: num("stokesShiftMax"),
+        stokesShiftMin: sMin,
+        stokesShiftMax: sMax,
         spatialResolution: num("spatialResolution"),
-        stokesShiftResolution: num("stokesShiftResolution"),
+        stokesShiftResolution: sRes,
+        fineTuneSpectralResolution: sRes,
         linkMetricsToGrid: linked,
-        metricsShiftMin: linked ? num("stokesShiftMin") : num("metricsShiftMin"),
-        metricsShiftMax: linked ? num("stokesShiftMax") : num("metricsShiftMax"),
+        metricsShiftMin: linked ? sMin : num("metricsShiftMin"),
+        metricsShiftMax: linked ? sMax : num("metricsShiftMax"),
         metric: val("metric"),
         metricVariant: val("metricVariant"),
         numStartPoints: num("numStartPoints"),
@@ -749,6 +767,27 @@ function toggleDataSource() {
     if (genPredBlock) {
         genPredBlock.style.display = (source === "predictions") ? "none" : "";
     }
+}
+
+function syncSpectralRes(val) {
+    var el1 = document.getElementById("stokesShiftResolution");
+    var el2 = document.getElementById("fineTuneSpectralResolution");
+    if (el1 && el1.value != val) el1.value = val;
+    if (el2 && el2.value != val) el2.value = val;
+}
+
+function syncStokesMin(val) {
+    var el1 = document.getElementById("stokesShiftMin");
+    var el2 = document.getElementById("fineTuneStokesMin");
+    if (el1 && el1.value != val) el1.value = val;
+    if (el2 && el2.value != val) el2.value = val;
+}
+
+function syncStokesMax(val) {
+    var el1 = document.getElementById("stokesShiftMax");
+    var el2 = document.getElementById("fineTuneStokesMax");
+    if (el1 && el1.value != val) el1.value = val;
+    if (el2 && el2.value != val) el2.value = val;
 }
 
 function getDataSource() {
@@ -1571,16 +1610,16 @@ function toggleAllDbOptima(masterCb) {
                             <div class="field-row">
                                 <div class="field">
                                     <label>Stokes Min (cm⁻¹)</label>
-                                    <input type="number" id="stokesShiftMin" value="100" step="10">
+                                    <input type="number" id="stokesShiftMin" value="100" step="10" onchange="syncStokesMin(this.value)">
                                 </div>
                                 <div class="field">
                                     <label>Stokes Max (cm⁻¹)</label>
-                                    <input type="number" id="stokesShiftMax" value="3600" step="10">
+                                    <input type="number" id="stokesShiftMax" value="3600" step="10" onchange="syncStokesMax(this.value)">
                                 </div>
                             </div>
                             <div class="field">
                                 <label>Stokes Resolution (cm⁻¹)</label>
-                                <input type="number" id="stokesShiftResolution" value="5" step="1" min="1">
+                                <input type="number" id="stokesShiftResolution" value="5" step="1" min="0.5" onchange="syncSpectralRes(this.value)">
                             </div>
                             <div class="field-row" style="margin-top:4px;">
                                 <div class="field" style="display:flex;align-items:center;gap:6px;">
@@ -1687,6 +1726,20 @@ function toggleAllDbOptima(masterCb) {
                                 <div class="field">
                                     <label>Refinement Radius (nm)</label>
                                     <input type="number" id="refinementRadius" value="10" step="1" min="1">
+                                </div>
+                            </div>
+
+                            <div class="field-row">
+                                <div class="field">
+                                    <label>Spectral Resolution (cm⁻¹)</label>
+                                    <input type="number" id="fineTuneSpectralResolution" value="5" step="1" min="0.5" onchange="syncSpectralRes(this.value)">
+                                </div>
+                                <div class="field">
+                                    <label>Stokes Window (cm⁻¹)</label>
+                                    <div style="display:flex;gap:4px;">
+                                        <input type="number" id="fineTuneStokesMin" value="100" step="10" style="width:50%;" title="Stokes Min (cm⁻¹)" onchange="syncStokesMin(this.value)">
+                                        <input type="number" id="fineTuneStokesMax" value="3600" step="10" style="width:50%;" title="Stokes Max (cm⁻¹)" onchange="syncStokesMax(this.value)">
+                                    </div>
                                 </div>
                             </div>
 

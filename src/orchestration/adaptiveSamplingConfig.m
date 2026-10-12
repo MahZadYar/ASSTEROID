@@ -131,6 +131,7 @@ end
     cfg = coreCfg;
     cfg.workDir         = options.WorkDir;
     cfg.dataSource      = options.DataSource;
+    cfg.DataSource      = options.DataSource;
     cfg.dataFile        = options.DataFile;
     cfg.modelFile       = options.ModelFile;
     cfg.riCsvFile       = options.RiCsvFile;
