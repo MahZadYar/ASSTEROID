@@ -31,7 +31,7 @@ arguments
     options.WorkDir         (1,1) string  = pwd
     options.DataSource      (1,1) string {mustBeMember(options.DataSource, ...
         ["model", "interpolation"])} = "interpolation"
-    options.DataFile        (1,1) string  = ""
+    options.DataFile                      = ""
     options.ModelFile       (1,1) string  = ""
     options.RiCsvFile       (1,1) string  = ""
     options.PredictionFile  (1,1) string  = ""

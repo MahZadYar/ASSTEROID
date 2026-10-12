@@ -64,6 +64,8 @@ classdef SamplingController < handle
                         obj.saveDatabase();
                     case {"StopProcess", "StopSampling"}
                         obj.stopSampling();
+                    case "ClientReady"
+                        % Web UI bridge handshake
                     otherwise
                         fprintf("[SamplingController] Unknown event: %s\n", eventName);
                 end
@@ -86,8 +88,16 @@ classdef SamplingController < handle
                     obj.sendToHTML("Error", "Select a prediction file"); return;
                 end
             else
-                if isempty(cfg.dataFile)
-                    obj.sendToHTML("Error", "Select a data file"); return;
+                % If dataFile is empty or not specified, check in-memory db.Sim
+                db = obj.session.db;
+                if (isempty(cfg.dataFile) || (isstring(cfg.dataFile) && cfg.dataFile == "")) ...
+                        && isfield(db, "Sim") && isstruct(db.Sim) && structRowCount(db.Sim) > 0
+                    cfg.dataFile = db.Sim;
+                    obj.samplingState.config = cfg;
+                end
+
+                if isempty(cfg.dataFile) || (isstring(cfg.dataFile) && cfg.dataFile == "")
+                    obj.sendToHTML("Error", "Select a data file or load a database"); return;
                 end
             end
 
@@ -504,6 +514,12 @@ classdef SamplingController < handle
             end
 
             [dbModelFile, dbRiCsvFile, dbDataFile, dbPredFile] = obj.resolvePaths();
+            if isfield(ev, "dataFile") && ~isempty(ev.dataFile)
+                dbDataFile = ev.dataFile;
+            elseif (isempty(dbDataFile) || (isstring(dbDataFile) && dbDataFile == "")) ...
+                    && isfield(obj.session.db, "Sim") && isstruct(obj.session.db.Sim) && structRowCount(obj.session.db.Sim) > 0
+                dbDataFile = obj.session.db.Sim;
+            end
 
             xParam = gs("xAxisParam", "");
             yParam = gs("yAxisParam", "");
@@ -556,7 +572,7 @@ classdef SamplingController < handle
             db = obj.session.db;
             if isfield(db, "Sim") && isstruct(db.Sim) && structRowCount(db.Sim) > 0
                 try
-                    obj.loadSamplingData(struct("dataSource", "interpolation"));
+                    obj.loadSamplingData(struct("dataSource", "interpolation", "dataFile", db.Sim));
                 catch ME
                     fprintf("[SamplingController] Auto-load data on refresh: %s\n", ME.message);
                 end
@@ -673,6 +689,20 @@ classdef SamplingController < handle
                 try
                     sendEventToHTMLSource(obj.htmlComponent, eventName, payload);
                 catch
+                end
+            end
+            if ~isempty(obj.fig) && isvalid(obj.fig) && isstruct(obj.fig.UserData) && isfield(obj.fig.UserData, "app")
+                if strcmp(eventName, "SamplingProgress") && isstruct(payload)
+                    pct = 0; if isfield(payload, "percent"), pct = payload.percent; end
+                    msg = ""; if isfield(payload, "message"), msg = payload.message; end
+                    try obj.fig.UserData.app.updateProgress(pct, msg, "Stage 2 — Sampling"); catch; end
+                elseif (strcmp(eventName, "Error") || strcmp(eventName, "Warning")) && (ischar(payload) || isstring(payload))
+                    lvl = "info"; if strcmp(eventName, "Error"), lvl = "error"; else, lvl = "warning"; end
+                    try obj.fig.UserData.app.logMessage(string(payload), lvl, "Stage 2 — Sampling"); catch; end
+                elseif strcmp(eventName, "SamplingComplete")
+                    sMsg = "Sampling complete.";
+                    if isstruct(payload) && isfield(payload, "message"), sMsg = string(payload.message); end
+                    try obj.fig.UserData.app.logMessage(sMsg, "success", "Stage 2 — Sampling"); catch; end
                 end
             end
         end

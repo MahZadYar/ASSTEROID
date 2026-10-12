@@ -239,13 +239,26 @@ function setup(htmlComponent) {
     });
     htmlComponent.addEventListener("TrainComplete", function(event) {
         setStatus("done", "Complete");
-        appendLog("Training complete. " + (event.Data || ""));
+        var pBar = document.getElementById("progressBar");
+        if (pBar) pBar.style.width = "100%";
+        var pctLbl = document.getElementById("epochPercentLabel");
+        if (pctLbl) pctLbl.textContent = "100%";
+        appendLog("Training complete. " + (event.Data || "Model saved to disk and database."));
         enableRun(true);
+        resetStopButtons();
     });
     htmlComponent.addEventListener("TrainError", function(event) {
         setStatus("error", "Error");
         appendLog("ERROR: " + (event.Data || "Unknown error"));
         enableRun(true);
+        resetStopButtons();
+        var btn = document.getElementById("btnEvalModel");
+        var btnHead = document.getElementById("btnHeaderEvalModel");
+        if (btn) btn.disabled = false;
+        if (btnHead) btnHead.disabled = false;
+    });
+    htmlComponent.addEventListener("TrainingPerformanceReport", function(event) {
+        renderPerformanceReport(event.Data);
     });
 
     htmlComponent.addEventListener("DbAutoFill", function(event) {
@@ -260,7 +273,7 @@ function setup(htmlComponent) {
     });
     htmlComponent.addEventListener("TrainStopAck", function(event) {
         setStatus("running", "Stopping...");
-        appendLog(event.Data || "Stop requested. Waiting for current iteration to finish...");
+        appendLog(event.Data || "Stop requested. Finalizing current iteration and saving model...");
     });
     htmlComponent.addEventListener("ProcessStopAck", function(event) {
         var msg = (typeof event.Data === "string") ? event.Data : ((event.Data && event.Data.message) ? event.Data.message : "Stopping process...");
@@ -268,14 +281,14 @@ function setup(htmlComponent) {
         appendLog(msg);
     });
     htmlComponent.addEventListener("TrainStopped", function(event) {
-        setStatus("idle", "Terminated");
-        appendLog("Training stopped: " + (event.Data || "Terminated by user."));
+        setStatus("idle", "Stopped & Saved");
+        appendLog("Training stopped: " + (event.Data || "Model saved to disk and database."));
         enableRun(true);
         resetStopButtons();
     });
     htmlComponent.addEventListener("ProcessStopped", function(event) {
         var msg = (typeof event.Data === "string") ? event.Data : ((event.Data && event.Data.message) ? event.Data.message : "Process terminated by user.");
-        setStatus("idle", "Terminated");
+        setStatus("idle", "Stopped & Saved");
         appendLog(msg);
         enableRun(true);
         resetStopButtons();
@@ -346,6 +359,9 @@ function setup(htmlComponent) {
             if (container) container.style.display = this.checked ? "block" : "none";
         });
     }
+
+    // Ensure vertical gap inputs are visible if default checked
+    toggleVerticalGapInput();
 }
 
 function toggleFeatureSchema() {
@@ -400,21 +416,28 @@ function findLatestCheckpoint() {
 function stopProcess() {
     var stopBtns = document.querySelectorAll(".btn-stop");
     stopBtns.forEach(function(b) {
-        b.innerHTML = "&#9632; Stopping...";
+        b.innerHTML = "&#9632; Stopping &amp; Saving Model...";
         b.disabled = true;
     });
-    appendLog("Stop requested by user. Terminating process...");
+    appendLog("Stop requested by user. Terminating training and saving model at current iteration...");
     if (window.htmlComponent) {
         window.htmlComponent.sendEventToMATLAB("StopProcess", {});
     }
 }
 
 function resetStopButtons() {
-    var stopBtns = document.querySelectorAll(".btn-stop");
-    stopBtns.forEach(function(b) {
-        b.innerHTML = "&#9632; Stop";
-        b.disabled = false;
-    });
+    var btnStopAction = document.getElementById("btnStopAction");
+    if (btnStopAction) {
+        btnStopAction.innerHTML = "&#9632; Stop &amp; Save Model";
+        btnStopAction.disabled = true;
+    }
+    var progStop = document.getElementById("progressStopRow");
+    if (progStop) progStop.style.display = "none";
+    var btnStopProg = document.getElementById("btnStopProgress");
+    if (btnStopProg) {
+        btnStopProg.innerHTML = "&#9632; Early Stop &amp; Save Model";
+        btnStopProg.disabled = true;
+    }
 }
 
 function collectConfig() {
@@ -500,15 +523,94 @@ function runTraining() {
     enableRun(false);
     clearLog();
     setStatus("running", "Training...");
+
+    // Reset epoch progress and metric pills
+    var maxEp = num("maxEpochs") || 200;
+    var epLbl = document.getElementById("epochProgressLabel");
+    if (epLbl) epLbl.textContent = "Epoch: 0 / " + maxEp;
+    var pctLbl = document.getElementById("epochPercentLabel");
+    if (pctLbl) pctLbl.textContent = "0.0%";
+    var pBar = document.getElementById("progressBar");
+    if (pBar) pBar.style.width = "0%";
+    var itEl = document.getElementById("valIter");
+    if (itEl) itEl.textContent = "0";
+    var lEl = document.getElementById("valLoss");
+    if (lEl) lEl.textContent = "--";
+    var vlEl = document.getElementById("valValLoss");
+    if (vlEl) vlEl.textContent = "--";
+
+    // Enable stop buttons
+    var btnStopAction = document.getElementById("btnStopAction");
+    if (btnStopAction) {
+        btnStopAction.innerHTML = "&#9632; Stop &amp; Save Model";
+        btnStopAction.disabled = false;
+    }
+    var progStop = document.getElementById("progressStopRow");
+    if (progStop) progStop.style.display = "block";
+    var btnStopProg = document.getElementById("btnStopProgress");
+    if (btnStopProg) {
+        btnStopProg.innerHTML = "&#9632; Early Stop &amp; Save Model";
+        btnStopProg.disabled = false;
+    }
+
     window.htmlComponent.sendEventToMATLAB("RunTraining", collectConfig());
 }
 
 function handleProgress(data) {
     if (!data) return;
     if (data.message) appendLog(data.message);
-    if (data.fraction !== undefined && data.fraction !== null) {
-        var pct = Math.round(data.fraction * 100);
-        document.getElementById("progressBar").style.width = pct + "%";
+
+    // Update epoch-based progress bar and labels
+    if (data.epoch !== undefined && data.maxEpochs !== undefined && data.maxEpochs > 0) {
+        var ep = Number(data.epoch);
+        var maxEp = Number(data.maxEpochs);
+        var frac = (data.fraction !== undefined && data.fraction !== null) ? Number(data.fraction) : (ep / maxEp);
+        var pct = Math.min(100, Math.max(0, frac * 100));
+        var pBar = document.getElementById("progressBar");
+        if (pBar) pBar.style.width = pct.toFixed(1) + "%";
+        var epLbl = document.getElementById("epochProgressLabel");
+        if (epLbl) epLbl.textContent = "Epoch: " + ep + " / " + maxEp;
+        var pctLbl = document.getElementById("epochPercentLabel");
+        if (pctLbl) pctLbl.textContent = pct.toFixed(1) + "%";
+    } else if (data.fraction !== undefined && data.fraction !== null) {
+        var pct = Math.min(100, Math.max(0, Number(data.fraction) * 100));
+        var pBar = document.getElementById("progressBar");
+        if (pBar) pBar.style.width = pct.toFixed(1) + "%";
+        var pctLbl = document.getElementById("epochPercentLabel");
+        if (pctLbl) pctLbl.textContent = pct.toFixed(1) + "%";
+    }
+
+    // Update real-time metric indicators
+    if (data.iteration !== undefined && data.iteration !== null) {
+        var itEl = document.getElementById("valIter");
+        if (itEl) itEl.textContent = data.iteration;
+    }
+    if (data.loss !== undefined && data.loss !== null && !isNaN(Number(data.loss))) {
+        var lEl = document.getElementById("valLoss");
+        if (lEl) lEl.textContent = Number(data.loss).toExponential(3);
+    }
+    if (data.valLoss !== undefined && data.valLoss !== null && !isNaN(Number(data.valLoss))) {
+        var vlEl = document.getElementById("valValLoss");
+        if (vlEl) vlEl.textContent = Number(data.valLoss).toExponential(3);
+    }
+
+    if (window.htmlComponent) {
+        var pctProg = 0;
+        if (data.epoch !== undefined && data.maxEpochs !== undefined && data.maxEpochs > 0) {
+            pctProg = Math.min(100, Math.max(0, (Number(data.epoch) / Number(data.maxEpochs)) * 100));
+        } else if (data.fraction !== undefined && data.fraction !== null) {
+            pctProg = Math.min(100, Math.max(0, Number(data.fraction) * 100));
+        }
+        var mObj = {};
+        if (data.iteration !== undefined && data.iteration !== null) mObj.Iter = data.iteration;
+        if (data.loss !== undefined && data.loss !== null && !isNaN(Number(data.loss))) mObj.Loss = Number(data.loss).toExponential(3);
+        if (data.valLoss !== undefined && data.valLoss !== null && !isNaN(Number(data.valLoss))) mObj.ValLoss = Number(data.valLoss).toExponential(3);
+        window.htmlComponent.sendEventToMATLAB("ProgressUpdate", {
+            percent: pctProg,
+            message: data.message || "",
+            stage: "Stage 3 — Training",
+            metrics: mObj
+        });
     }
 }
 
@@ -529,7 +631,12 @@ function chk(id) {
 }
 
 function enableRun(state) {
-    document.getElementById("btnRun").disabled = !state;
+    var btnRun = document.getElementById("btnRun");
+    if (btnRun) btnRun.disabled = !state;
+    var btnEval = document.getElementById("btnEvalModel");
+    if (btnEval) btnEval.disabled = !state;
+    var btnHead = document.getElementById("btnHeaderEvalModel");
+    if (btnHead) btnHead.disabled = !state;
 }
 function fillIfEmpty(id, value) {
     if (!value) return;
@@ -598,15 +705,22 @@ function setStatus(cls, text) {
     el.textContent = text;
 }
 
-function appendLog(msg) {
+function appendLog(msg, level) {
+    if (window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("LogMessage", { message: msg, stage: "Stage 3 — Training", level: level || "info" });
+    }
     var el = document.getElementById("progressLog");
-    el.textContent += msg + "\n";
-    el.scrollTop = el.scrollHeight;
+    if (el) {
+        el.textContent += msg + "\n";
+        el.scrollTop = el.scrollHeight;
+    }
 }
 
 function clearLog() {
-    document.getElementById("progressLog").textContent = "";
-    document.getElementById("progressBar").style.width = "0%";
+    var el = document.getElementById("progressLog");
+    if (el) el.textContent = "";
+    var bar = document.getElementById("progressBar");
+    if (bar) bar.style.width = "0%";
 }
 
 function toggleSection(el) {
@@ -622,6 +736,12 @@ function renderPerformanceReport(data) {
     var card = document.getElementById("perfReportCard");
     if (card) card.style.display = "block";
     
+    var emptyState = document.getElementById("perfReportEmptyState");
+    var contentState = document.getElementById("perfReportContent");
+    if (emptyState) emptyState.style.display = "none";
+    if (contentState) contentState.style.display = "block";
+    
+    var theadRow = document.getElementById("perfReportHeaderRow");
     var tbody = document.getElementById("perfReportBody");
     if (!tbody) return;
     tbody.innerHTML = "";
@@ -629,38 +749,101 @@ function renderPerformanceReport(data) {
     currentLatexSummary = data.latexSummary || "";
     
     var targets = data.targets || [];
-    for (var i = 0; i < targets.length; i++) {
-        var t = targets[i];
+    var nT = targets.length;
+    
+    // Dynamic transposed header
+    if (theadRow) {
+        theadRow.innerHTML = "<th style='padding:6px 8px; font-weight:700;'>Evaluation Tier / Metric</th>";
+        for (var i = 0; i < nT; i++) {
+            var rawName = String(targets[i].name || ("Target " + (i + 1)));
+            var disp = rawName;
+            if (rawName.toLowerCase() === "absorptance") disp = "Absorptance <em>A<sub>L</sub></em>";
+            else if (rawName.toLowerCase() === "ef_vol") disp = "Volumetric EF <em>EF<sub>V</sub></em>";
+            else if (rawName.toLowerCase() === "ef_surf") disp = "Surface EF <em>EF<sub>S</sub></em>";
+            
+            var th = document.createElement("th");
+            th.style.cssText = "padding:6px 8px; text-align:center; font-weight:700; color:var(--text-primary);";
+            th.innerHTML = disp;
+            theadRow.appendChild(th);
+        }
+    }
+    
+    // Helper to add section banner row
+    function addSectionBanner(title) {
         var tr = document.createElement("tr");
-        tr.style.borderBottom = "1px solid var(--border)";
-        
-        var roiNRMSEStr = (t.roiNRMSE === null || t.roiNRMSE === undefined || isNaN(t.roiNRMSE)) ? "—" : t.roiNRMSE.toFixed(2) + "%";
-        var roiR2Str = (t.roiR2 === null || t.roiR2 === undefined || isNaN(t.roiR2)) ? "—" : t.roiR2.toFixed(4);
-        
-        tr.innerHTML = 
-            "<td style='padding:6px 8px; font-weight:600; color:var(--text-primary);'>" + (t.name || "") + "</td>" +
-            "<td style='padding:6px 8px;'>" + Number(t.holdoutNRMSE || 0).toFixed(2) + "%</td>" +
-            "<td style='padding:6px 8px;'>" + Number(t.holdoutNRMSLE || 0).toFixed(2) + "%</td>" +
-            "<td style='padding:6px 8px; font-weight:600; color:var(--accent);'>" + Number(t.holdoutR2 || 0).toFixed(4) + "</td>" +
-            "<td style='padding:6px 8px;'>" + Number(t.idwNRMSE || 0).toFixed(2) + "%</td>" +
-            "<td style='padding:6px 8px;'>" + Number(t.idwR2 || 0).toFixed(4) + "</td>" +
-            "<td style='padding:6px 8px; color:var(--success); font-weight:600;'>" + roiNRMSEStr + "</td>" +
-            "<td style='padding:6px 8px; color:var(--success); font-weight:600;'>" + roiR2Str + "</td>";
+        tr.style.cssText = "background:rgba(255,255,255,0.03); border-top:1px solid var(--border); border-bottom:1px solid var(--border);";
+        tr.innerHTML = "<td colspan='" + (nT + 1) + "' style='padding:5px 8px; font-weight:700; font-size:10.5px; color:var(--accent); font-style:italic;'>" + title + "</td>";
         tbody.appendChild(tr);
     }
+    
+    // Helper to add metric row
+    function addRow(label, fn, isAccent) {
+        var tr = document.createElement("tr");
+        tr.style.cssText = "border-bottom:1px solid rgba(255,255,255,0.05);";
+        var cells = "<td style='padding:5px 8px; color:var(--text-secondary); font-size:11px;'>" + label + "</td>";
+        for (var j = 0; j < nT; j++) {
+            var v = fn(targets[j]);
+            var tdStyle = "padding:5px 8px; text-align:center; font-size:11px;";
+            if (isAccent) tdStyle += " font-weight:600; color:var(--accent);";
+            cells += "<td style='" + tdStyle + "'>" + v + "</td>";
+        }
+        tr.innerHTML = cells;
+        tbody.appendChild(tr);
+    }
+    
+    // Tier 1
+    addSectionBanner("Tier 1: Global Empirical Test Holdout Split (10% unique geometries)");
+    addRow("Normalized RMSE, NRMSE (%)", function(t) {
+        return (t.holdoutNRMSE != null && !isNaN(t.holdoutNRMSE)) ? Number(t.holdoutNRMSE).toFixed(2) + "%" : "—";
+    }, false);
+    addRow("Logarithmic RMSE, N-RMSLE (%)", function(t) {
+        return (t.holdoutNRMSLE != null && !isNaN(t.holdoutNRMSLE)) ? Number(t.holdoutNRMSLE).toFixed(2) + "%" : "—";
+    }, false);
+    addRow("Coefficient of Determination, R²", function(t) {
+        return (t.holdoutR2 != null && !isNaN(t.holdoutR2)) ? Number(t.holdoutR2).toFixed(4) : "—";
+    }, true);
+    
+    // Tier 2
+    addSectionBanner("Tier 2: Global Unbiased Expectation via Inverse Density Weighting (IDW)");
+    addRow("Density-compensated NRMSE (%)", function(t) {
+        return (t.idwNRMSE != null && !isNaN(t.idwNRMSE)) ? Number(t.idwNRMSE).toFixed(2) + "%" : "—";
+    }, false);
+    addRow("Density-compensated R²", function(t) {
+        return (t.idwR2 != null && !isNaN(t.idwR2)) ? Number(t.idwR2).toFixed(4) : "—";
+    }, true);
+    
+    // Tier 3
+    addSectionBanner("Tier 3: Modal Optima Region of Interest (RoI Local Accuracy)");
+    addRow("Local Resonance Basin NRMSE (%)", function(t) {
+        return (t.roiNRMSE != null && !isNaN(t.roiNRMSE)) ? Number(t.roiNRMSE).toFixed(2) + "%" : "—";
+    }, false);
+    addRow("Local Resonance Basin R²", function(t) {
+        return (t.roiR2 != null && !isNaN(t.roiR2)) ? Number(t.roiR2).toFixed(4) : "—";
+    }, false);
     
     var meta = document.getElementById("perfReportMeta");
     if (meta) {
         meta.textContent = "Evaluated on " + (data.numTestSamples || 0) + " test holdout points (" + (data.numRoiSamples || 0) + " within modal optima basins).";
     }
+
+    var btn = document.getElementById("btnEvalModel");
+    var btnHead = document.getElementById("btnHeaderEvalModel");
+    if (btn) btn.disabled = false;
+    if (btnHead) btnHead.disabled = false;
+    setStatus("idle", "Ready");
 }
 
 function evaluateMetricsNow() {
-    appendLog("Requesting three-tier generalization metrics evaluation...");
-    if (window.sendToMATLAB) {
-        window.sendToMATLAB("EvaluateModelPerformance", {});
-    } else if (window.htmlComponent) {
+    var btn = document.getElementById("btnEvalModel");
+    var btnHead = document.getElementById("btnHeaderEvalModel");
+    if (btn) btn.disabled = true;
+    if (btnHead) btnHead.disabled = true;
+    appendLog("Requesting three-tier generalization performance metrics from current DB model...");
+    setStatus("running", "Evaluating...");
+    if (window.htmlComponent && typeof window.htmlComponent.sendEventToMATLAB === "function") {
         window.htmlComponent.sendEventToMATLAB("EvaluateModelPerformance", {});
+    } else if (window.sendToMATLAB) {
+        window.sendToMATLAB("EvaluateModelPerformance", {});
     }
 }
 
@@ -698,9 +881,9 @@ document.addEventListener("DOMContentLoaded", function() {
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
         <h2 style="margin:0;border:none;padding:0;">🧠 Stage 3 — DNN Training</h2>
         <div style="display:flex;gap:6px;align-items:center;">
+            <button class="btn-secondary" id="btnHeaderEvalModel" style="padding:4px 10px;font-size:11px;background:var(--bg-tertiary);border:1px solid var(--accent);border-radius:4px;color:var(--accent);cursor:pointer;" onclick="evaluateMetricsNow()" title="Evaluate performance metrics from current DB Model">&#128202; Eval DB Model</button>
             <button class="btn-secondary" style="padding:4px 10px;font-size:11px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer;" onclick="window.htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
             <button class="btn-secondary" style="padding:4px 10px;font-size:11px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer;" onclick="window.htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
-            <button class="btn-stop" id="btnStopHeader" onclick="stopProcess()">&#9632; Stop</button>
         </div>
     </div>
 
@@ -890,12 +1073,12 @@ document.addEventListener("DOMContentLoaded", function() {
                 <!-- Vertical Gap Metric Controls -->
                 <div class="info-card" style="margin-top:8px;">
                     <div class="toggle-row">
-                        <input type="checkbox" id="includeVerticalGap" onchange="toggleVerticalGapInput()">
+                        <input type="checkbox" id="includeVerticalGap" checked onchange="toggleVerticalGapInput()">
                         <label for="includeVerticalGap" style="font-weight:600; color:var(--text-primary); cursor:pointer;">
                             Include Vertical Gap Ratio (h<sub>gap</sub> / λ)
                         </label>
                     </div>
-                    <div id="verticalGapInputRow" style="display:none; margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
+                    <div id="verticalGapInputRow" style="display:block; margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
                         <div class="field-row">
                             <div class="field" style="max-width:180px;">
                                 <label for="gapHeightUm">Spacer Height h<sub>gap</sub> (µm)</label>
@@ -1290,25 +1473,39 @@ document.addEventListener("DOMContentLoaded", function() {
     </div>
 
     <!-- Actions -->
-    <div style="display:flex;gap:6px;align-items:center;">
-        <button id="btnRun" class="btn-primary" style="flex:1;" onclick="runTraining()">Start Training</button>
-        <button id="btnStopAction" class="btn-stop" style="padding:10px 16px;font-size:12px;margin-top:6px;" onclick="stopProcess()">&#9632; Stop</button>
+    <div style="display:flex;gap:8px;align-items:stretch;margin-top:8px;">
+        <button id="btnRun" class="btn-primary" style="flex:1.2;margin-top:0;" onclick="runTraining()">🚀 Start Training</button>
+        <button id="btnEvalModel" class="btn-secondary" style="flex:1;padding:10px 12px;font-size:12px;border:1px solid var(--accent);color:var(--accent);display:flex;align-items:center;justify-content:center;gap:6px;" onclick="evaluateMetricsNow()" title="Evaluate performance metrics directly from the current model in the database without re-training">
+            <span style="font-size:14px;">📊</span> Evaluate DB Model
+        </button>
     </div>
 
-    <!-- Progress -->
-    <div id="progressArea">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-            <span style="font-weight:600; color:var(--text-primary);">Progress</span>
+    <!-- Progress & Monitoring -->
+    <div id="progressArea" style="max-height:220px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span style="font-weight:600; color:var(--text-primary); font-size:12px;">Training Progress</span>
             <span id="statusBadge" class="status-badge status-idle">Idle</span>
         </div>
-        <div class="progress-bar-container">
-            <div id="progressBar" class="progress-bar"></div>
+
+        <!-- Epoch-based progress counter & percentage -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; font-size:11px;">
+            <span id="epochProgressLabel" style="font-weight:600; color:var(--text-primary);">Epoch: 0 / 200</span>
+            <span id="epochPercentLabel" style="font-weight:700; color:var(--accent);">0.0%</span>
         </div>
-        <pre id="progressLog" style="margin-top:6px; min-height:40px;"></pre>
+        <div class="progress-bar-container" style="height:12px; border-radius:6px; background:rgba(255,255,255,0.06); border:1px solid var(--border); overflow:hidden;">
+            <div id="progressBar" class="progress-bar" style="height:100%; width:0%; border-radius:5px; background:linear-gradient(90deg, var(--accent), var(--accent-hover, #6bd1cb)); transition:width 0.2s ease;"></div>
+        </div>
+
+        <!-- Real-time metrics bar -->
+        <div id="trainingMetricPills" style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; font-size:11px; font-family:'Cascadia Code','Consolas',monospace;">
+            <span style="background:var(--bg-tertiary); padding:2px 7px; border-radius:4px; border:1px solid var(--border);">Iter: <strong id="valIter" style="color:var(--text-primary);">0</strong></span>
+            <span style="background:var(--bg-tertiary); padding:2px 7px; border-radius:4px; border:1px solid var(--border);">Loss: <strong id="valLoss" style="color:var(--accent, #48b2ac);">--</strong></span>
+            <span style="background:var(--bg-tertiary); padding:2px 7px; border-radius:4px; border:1px solid var(--border);">Val Loss: <strong id="valValLoss" style="color:var(--gold-bright, #ebb34f);">--</strong></span>
+        </div>
     </div>
 
     <!-- Generalization & Performance Report -->
-    <div class="section" id="perfReportCard" style="display:none; margin-top:10px;">
+    <div class="section" id="perfReportCard" style="margin-top:10px;">
         <div class="section-title open" onclick="toggleSection(this)">
             📊 Generalization & Performance Report (Three-Tier)
         </div>
@@ -1317,34 +1514,42 @@ document.addEventListener("DOMContentLoaded", function() {
                 Evaluates surrogate fidelity across: <strong>Tier 1</strong> (Holdout Test Split), <strong>Tier 2</strong> (Unbiased Inverse Density Weighting, IDW), and <strong>Tier 3</strong> (Modal Optima Region of Interest, RoI).
             </div>
             
-            <div style="overflow-x:auto;">
-                <table id="perfReportTable" style="width:100%; border-collapse:collapse; font-size:11px; text-align:left;">
-                    <thead>
-                        <tr style="border-bottom:1px solid var(--border); background:var(--bg-tertiary);">
-                            <th style="padding:6px 8px;">Target</th>
-                            <th style="padding:6px 8px;" title="Test Holdout NRMSE">Holdout NRMSE</th>
-                            <th style="padding:6px 8px;" title="Test Holdout N-RMSLE">Holdout N-RMSLE</th>
-                            <th style="padding:6px 8px;" title="Test Holdout R^2">Holdout R²</th>
-                            <th style="padding:6px 8px;" title="Inverse Density Weighted NRMSE">IDW NRMSE</th>
-                            <th style="padding:6px 8px;" title="Inverse Density Weighted R^2">IDW R²</th>
-                            <th style="padding:6px 8px;" title="Modal Optima Region of Interest NRMSE">RoI NRMSE</th>
-                            <th style="padding:6px 8px;" title="Modal Optima Region of Interest R^2">RoI R²</th>
-                        </tr>
-                    </thead>
-                    <tbody id="perfReportBody">
-                        <!-- Populated dynamically -->
-                    </tbody>
-                </table>
+            <div id="perfReportEmptyState" style="background:var(--bg-tertiary);border:1px dashed var(--border);border-radius:6px;padding:14px;text-align:center;margin-top:4px;">
+                <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:4px;">No Performance Report Available Yet</div>
+                <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px;line-height:1.4;">
+                    Evaluate the surrogate model currently loaded in <code>db.Model</code> across Holdout test split, Unbiased IDW, and Modal Optima RoI, and render the diagnostic plots in the visualization panel.
+                </div>
+                <button type="button" class="btn-secondary" onclick="evaluateMetricsNow()" style="padding:6px 14px;font-size:11px;border:1px solid var(--accent);color:var(--accent);display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+                    <span>📊</span> Evaluate DB Model Now
+                </button>
             </div>
 
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
-                <span id="perfReportMeta" style="font-size:10px; color:var(--text-secondary);"></span>
-                <div style="display:flex; gap:6px;">
-                    <button type="button" class="btn-secondary" onclick="evaluateMetricsNow()" style="padding:4px 8px; font-size:11px;">🔄 Re-evaluate</button>
-                    <button type="button" class="btn-secondary" id="btnCopyLatex" onclick="copyLatexTable()" style="padding:4px 8px; font-size:11px;">📋 Copy LaTeX</button>
+            <div id="perfReportContent" style="display:none;">
+                <div style="overflow-x:auto;">
+                    <table id="perfReportTable" style="width:100%; border-collapse:collapse; font-size:11px; text-align:left;">
+                        <thead>
+                            <tr id="perfReportHeaderRow" style="border-bottom:1px solid var(--border); background:var(--bg-tertiary);">
+                                <th style="padding:6px 8px; font-weight:700;">Evaluation Tier / Metric</th>
+                                <th style="padding:6px 8px; text-align:center; font-weight:700;">Absorptance <em>A<sub>L</sub></em></th>
+                                <th style="padding:6px 8px; text-align:center; font-weight:700;">Volumetric EF <em>EF<sub>V</sub></em></th>
+                                <th style="padding:6px 8px; text-align:center; font-weight:700;">Surface EF <em>EF<sub>S</sub></em></th>
+                            </tr>
+                        </thead>
+                        <tbody id="perfReportBody">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
                 </div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+                    <span id="perfReportMeta" style="font-size:10px; color:var(--text-secondary);"></span>
+                    <div style="display:flex; gap:6px;">
+                        <button type="button" class="btn-secondary" onclick="evaluateMetricsNow()" style="padding:4px 8px; font-size:11px;">🔄 Re-evaluate</button>
+                        <button type="button" class="btn-secondary" id="btnCopyLatex" onclick="copyLatexTable()" style="padding:4px 8px; font-size:11px;">📋 Copy LaTeX</button>
+                    </div>
+                </div>
+                <div id="copyFeedback" style="display:none; font-size:10px; color:var(--success); margin-top:4px; text-align:right;">✓ LaTeX table copied to clipboard!</div>
             </div>
-            <div id="copyFeedback" style="display:none; font-size:10px; color:var(--success); margin-top:4px; text-align:right;">✓ LaTeX table copied to clipboard!</div>
         </div>
     </div>
 </body>

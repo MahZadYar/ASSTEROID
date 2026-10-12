@@ -15,13 +15,13 @@ function rawFiles = resolveSimDataPath(db)
 
     rawFiles = string.empty;
 
-    if isfield(db, "Global") && isfield(db.Global, "SimFile") ...
-            && strlength(string(db.Global.SimFile)) > 0 && isfile(string(db.Global.SimFile))
-        rawFiles = string(db.Global.SimFile);
-    elseif isfield(db, "Sim") && isstruct(db.Sim) && structRowCount(db.Sim) > 0
+    if isfield(db, "Sim") && isstruct(db.Sim) && structRowCount(db.Sim) > 0
         tmpSim = fullfile(tempdir, "db_sim_data_temp.mat");
         allData = db.Sim; %#ok<NASGU>
         save(tmpSim, "allData", "-v7.3");
         rawFiles = string(tmpSim);
+    elseif isfield(db, "Global") && isfield(db.Global, "SimFile") ...
+            && strlength(string(db.Global.SimFile)) > 0 && isfile(string(db.Global.SimFile))
+        rawFiles = string(db.Global.SimFile);
     end
 end

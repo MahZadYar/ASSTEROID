@@ -576,6 +576,7 @@ function setup(htmlComponent) {
         resetStopButtons();
     });
 
+    toggleDataSource();
     initializeEmptySeedTable();
 }
 
@@ -739,6 +740,15 @@ function toggleDataSource() {
     if (predFields) predFields.style.display = (source === "predictions") ? "block" : "none";
     document.getElementById("modelFields").style.display = (source === "model") ? "block" : "none";
     document.getElementById("interpFields").style.display = (source === "interpolation") ? "block" : "none";
+
+    var gridSection = document.getElementById("gridDefinitionSection");
+    if (gridSection) {
+        gridSection.style.display = (source === "predictions") ? "none" : "";
+    }
+    var genPredBlock = document.getElementById("genPredBlock");
+    if (genPredBlock) {
+        genPredBlock.style.display = (source === "predictions") ? "none" : "";
+    }
 }
 
 function getDataSource() {
@@ -1084,9 +1094,15 @@ function addSeed() {
 function handleProgress(data) {
     if (!data) return;
     if (data.message) appendLog(data.message);
-    if (data.fraction !== undefined && data.fraction !== null) {
-        var pct = Math.round(data.fraction * 100);
-        document.getElementById("progressBar").style.width = pct + "%";
+    var pct = (data.fraction !== undefined && data.fraction !== null) ? Math.round(data.fraction * 100) : 0;
+    var bar = document.getElementById("progressBar");
+    if (bar) bar.style.width = pct + "%";
+    if (window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("ProgressUpdate", {
+            percent: pct,
+            message: data.message || "",
+            stage: "Stage 5 — Optimize"
+        });
     }
 }
 
@@ -1222,19 +1238,28 @@ function updateOptRequirements(d) {
 
 function setStatus(cls, text) {
     var el = document.getElementById("statusBadge");
-    el.className = "status-badge status-" + cls;
-    el.textContent = text;
+    if (el) {
+        el.className = "status-badge status-" + cls;
+        el.textContent = text;
+    }
 }
 
-function appendLog(msg) {
+function appendLog(msg, level) {
+    if (window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("LogMessage", { message: msg, stage: "Stage 5 — Optimize", level: level || "info" });
+    }
     var el = document.getElementById("progressLog");
-    el.textContent += msg + "\n";
-    el.scrollTop = el.scrollHeight;
+    if (el) {
+        el.textContent += msg + "\n";
+        el.scrollTop = el.scrollHeight;
+    }
 }
 
 function clearLog() {
-    document.getElementById("progressLog").textContent = "";
-    document.getElementById("progressBar").style.width = "0%";
+    var el = document.getElementById("progressLog");
+    if (el) el.textContent = "";
+    var bar = document.getElementById("progressBar");
+    if (bar) bar.style.width = "0%";
 }
 
 function toggleSection(el) {
@@ -1412,7 +1437,6 @@ function toggleAllDbOptima(masterCb) {
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px 8px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
         <h2 style="margin:0;padding:0;border:none;">🔍 Stage 5 — Optimization</h2>
         <div style="display:flex;gap:6px;">
-            <button class="btn-stop" id="btnStopHeader" onclick="stopProcess()" title="Stop any running process immediately">&#9632; Stop</button>
             <button class="btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="window.htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
             <button class="btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="window.htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
         </div>
@@ -1501,10 +1525,9 @@ function toggleAllDbOptima(masterCb) {
                                     <span id="reqOptimaStatus" class="req-badge req-optional" style="font-size:12px;font-weight:600;">&#8212; None</span>
                                 </div>
                             </div>
-                            <div style="margin-top:8px;">
+                            <div id="genPredBlock" style="margin-top:8px;">
                                 <div style="display:flex;gap:8px;">
                                     <button id="btnGenPredictions" class="btn-secondary" style="flex:1;padding:6px 12px;font-size:11px;" onclick="generatePredictions()">Generate / Regenerate Predictions</button>
-                                    <button class="btn-stop" onclick="stopProcess()" title="Stop any running process immediately">&#9632; Stop</button>
                                 </div>
                                 <p class="hint" style="margin-top:4px;">Runs the DNN model over the current grid and writes results to db.Pred. Required before optimization if no dense predictions are cached.</p>
                             </div>
@@ -1512,7 +1535,7 @@ function toggleAllDbOptima(masterCb) {
                     </div>
 
                     <!-- Grid Definition -->
-                    <div class="section">
+                    <div class="section" id="gridDefinitionSection">
                         <div class="section-title open" onclick="toggleSection(this)">Grid Definition</div>
                         <div>
                             <div class="field-row">
@@ -1581,7 +1604,7 @@ function toggleAllDbOptima(masterCb) {
                     </div>
 
                     <!-- Metric Selection -->
-                    <div class="section">
+                    <div class="section" id="metricSelectionSection">
                         <div class="section-title open" onclick="toggleSection(this)">Metric Selection</div>
                         <div>
                             <div class="field-row">
@@ -1610,7 +1633,6 @@ function toggleAllDbOptima(masterCb) {
 
                     <div class="btn-row">
                         <button id="btnPreview" class="btn-primary" onclick="previewMetric()">Preview Heatmap</button>
-                        <button class="btn-stop" onclick="stopProcess()" title="Stop any running process immediately">&#9632; Stop</button>
                     </div>
                 </div>
             </div>
@@ -1642,7 +1664,6 @@ function toggleAllDbOptima(masterCb) {
 
                     <div class="btn-row">
                         <button id="btnInitSeeds" class="btn-primary" onclick="initializeSeeds()">Initialize Seeds</button>
-                        <button class="btn-stop" onclick="stopProcess()" title="Stop any running process immediately">&#9632; Stop</button>
                     </div>
                 </div>
             </div>
@@ -1781,7 +1802,6 @@ function toggleAllDbOptima(masterCb) {
 
                     <div class="btn-row">
                         <button id="btnFineTune" class="btn-primary" onclick="fineTuneSeeds()">Fine Tune Seeds</button>
-                        <button class="btn-stop" onclick="stopProcess()" title="Stop any running process immediately">&#9632; Stop</button>
                     </div>
                 </div>
             </div>
@@ -1861,20 +1881,6 @@ function toggleAllDbOptima(masterCb) {
                     <div class="bottom-actions">
                         <span style="font-size:11px;color:var(--text-secondary);" id="dbOptimaCount">0 rows</span>
                     </div>
-                </div>
-            </div>
-            
-            <!-- Bottom Section: Console / Progress -->
-            <div class="bottom-left-section">
-                <div id="progressArea">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                        <span style="font-weight:600; color:var(--text-primary);">Progress</span>
-                        <span id="statusBadge" class="status-badge status-idle">Idle</span>
-                    </div>
-                    <div class="progress-bar-container">
-                        <div id="progressBar" class="progress-bar"></div>
-                    </div>
-                    <pre id="progressLog" style="margin-top:6px; min-height:30px;"></pre>
                 </div>
             </div>
         </div>

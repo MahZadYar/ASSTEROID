@@ -436,6 +436,20 @@ classdef ImportController < handle
                 catch
                 end
             end
+            if ~isempty(obj.fig) && isvalid(obj.fig) && isstruct(obj.fig.UserData) && isfield(obj.fig.UserData, "app")
+                if strcmp(eventName, "Progress") && isstruct(payload)
+                    pct = 0;
+                    if isfield(payload, "fraction") && ~isempty(payload.fraction), pct = payload.fraction * 100;
+                    elseif isfield(payload, "percent") && ~isempty(payload.percent), pct = payload.percent; end
+                    msg = ""; if isfield(payload, "message"), msg = payload.message; end
+                    try obj.fig.UserData.app.updateProgress(pct, msg, "Stage 1 — Import"); catch; end
+                elseif contains(lower(eventName), "error") || contains(lower(eventName), "complete")
+                    lvl = "info";
+                    if contains(lower(eventName), "error"), lvl = "error";
+                    else, lvl = "success"; end
+                    try obj.fig.UserData.app.logMessage(string(payload), lvl, "Stage 1 — Import"); catch; end
+                end
+            end
         end
 
         function v = safeNum(~, s, f, d)

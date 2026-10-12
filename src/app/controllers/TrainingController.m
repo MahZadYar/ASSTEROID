@@ -47,6 +47,19 @@ classdef TrainingController < handle
                                 && isfield(fig_.UserData.app, "broadcastDbStatus")
                             fig_.UserData.app.broadcastDbStatus();
                         end
+                        db_ = obj.getDb();
+                        if isfield(db_, "Model") && isstruct(db_.Model) && isfield(db_.Model, "PerformanceReport") ...
+                                && isstruct(db_.Model.PerformanceReport)
+                            obj.sendPerformanceReport(db_.Model.PerformanceReport);
+                            vp_ = obj.visPanel;
+                            if ~isempty(vp_) && isvalid(vp_)
+                                try
+                                    delete(allchild(vp_));
+                                    visualizePerformanceReport(db_.Model.PerformanceReport, Parent=vp_);
+                                catch
+                                end
+                            end
+                        end
                     case "SaveDatabaseRequest"
                         if ~isempty(fig_) && isvalid(fig_)
                             if isfield(fig_.UserData, "app") && isfield(fig_.UserData.app, "saveDbFile")
@@ -69,8 +82,10 @@ classdef TrainingController < handle
                         workDir = obj.session.workDir;
                         res = obj.findLatestCheckpointFile(workDir);
                         obj.sendToHTML("LatestCheckpointFound", res);
-                    case "EvaluateModelPerformance"
+                    case {"EvaluateModelPerformance", "evaluateModelPerformance"}
                         obj.evaluateModelPerformance(eventData);
+                    case "ClientReady"
+                        % Web UI bridge handshake
                     otherwise
                         fprintf("[TrainingController] Unknown event: %s\n", eventName);
                 end
@@ -170,8 +185,17 @@ classdef TrainingController < handle
 
             featureSchema = obj.safeStr(d, "featureSchema", "v2_physics");
             splitMode     = obj.safeStr(d, "splitMode", "geometry");
-            incVertGap    = obj.safeBool(d, "includeVerticalGap", false);
+            incVertGap    = obj.safeBool(d, "includeVerticalGap", true);
             gapHeightUm   = obj.safeNum(d, "gapHeightUm", 0.005);
+
+            defaultCpPath = fullfile(workDir, "DNNCheckpoints");
+            cpPath = obj.safeStr(d, "checkpointPath", "");
+            if cpPath == "" || cpPath == "DNNCheckpoints"
+                cpPath = defaultCpPath;
+            end
+            if ~isfolder(cpPath)
+                try mkdir(cpPath); catch; end
+            end
 
             cfg = trainingConfig( ...
                 WorkDir             = workDir, ...
@@ -218,7 +242,7 @@ classdef TrainingController < handle
                 ExecutionEnvironment    = obj.safeStr(d, "executionEnvironment", "auto"), ...
                 PreprocessingEnvironment = obj.safeStr(d, "preprocessingEnvironment", "serial"), ...
                 Acceleration            = obj.safeStr(d, "acceleration", "auto"), ...
-                CheckpointPath          = obj.safeStr(d, "checkpointPath", ""), ...
+                CheckpointPath          = cpPath, ...
                 CheckpointFrequency     = obj.safeNum(d, "checkpointFrequency", NaN), ...
                 CheckpointFrequencyUnit = obj.safeStr(d, "checkpointFrequencyUnit", "epoch"), ...
                 ResetInputNormalization = obj.safeBool(d, "resetInputNormalization", true), ...
@@ -236,18 +260,191 @@ classdef TrainingController < handle
 
             cfg.stopTrainingFcn = @() obj.isStopRequested();
 
-            results = runTrainingWorkflow(cfg, rep);
-
-            % Render diagnostic plots
+            % Setup real-time Log-Log Loss vs Iteration plot in right panel (visPanel)
             vp = obj.visPanel;
-            if ~isempty(vp) && isvalid(vp)
+            if (isempty(vp) || ~isvalid(vp)) && ~isempty(obj.fig) && isvalid(obj.fig) ...
+                    && isfield(obj.fig.UserData, "handles") && isfield(obj.fig.UserData.handles, "trainingVisPanel")
+                vp = obj.fig.UserData.handles.trainingVisPanel;
+            end
+            hasVisPanel = ~isempty(vp) && isvalid(vp);
+            trainAx = [];
+            hTrainLoss = [];
+            hValLoss = [];
+            lastIterLogged = 0;
+            lastLossLogged = NaN;
+
+            if hasVisPanel
                 try
                     delete(allchild(vp));
-                    visualizeTrainingResults(results, Parent=vp);
-                catch ME_vis
-                    fprintf("[TrainingController] Visualization error: %s\n", ME_vis.message);
+                    trainAx = uiaxes(vp);
+                    trainAx.Units = "normalized";
+                    trainAx.Position = [0.10, 0.12, 0.86, 0.80];
+                    trainAx.XScale = "log";
+                    trainAx.YScale = "log";
+                    trainAx.XGrid = "on";
+                    trainAx.YGrid = "on";
+                    trainAx.Color = [12, 16, 32]/255;          % ASSTEROID deep dark background (#0c1020)
+                    trainAx.GridColor = [35, 50, 86]/255;      % Slate navy grid (#233256)
+                    trainAx.GridAlpha = 0.5;
+                    trainAx.XColor = [160, 178, 214]/255;      % Slate text (#a0b2d6)
+                    trainAx.YColor = [160, 178, 214]/255;
+                    title(trainAx, "Surrogate DNN Training Loss & Validation vs. Iteration (Log-Log Scale)", ...
+                        "Color", [248, 248, 248]/255, "FontSize", 11, "FontWeight", "bold");
+                    xlabel(trainAx, "Iteration (log scale)", ...
+                        "Color", [160, 178, 214]/255, "FontSize", 10, "FontWeight", "bold");
+                    ylabel(trainAx, "Loss (log scale)", ...
+                        "Color", [160, 178, 214]/255, "FontSize", 10, "FontWeight", "bold");
+
+                    hTrainLoss = animatedline(trainAx, ...
+                        "Color", [72, 178, 172]/255, ...       % ASSTEROID Teal (#48b2ac)
+                        "LineWidth", 0.5, ...                  % Minimum line thickness
+                        "LineStyle", "-", ...
+                        "DisplayName", "Training Loss");
+                    hValLoss = animatedline(trainAx, ...
+                        "Color", [235, 179, 79]/255, ...       % ASSTEROID Gold (#ebb34f)
+                        "LineWidth", 1.5, ...
+                        "LineStyle", "-", ...                  % Solid line
+                        "Marker", "none", ...                  % No point data
+                        "DisplayName", "Validation Loss");
+
+                    legend(trainAx, [hTrainLoss, hValLoss], ...
+                        "TextColor", [248, 248, 248]/255, ...
+                        "Color", [19, 26, 51]/255, ...         % ASSTEROID tertiary bg (#131a33)
+                        "EdgeColor", [35, 50, 86]/255, ...     % ASSTEROID border (#233256)
+                        "Location", "northeast");
+                    drawnow;
+                catch ME_ax
+                    fprintf("[TrainingController] Error initializing live training axes: %s\n", ME_ax.message);
                 end
             end
+
+            maxEpochsVal = obj.safeNum(d, "maxEpochs", 200);
+            lastUiUpdateTic = tic;
+            totalItersLocked = NaN;
+
+            cfg.iterationCallback = @(info) onIterProgress(info);
+
+            function onIterProgress(info)
+                if ~isstruct(info) || ~isfield(info, "State")
+                    return;
+                end
+
+                % Set and lock X-axis limits to [1 totalIterations] so it doesn't rescale
+                if isfield(info, "TotalIterations") && isfinite(double(info.TotalIterations)) && double(info.TotalIterations) >= 1
+                    totIters = max(2, double(info.TotalIterations));
+                    if isnan(totalItersLocked) || totalItersLocked ~= totIters
+                        totalItersLocked = totIters;
+                        if ~isempty(trainAx) && isvalid(trainAx)
+                            try
+                                trainAx.XLim = [1, totIters];
+                                trainAx.XLimMode = "manual";
+                            catch
+                            end
+                        end
+                    end
+                end
+
+                if strcmpi(string(info.State), "start")
+                    return;
+                end
+                if ~strcmpi(string(info.State), "iteration")
+                    return;
+                end
+
+                curIter = double(info.Iteration);
+                curEpoch = double(info.Epoch);
+                curLoss = NaN;
+                if isfield(info, "TrainingLoss") && ~isempty(info.TrainingLoss)
+                    tLossDbl = double(info.TrainingLoss);
+                    if isscalar(tLossDbl) && isfinite(tLossDbl)
+                        curLoss = tLossDbl;
+                    elseif ~isempty(tLossDbl)
+                        curLoss = mean(tLossDbl(isfinite(tLossDbl)), 'all');
+                    end
+                elseif isfield(info, "Loss") && ~isempty(info.Loss)
+                    tLossDbl = double(info.Loss);
+                    if isscalar(tLossDbl) && isfinite(tLossDbl)
+                        curLoss = tLossDbl;
+                    elseif ~isempty(tLossDbl)
+                        curLoss = mean(tLossDbl(isfinite(tLossDbl)), 'all');
+                    end
+                end
+
+                curValLoss = NaN;
+                if isfield(info, "ValidationLoss") && ~isempty(info.ValidationLoss)
+                    vLossDbl = double(info.ValidationLoss);
+                    if isscalar(vLossDbl) && isfinite(vLossDbl)
+                        curValLoss = vLossDbl;
+                    elseif ~isempty(vLossDbl)
+                        curValLoss = mean(vLossDbl(isfinite(vLossDbl)), 'all');
+                    end
+                end
+
+                curLr = NaN;
+                if isfield(info, "LearnRate") && ~isempty(info.LearnRate)
+                    curLr = double(info.LearnRate);
+                elseif isfield(info, "BaseLearnRate") && ~isempty(info.BaseLearnRate)
+                    curLr = double(info.BaseLearnRate);
+                end
+
+                if isfinite(curIter) && curIter >= 1
+                    lastIterLogged = curIter;
+                end
+                if isfinite(curLoss)
+                    lastLossLogged = curLoss;
+                end
+
+                % Real-time Log-Log plot point additions
+                if ~isempty(trainAx) && isvalid(trainAx) && curIter >= 1
+                    try
+                        if isfinite(curLoss) && curLoss > 0
+                            addpoints(hTrainLoss, curIter, curLoss);
+                        end
+                        if isfinite(curValLoss) && curValLoss > 0
+                            addpoints(hValLoss, curIter, curValLoss);
+                        end
+                    catch
+                    end
+                end
+
+                % Throttle UI / HTML updates to ~0.10s for buttery-smooth training performance
+                if toc(lastUiUpdateTic) >= 0.10 || curIter == 1
+                    lastUiUpdateTic = tic;
+
+                    if ~isempty(trainAx) && isvalid(trainAx)
+                        try
+                            subText = sprintf("Epoch %d / %d | Iteration %d | Train Loss: %.4e", ...
+                                curEpoch, maxEpochsVal, curIter, curLoss);
+                            if isfinite(curValLoss) && curValLoss > 0
+                                subText = subText + sprintf(" | Val Loss: %.4e", curValLoss);
+                            end
+                            if isfinite(curLr)
+                                subText = subText + sprintf(" | LR: %.1e", curLr);
+                            end
+                            subtitle(trainAx, subText, "Color", [160, 178, 214]/255, "FontSize", 9);
+                            drawnow limitrate;
+                        catch
+                        end
+                    end
+
+                    % Send epoch progress and metrics to HTML UI
+                    frac = min(1.0, curEpoch / max(1, maxEpochsVal));
+                    progStruct = struct( ...
+                        "fraction", frac, ...
+                        "epoch", curEpoch, ...
+                        "maxEpochs", maxEpochsVal, ...
+                        "iteration", curIter, ...
+                        "loss", curLoss, ...
+                        "valLoss", curValLoss, ...
+                        "message", sprintf("Epoch %d/%d (Iter %d) - Loss: %.4e", curEpoch, maxEpochsVal, curIter, curLoss));
+                    if isfinite(curLr)
+                        progStruct.lr = curLr;
+                    end
+                    obj.sendToHTML("Progress", progStruct);
+                end
+            end
+
+            results = runTrainingWorkflow(cfg, rep);
 
             % Update session state
             if isfield(results, "db") && isstruct(results.db)
@@ -273,14 +470,9 @@ classdef TrainingController < handle
             end
 
             obj.session.markDirty();
-
-            % Dispatch three-tier performance report to UI if available
-            if isfield(results, "performanceReport") && isstruct(results.performanceReport) ...
-                    && ~isempty(fieldnames(results.performanceReport))
-                obj.sendPerformanceReport(results.performanceReport);
-            elseif isfield(obj.session.db, "Model") && isfield(obj.session.db.Model, "PerformanceReport") ...
-                    && isstruct(obj.session.db.Model.PerformanceReport)
-                obj.sendPerformanceReport(obj.session.db.Model.PerformanceReport);
+            try
+                obj.session.saveDatabase();
+            catch
             end
 
             % Sync legacy figure state for backward compatibility
@@ -293,17 +485,51 @@ classdef TrainingController < handle
                     ve.modelLoaded = true;
                     obj.fig.UserData.visExport = ve;
                 end
+                if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "saveDbFile")
+                    try obj.fig.UserData.app.saveDbFile(); catch; end
+                end
                 if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "markDbDirty")
-                    obj.fig.UserData.app.markDbDirty();
+                    try obj.fig.UserData.app.markDbDirty(); catch; end
                 else
                     obj.fig.UserData.dbDirty = true;
                 end
             end
 
+            % Finalize diagnostic plots on right panel
+            if ~isempty(trainAx) && isvalid(trainAx)
+                try
+                    if obj.isStopRequested()
+                        title(trainAx, sprintf("Training Stopped Early at Iteration %d (Loss: %.4e) — Model Saved", ...
+                            round(lastIterLogged), lastLossLogged), ...
+                            "Color", [230, 74, 111]/255, "FontSize", 11, "FontWeight", "bold");
+                        subtitle(trainAx, "Model saved to disk and database. Click 'Evaluate DB Model' to inspect Three-Tier generalization.", ...
+                            "Color", [160, 178, 214]/255, "FontSize", 9);
+                    else
+                        title(trainAx, sprintf("Training Complete — Final Loss: %.4e (%d Iterations)", ...
+                            lastLossLogged, round(lastIterLogged)), ...
+                            "Color", [72, 178, 172]/255, "FontSize", 11, "FontWeight", "bold");
+                        subtitle(trainAx, "Model saved to disk and database. Click 'Evaluate DB Model' to compute and display full Three-Tier Generalization metrics", ...
+                            "Color", [160, 178, 214]/255, "FontSize", 9);
+                    end
+                    drawnow;
+                catch
+                end
+            end
+
+            % Dispatch three-tier performance report to UI if available
+            if isfield(results, "performanceReport") && isstruct(results.performanceReport) ...
+                    && ~isempty(fieldnames(results.performanceReport))
+                obj.sendPerformanceReport(results.performanceReport);
+            elseif isfield(obj.session.db, "Model") && isfield(obj.session.db.Model, "PerformanceReport") ...
+                    && isstruct(obj.session.db.Model.PerformanceReport)
+                obj.sendPerformanceReport(obj.session.db.Model.PerformanceReport);
+            end
+
             if obj.isStopRequested()
-                obj.notifyStopped(sprintf("Training stopped by user and finalized in %.1f s", results.elapsedTotal));
+                obj.notifyStopped(sprintf("Training stopped early by user at iteration %d (loss: %.4e). Model saved to disk and database.", ...
+                    round(lastIterLogged), lastLossLogged));
             else
-                obj.sendToHTML("TrainComplete", sprintf("Training complete in %.1f s", results.elapsedTotal));
+                obj.sendToHTML("TrainComplete", sprintf("Training complete in %.1f s. Model saved to disk and database.", results.elapsedTotal));
             end
         end
 
@@ -397,8 +623,8 @@ classdef TrainingController < handle
         end
     end
 
-    %% Internal Helpers
-    methods (Access = private)
+    %% Helpers and Lifecycle Controls
+    methods
         function db = getDb(obj)
             if ~isempty(obj.fig) && isvalid(obj.fig) && isstruct(obj.fig.UserData) ...
                     && isfield(obj.fig.UserData, "db") && isstruct(obj.fig.UserData.db)
@@ -436,6 +662,28 @@ classdef TrainingController < handle
                 catch
                 end
             end
+            if ~isempty(obj.fig) && isvalid(obj.fig) && isstruct(obj.fig.UserData) && isfield(obj.fig.UserData, "app")
+                if strcmp(eventName, "Progress") && isstruct(payload)
+                    pct = 0;
+                    if isfield(payload, "fraction") && ~isempty(payload.fraction), pct = payload.fraction * 100;
+                    elseif isfield(payload, "percent") && ~isempty(payload.percent), pct = payload.percent;
+                    elseif isfield(payload, "epoch") && isfield(payload, "maxEpochs") && payload.maxEpochs > 0
+                        pct = (payload.epoch / payload.maxEpochs) * 100;
+                    end
+                    msg = ""; if isfield(payload, "message"), msg = payload.message; end
+                    mObj = struct();
+                    if isfield(payload, "iteration"), mObj.Iter = payload.iteration; end
+                    if isfield(payload, "loss") && isfinite(payload.loss), mObj.Loss = sprintf("%.3e", payload.loss); end
+                    if isfield(payload, "valLoss") && isfinite(payload.valLoss), mObj.ValLoss = sprintf("%.3e", payload.valLoss); end
+                    try obj.fig.UserData.app.updateProgress(pct, msg, "Stage 3 — Training", mObj); catch; end
+                elseif (contains(lower(eventName), "error") || contains(lower(eventName), "complete") || contains(lower(eventName), "stop"))
+                    lvl = "info";
+                    if contains(lower(eventName), "error"), lvl = "error";
+                    elseif contains(lower(eventName), "stop"), lvl = "warning";
+                    else, lvl = "success"; end
+                    try obj.fig.UserData.app.logMessage(string(payload), lvl, "Stage 3 — Training"); catch; end
+                end
+            end
         end
 
         function rep = makeReporter(obj)
@@ -453,6 +701,14 @@ classdef TrainingController < handle
                 end
                 if isfield(obj.fig.UserData, "training")
                     obj.fig.UserData.training.isRunning = isRunning;
+                end
+                if isRunning
+                    if isfield(obj.fig.UserData, "process")
+                        obj.fig.UserData.process.stopRequested = false;
+                    end
+                    if isfield(obj.fig.UserData, "training")
+                        obj.fig.UserData.training.stopRequested = false;
+                    end
                 end
             end
             obj.session.setProcessRunning(isRunning, "Training");
@@ -499,9 +755,11 @@ classdef TrainingController < handle
                 end
             end
             obj.session.requestStop();
+            obj.sendToHTML("TrainStopAck", "Stopping training at current iteration and saving model...");
         end
 
         function notifyStopped(obj, msg)
+            obj.sendToHTML("TrainStopped", msg);
             if ~isempty(obj.fig) && isvalid(obj.fig)
                 if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "notifyProcessStopped")
                     obj.fig.UserData.app.notifyProcessStopped("Training", msg);
@@ -599,53 +857,155 @@ classdef TrainingController < handle
 
         function evaluateModelPerformance(obj, ~)
         % EVALUATEMODELPERFORMANCE Evaluate three-tier metrics for currently loaded model.
-            if ~obj.session.modelLoaded && (~isfield(obj.session.db, "Model") || isempty(fieldnames(obj.session.db.Model)))
-                obj.sendToHTML("TrainError", "No trained model loaded in session or db.Model.");
+            setup_project;
+            db_ = obj.getDb();
+            hasModelInDb = isfield(db_, "Model") && isstruct(db_.Model) && ~isempty(fieldnames(db_.Model));
+            if ~obj.session.modelLoaded && ~hasModelInDb
+                obj.sendToHTML("TrainError", "No trained model found in session or db.Model. Train a model or load one from Database tab.");
                 return;
             end
 
-            % Check simulation data
-            simData = [];
-            if isfield(obj.session.db, "Sim") && isstruct(obj.session.db.Sim) && ~isempty(fieldnames(obj.session.db.Sim))
-                simData = obj.session.db.Sim;
-            end
-            if isempty(simData)
-                obj.sendToHTML("TrainError", "Simulation data required for evaluation (db.Sim is empty).");
-                return;
-            end
+            try
+                obj.sendToHTML("Progress", struct("status", "Evaluating", "message", "Resolving trained model and simulation dataset..."));
 
-            model = obj.session.model;
-            if isempty(model) && isfield(obj.session.db.Model, "Model")
-                model = obj.session.db.Model.Model;
+                ri = getDefaultRefractiveIndex(SearchDir=obj.session.workDir, WavelengthUnit="um");
+
+                % Resolve model
+                model = obj.session.model;
+                if isempty(model) && hasModelInDb
+                    if isfield(db_.Model, "Model") && isstruct(db_.Model.Model)
+                        model = db_.Model.Model;
+                    elseif isfield(db_.Model, "Net") && ~isempty(db_.Model.Net)
+                        model = db_.Model;
+                    elseif isfield(db_.Model, "NetFile") && isfile(string(db_.Model.NetFile))
+                        try
+                            [model, ~] = loadAndValidateModel(ModelFile=string(db_.Model.NetFile), Ri=ri);
+                        catch
+                        end
+                    end
+                end
+
+                if isempty(model)
+                    obj.sendToHTML("TrainError", "Unable to resolve trained model network from session or db.Model.");
+                    return;
+                end
+
+                targetFields = ["Absorptance", "EF_vol", "EF_surf"];
+                if isfield(model, "targetNames") && ~isempty(model.targetNames)
+                    targetFields = string(model.targetNames);
+                end
+
+                % Resolve evaluation dataset: reuse cached/saved split if available, otherwise build fresh
+                ds = [];
+                if isprop(obj.session, "dataset") && ~isempty(obj.session.dataset) ...
+                        && isstruct(obj.session.dataset) && isfield(obj.session.dataset, "XTest") && ~isempty(obj.session.dataset.XTest)
+                    ds = obj.session.dataset;
+                elseif ((isstruct(model) && isfield(model, "dataset")) || (isobject(model) && isprop(model, "dataset"))) ...
+                        && ~isempty(model.dataset) && isstruct(model.dataset) ...
+                        && isfield(model.dataset, "XTest") && ~isempty(model.dataset.XTest)
+                    ds = model.dataset;
+                end
+                if isempty(ds) && isfield(db_, "Model") && isstruct(db_.Model)
+                    if isfield(db_.Model, "Dataset") && isstruct(db_.Model.Dataset) ...
+                            && isfield(db_.Model.Dataset, "XTest") && ~isempty(db_.Model.Dataset.XTest)
+                        ds = db_.Model.Dataset;
+                    elseif isfield(db_.Model, "NetFile") && isfile(string(db_.Model.NetFile))
+                        try
+                            loadedNet = load(string(db_.Model.NetFile), "dataset");
+                            if isfield(loadedNet, "dataset") && isstruct(loadedNet.dataset) ...
+                                    && isfield(loadedNet.dataset, "XTest") && ~isempty(loadedNet.dataset.XTest)
+                                ds = loadedNet.dataset;
+                            end
+                        catch
+                        end
+                    end
+                end
+
+                if isempty(ds)
+                    % Check simulation data
+                    simData = [];
+                    if isfield(db_, "Sim") && isstruct(db_.Sim) && ~isempty(fieldnames(db_.Sim))
+                        simData = db_.Sim;
+                    end
+                    if isempty(simData)
+                        rawFiles = obj.resolveSimDataFiles();
+                        if ~isempty(rawFiles)
+                            for rf = reshape(rawFiles, 1, [])
+                                if isfile(rf)
+                                    try
+                                        loaded = load(rf);
+                                        if isfield(loaded, "allData") && isstruct(loaded.allData)
+                                            simData = loaded.allData;
+                                            break;
+                                        elseif isfield(loaded, "Sim") && isstruct(loaded.Sim)
+                                            simData = loaded.Sim;
+                                            break;
+                                        end
+                                    catch
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    if isempty(simData)
+                        obj.sendToHTML("TrainError", "Simulation data required for evaluation (db.Sim is empty). Load simulation data in Database tab.");
+                        return;
+                    end
+
+                    obj.sendToHTML("Progress", struct("status", "Evaluating", "message", "Preparing dataset splits and feature matrices..."));
+                    ds = prepare_training_dataset(simData, ri, TargetFields=targetFields);
+                end
+
+                dbOptima = [];
+                if isfield(db_, "Optima") && isstruct(db_.Optima)
+                    dbOptima = db_.Optima;
+                end
+
+                obj.sendToHTML("Progress", struct("status", "Evaluating", "message", "Computing Tier 1 (Holdout), Tier 2 (IDW), and Tier 3 (Optima RoI) metrics..."));
+                perfReport = computeSurrogateEvaluationMetrics(model, ds, dbOptima, Verbose=true);
+
+                % Update session and database state
+                if ~isfield(obj.session.db, "Model") || ~isstruct(obj.session.db.Model)
+                    obj.session.db.Model = struct();
+                end
+                obj.session.db.Model.PerformanceReport = perfReport;
+                if ~isempty(obj.session.model)
+                    obj.session.model.performanceReport = perfReport;
+                end
+                obj.session.markDirty();
+
+                if ~isempty(obj.fig) && isvalid(obj.fig)
+                    obj.fig.UserData.db = obj.session.db;
+                    if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "markDbDirty")
+                        obj.fig.UserData.app.markDbDirty();
+                    else
+                        obj.fig.UserData.dbDirty = true;
+                    end
+                end
+
+                % Dispatch report to HTML UI
+                obj.sendPerformanceReport(perfReport);
+
+                % Render diagnostic plots in right panel if available
+                vp = obj.visPanel;
+                if ~isempty(vp) && isvalid(vp)
+                    try
+                        delete(allchild(vp));
+                        visualizePerformanceReport(perfReport, Parent=vp);
+                    catch ME_vis
+                        fprintf("[TrainingController] Visualization error: %s\n", ME_vis.message);
+                    end
+                end
+
+                obj.sendToHTML("Progress", struct("status", "Idle", "message", "Generalization performance report evaluated and displayed successfully."));
+            catch ME_eval
+                fprintf("[TrainingController] Evaluation error: %s\n", ME_eval.message);
+                for k = 1:numel(ME_eval.stack)
+                    fprintf("   Line %d: %s (%s)\n", ME_eval.stack(k).line, ME_eval.stack(k).name, ME_eval.stack(k).file);
+                end
+                obj.sendToHTML("TrainError", "Evaluation error: " + string(ME_eval.message));
+                obj.sendToHTML("Progress", struct("status", "Error", "message", "Evaluation failed: " + string(ME_eval.message)));
             end
-
-            ri = getDefaultRefractiveIndex(SearchDir=obj.session.workDir, WavelengthUnit="um");
-            targetFields = ["Absorptance", "EF_vol", "EF_surf"];
-            if isfield(model, "targetNames") && ~isempty(model.targetNames)
-                targetFields = string(model.targetNames);
-            end
-
-            ds = prepare_training_dataset(simData, ri, TargetFields=targetFields);
-
-            dbOptima = [];
-            if isfield(obj.session.db, "Optima") && isstruct(obj.session.db.Optima)
-                dbOptima = obj.session.db.Optima;
-            end
-
-            perfReport = computeSurrogateEvaluationMetrics(model, ds, dbOptima, Verbose=true);
-
-            % Update session state
-            if ~isfield(obj.session.db, "Model") || ~isstruct(obj.session.db.Model)
-                obj.session.db.Model = struct();
-            end
-            obj.session.db.Model.PerformanceReport = perfReport;
-            if ~isempty(obj.session.model)
-                obj.session.model.performanceReport = perfReport;
-            end
-            obj.session.markDirty();
-
-            obj.sendPerformanceReport(perfReport);
-            obj.sendToHTML("Progress", struct("message", "Generalization metrics evaluated successfully."));
         end
     end
 end

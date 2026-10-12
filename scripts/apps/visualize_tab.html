@@ -492,8 +492,15 @@ function setBusy(state) {
 function handleProgress(data) {
     if (!data) return;
     if (data.message) appendLog(data.message);
-    if (data.fraction !== undefined && data.fraction !== null) {
-        document.getElementById("progressBar").style.width = Math.round(data.fraction * 100) + "%";
+    var pct = (data.fraction !== undefined && data.fraction !== null) ? Math.round(data.fraction * 100) : 0;
+    var bar = document.getElementById("progressBar");
+    if (bar) bar.style.width = pct + "%";
+    if (window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("ProgressUpdate", {
+            percent: pct,
+            message: data.message || "",
+            stage: "Stage 6 — Visualize"
+        });
     }
 }
 function updateDbBanner(d) {
@@ -510,14 +517,21 @@ function updateDbBanner(d) {
 }
 function setStatus(cls, text) {
     var el = document.getElementById("statusBadge");
-    el.className = "status-badge status-" + cls;
-    el.textContent = text;
+    if (el) {
+        el.className = "status-badge status-" + cls;
+        el.textContent = text;
+    }
 }
-function appendLog(msg) {
+function appendLog(msg, level) {
+    if (window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("LogMessage", { message: msg, stage: "Stage 6 — Visualize", level: level || "info" });
+    }
     var el = document.getElementById("progressLog");
-    el.textContent += msg + "\n";
-    var area = document.getElementById("progressArea");
-    area.scrollTop = area.scrollHeight;
+    if (el) {
+        el.textContent += msg + "\n";
+        var area = document.getElementById("progressArea");
+        if (area) area.scrollTop = area.scrollHeight;
+    }
 }
 
 document.addEventListener("DOMContentLoaded", function() {
@@ -538,7 +552,6 @@ document.addEventListener("DOMContentLoaded", function() {
         <div class="header-actions">
             <button class="btn-secondary small" id="btnRefresh" onclick="window.htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
             <button class="btn-secondary small" id="btnSaveDb" onclick="window.htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
-            <button class="btn-stop" id="btnStopHeader" onclick="stopProcess()">&#9632; Stop</button>
         </div>
     </header>
     <div id="dbStatusBanner"></div>
@@ -711,18 +724,6 @@ document.addEventListener("DOMContentLoaded", function() {
             <div class="btn-row">
                 <button id="btnRender" class="btn-primary" onclick="render()">Render</button>
                 <button id="btnClear" class="btn-secondary" onclick="clearTraces()">Clear traces</button>
-                <button class="btn-stop" id="btnStopRender" style="padding:10px 14px;" onclick="stopProcess()">&#9632; Stop</button>
-            </div>
-        </div>
-
-        <div class="bottom-panel">
-            <div id="progressArea">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                    <span style="font-weight:600; color:var(--text-primary);">Progress</span>
-                    <span id="statusBadge" class="status-badge status-idle">Idle</span>
-                </div>
-                <div class="progress-bar-container"><div id="progressBar" class="progress-bar"></div></div>
-                <pre id="progressLog" style="margin-top:6px; min-height:30px; white-space:pre-wrap;"></pre>
             </div>
         </div>
     </main>

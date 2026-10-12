@@ -28,6 +28,9 @@ function varargout = ASSTEROID(workFolder)
         workFolder (1,1) string = string(pwd)
     end
 
+    % Ensure project paths are initialized
+    setup_project;
+
     % Singleton guard: if an instance is already running, bring it to front
     existing = findall(groot, "Type", "figure", "Tag", "ASSTEROID_MAIN_APP");
     if isempty(existing)
@@ -41,9 +44,6 @@ function varargout = ASSTEROID(workFolder)
         end
         return;
     end
-
-    % Ensure project paths are initialized
-    setup_project;
 
     % Launch main application
     if nargout > 0

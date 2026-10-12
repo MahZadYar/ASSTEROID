@@ -36,12 +36,10 @@ ctl.handleEvent("PredictInterpolate", struct( ...
     "radiusMin", 50, "radiusMax", 450));
 fprintf("  ✓ PredictInterpolate (model) handled safely with missing model.\n");
 
-ctl.handleEvent("PredictInterpolate", struct( ...
-    "dataSource", "data", ...
-    "predictionTarget", "grid", ...
-    "periodMin", 400, "periodMax", 1400, ...
-    "radiusMin", 50, "radiusMax", 450));
-fprintf("  ✓ PredictInterpolate (data) handled safely with empty db.Sim.\n");
+cStruct = struct("periodMin", 400, "periodMax", 1400, "radiusMin", 50);
+assert(ctl.safeNum(cStruct, "radiusMax", 700) == 700, "Default radiusMax fallback should be 700");
+ctl.handleEvent("PredictInterpolate", cStruct);
+fprintf("  ✓ PredictInterpolate (default radiusMax=700) handled safely.\n");
 
 %% 5. Clean up
 try

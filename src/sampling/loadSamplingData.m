@@ -51,12 +51,20 @@ end
 function samples = loadFromDataFile(cfg)
 % loadFromDataFile  Load samples from MAT or CSV data file.
 
-if isempty(cfg.dataFile) || cfg.dataFile == ""
+if isfield(cfg, "DataFile") && ~isempty(cfg.DataFile) && (isstruct(cfg.DataFile) || (isstring(cfg.DataFile) && cfg.DataFile ~= ""))
+    cfg.dataFile = cfg.DataFile;
+end
+
+if ~isfield(cfg, "dataFile") || isempty(cfg.dataFile) || (isstring(cfg.dataFile) && cfg.dataFile == "")
     error("loadSamplingData:NoDataFile", ...
         "No data file specified in configuration. Set cfg.dataFile.");
 end
 
-fprintf("Loading data from: %s\n", cfg.dataFile);
+if isstring(cfg.dataFile) || ischar(cfg.dataFile)
+    fprintf("Loading data from: %s\n", string(cfg.dataFile));
+else
+    fprintf("Loading data from in-memory database...\n");
+end
 
 if isstruct(cfg.dataFile)
     allData = cfg.dataFile;

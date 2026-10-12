@@ -47,12 +47,15 @@ function setup_project()
     end
 
     % Ensure legacy folder is NOT on the MATLAB path to avoid shadowing modern functions
-    legacyDir = fullfile(root, "legacy");
-    if contains(path, legacyDir)
-        try
-            rmpath(legacyDir);
-            fprintf("ASSTEROID: Removed legacy/ from path to prevent function shadowing.\n");
-        catch
+    pEntries = split(string(path), pathsep);
+    for idx = 1:numel(pEntries)
+        entryStr = pEntries(idx);
+        if contains(entryStr, "legacy", "IgnoreCase", true) && contains(entryStr, "Codebase", "IgnoreCase", true)
+            try
+                rmpath(char(entryStr));
+                fprintf("ASSTEROID: Removed %s from path to prevent function shadowing.\n", entryStr);
+            catch
+            end
         end
     end
 

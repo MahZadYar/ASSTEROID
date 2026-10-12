@@ -94,6 +94,28 @@ assert(numel(figsAfterDetect) == numel(figsBefore), ...
     numel(figsBefore), numel(figsAfterDetect)));
 fprintf("  ✓ Test 2 Passed: Seed detection reused db.Pred without recomputing or opening figures.\n");
 
+% 5. Test Preview with metric variant not pre-calculated (dynamic derivation on the fly)
+predSoA_uncalc = predSoA;
+predSoA_uncalc = rmfield(predSoA_uncalc, "Absorptance_laser");
+fig.UserData.db.Pred = predSoA_uncalc;
+if isfield(fig.UserData, "session") && isvalid(fig.UserData.session)
+    fig.UserData.session.db.Pred = predSoA_uncalc;
+end
+
+previewData2 = struct( ...
+    "dataSource", "predictions", ...
+    "metric", "Absorptance", ...
+    "metricVariant", "laser", ...
+    "laserWavelength", 785);
+
+dummyEvent2 = struct("HTMLEventName", "PreviewMetric", "HTMLEventData", previewData2);
+optHtml.HTMLEventReceivedFcn(optHtml, dummyEvent2);
+
+expectedField = resolveDerivedMetricField("Absorptance", "laser", predSoA_uncalc);
+assert(isfield(fig.UserData.optimize.previewResults.allData, expectedField), ...
+    sprintf("%s should be derived on the fly from Absorptance spectral matrix.", expectedField));
+fprintf("  ✓ Test 3 Passed: Uncalculated metric variant (%s) derived on the fly from db.Pred spectral data.\n", expectedField);
+
 % Cleanup
 delete(fig);
 fprintf("=== ALL OPTIMIZE PRED REUSE TESTS PASSED! ===\n");

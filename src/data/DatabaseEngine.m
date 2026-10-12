@@ -105,6 +105,9 @@ classdef DatabaseEngine
                 mkdir(targetFolder);
             end
 
+            % Sanitize db to ensure no UI closures, handles, or figures are serialized
+            db = DatabaseEngine.sanitizeDatabase(db);
+
             % Update timestamp and metadata
             if isfield(db, "Global") && isstruct(db.Global)
                 db.Global.DateModified = string(datetime("now", "Format", "yyyy-MM-dd HH:mm:ss"));
@@ -169,6 +172,9 @@ classdef DatabaseEngine
             if strlength(targetFolder) > 0 && ~isfolder(targetFolder)
                 mkdir(targetFolder);
             end
+
+            % Sanitize db to ensure no UI closures, handles, or figures are serialized
+            db = DatabaseEngine.sanitizeDatabase(db);
 
             % Update timestamp and metadata before dispatch
             if isfield(db, "Global") && isstruct(db.Global)
@@ -274,6 +280,34 @@ classdef DatabaseEngine
                 str = sprintf("%.2f MB", numBytes / (1024^2));
             else
                 str = sprintf("%.2f GB", numBytes / (1024^3));
+            end
+        end
+
+        function db = sanitizeDatabase(db)
+        % SANITIZEDATABASE Remove UI figure closures, controller handles, and transient callbacks.
+            if ~isstruct(db), return; end
+            if isfield(db, "Model") && isstruct(db.Model)
+                if isfield(db.Model, "Model") && isstruct(db.Model.Model) && isfield(db.Model.Model, "options") ...
+                        && isstruct(db.Model.Model.options)
+                    opts = db.Model.Model.options;
+                    fnames = fieldnames(opts);
+                    for k = 1:numel(fnames)
+                        if isa(opts.(fnames{k}), "function_handle")
+                            opts = rmfield(opts, fnames{k});
+                        end
+                    end
+                    db.Model.Model.options = opts;
+                end
+                if isfield(db.Model, "options") && isstruct(db.Model.options)
+                    opts = db.Model.options;
+                    fnames = fieldnames(opts);
+                    for k = 1:numel(fnames)
+                        if isa(opts.(fnames{k}), "function_handle")
+                            opts = rmfield(opts, fnames{k});
+                        end
+                    end
+                    db.Model.options = opts;
+                end
             end
         end
 

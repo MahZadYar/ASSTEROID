@@ -86,7 +86,7 @@ classdef PredictionController < handle
             periodMin = obj.safeNum(d, "periodMin", 400);
             periodMax = obj.safeNum(d, "periodMax", 1400);
             radiusMin = obj.safeNum(d, "radiusMin", 50);
-            radiusMax = obj.safeNum(d, "radiusMax", 450);
+            radiusMax = obj.safeNum(d, "radiusMax", 700);
             spatialRes = obj.safeNum(d, "spatialResolution", 2);
             stokesMin = obj.safeNum(d, "stokesShiftMin", 100);
             stokesMax = obj.safeNum(d, "stokesShiftMax", 3600);
@@ -380,6 +380,21 @@ classdef PredictionController < handle
                 catch
                 end
             end
+            if ~isempty(obj.fig) && isvalid(obj.fig) && isstruct(obj.fig.UserData) && isfield(obj.fig.UserData, "app")
+                if strcmp(eventName, "Progress") && isstruct(payload)
+                    pct = 0;
+                    if isfield(payload, "fraction") && ~isempty(payload.fraction), pct = payload.fraction * 100;
+                    elseif isfield(payload, "percent") && ~isempty(payload.percent), pct = payload.percent; end
+                    msg = ""; if isfield(payload, "message"), msg = payload.message; end
+                    try obj.fig.UserData.app.updateProgress(pct, msg, "Stage 4 — Predict"); catch; end
+                elseif (strcmp(eventName, "Error") || strcmp(eventName, "Warning") || strcmp(eventName, "PredictComplete"))
+                    lvl = "info";
+                    if strcmp(eventName, "Error"), lvl = "error";
+                    elseif strcmp(eventName, "PredictComplete"), lvl = "success";
+                    else, lvl = "warning"; end
+                    try obj.fig.UserData.app.logMessage(string(payload), lvl, "Stage 4 — Predict"); catch; end
+                end
+            end
         end
 
         function rep = makeReporter(obj)
@@ -435,8 +450,11 @@ classdef PredictionController < handle
                 obj.sendToHTML("Progress", struct("status", "Stopped", "message", msg));
             end
         end
+    end
 
-        function v = safeNum(~, s, f, d)
+    %% Static Helpers
+    methods (Static)
+        function v = safeNum(s, f, d)
             v = d;
             if isfield(s, f) && ~isempty(s.(f))
                 val = double(s.(f));
@@ -444,14 +462,14 @@ classdef PredictionController < handle
             end
         end
 
-        function v = safeStr(~, s, f, d)
+        function v = safeStr(s, f, d)
             v = string(d);
             if isfield(s, f) && ~isempty(s.(f))
                 v = string(s.(f));
             end
         end
 
-        function v = safeBool(~, s, f, d)
+        function v = safeBool(s, f, d)
             v = logical(d);
             if isfield(s, f) && ~isempty(s.(f))
                 v = logical(s.(f));

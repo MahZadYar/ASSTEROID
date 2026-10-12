@@ -93,7 +93,7 @@ arguments
     options.ValSplit            (1,1) double  {mustBeBetween(options.ValSplit,0,1)} = 0.5
     options.FeatureSchema       (1,1) string  {mustBeMember(options.FeatureSchema, ["v2_physics", "v1_legacy"])} = "v2_physics"
     options.SplitMode           (1,1) string  {mustBeMember(options.SplitMode, ["geometry", "row"])} = "geometry"
-    options.IncludeVerticalGap  (1,1) logical = false
+    options.IncludeVerticalGap  (1,1) logical = true
     options.GapHeightUm         (1,1) double  {mustBePositive} = 0.005
     options.SaveArtifacts       (1,1) logical = true
     options.DatabaseFile        (1,1) string  = "database.mat"
@@ -217,7 +217,14 @@ end
     cfg.executionEnvironment = options.ExecutionEnvironment;
     cfg.preprocessingEnvironment = options.PreprocessingEnvironment;
     cfg.acceleration         = options.Acceleration;
-    cfg.checkpointPath       = options.CheckpointPath;
+    if strlength(options.CheckpointPath) == 0
+        cfg.checkpointPath = fullfile(options.WorkDir, "DNNCheckpoints");
+    else
+        cfg.checkpointPath = options.CheckpointPath;
+    end
+    if ~isfolder(cfg.checkpointPath)
+        try mkdir(cfg.checkpointPath); catch; end
+    end
     cfg.checkpointFrequency  = options.CheckpointFrequency;
     cfg.checkpointFrequencyUnit = options.CheckpointFrequencyUnit;
     cfg.resetInputNormalization = options.ResetInputNormalization;

@@ -50,7 +50,7 @@ function cfg = createSamplingConfig(options)
 %   See also: loadSamplingData, buildSamplingDensity, runAdaptiveSampling
 
 arguments
-    options.dataFile (1,1) string = ""
+    options.dataFile = ""
     options.fromPredictions (1,1) logical = false
     options.predictionFile (1,1) string = ""
     options.numPoints (1,1) double {mustBePositive, mustBeInteger} = 100

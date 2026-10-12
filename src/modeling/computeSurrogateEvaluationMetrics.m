@@ -42,6 +42,7 @@ arguments
     options.KNearestNeighbors (1,1) double {mustBePositive} = 15
     options.RoiRadiusNm       (1,1) double {mustBePositive} = 20
     options.Verbose           (1,1) logical                 = true
+    options.IdwScope          (1,1) string {mustBeMember(options.IdwScope, ["holdout", "all"])} = "holdout"
 end
 
 if isempty(dataset) || ~isstruct(dataset)
@@ -50,7 +51,10 @@ if isempty(dataset) || ~isstruct(dataset)
 end
 
 %% 1. Extract Ground Truth and Generate Predictions
-if isfield(dataset, "YTest")
+hasRawTruth = isfield(dataset, "YTestRaw") && ~isempty(dataset.YTestRaw);
+if hasRawTruth
+    YTrue = double(dataset.YTestRaw);
+elseif isfield(dataset, "YTest")
     YTrue = double(dataset.YTest);
 elseif isfield(dataset, "YTrue")
     YTrue = double(dataset.YTrue);
@@ -94,12 +98,24 @@ elseif isstruct(model) && isfield(model, "net") && ~isempty(model.net) && ~isemp
     if isa(ZPred, "dlarray"), ZPred = extractdata(ZPred); end
     ZPred = double(ZPred);
     
+    denormApplied = false;
     if isfield(model, "denormalize") && isa(model.denormalize, "function_handle")
         YPred = model.denormalize(ZPred);
+        denormApplied = true;
     elseif isfield(dataset, "denormalize") && isa(dataset.denormalize, "function_handle")
         YPred = dataset.denormalize(ZPred);
+        denormApplied = true;
     else
         YPred = ZPred;
+    end
+    
+    % If predictions were denormalized to physical units, ensure YTrue is also in physical units!
+    if denormApplied && ~hasRawTruth
+        if isfield(model, "denormalize") && isa(model.denormalize, "function_handle")
+            YTrue = model.denormalize(YTrue);
+        elseif isfield(dataset, "denormalize") && isa(dataset.denormalize, "function_handle")
+            YTrue = dataset.denormalize(YTrue);
+        end
     end
 else
     error("computeSurrogateEvaluationMetrics:CannotPredict", ...
@@ -111,14 +127,15 @@ logCandidates = ["ef_vol", "ef_surf", "m_vol", "m_surf", "intw_vol", "intw_t"];
 targetLogMask = false(1, numTargets);
 if isstruct(model) && isfield(model, "targetTransform") && isstruct(model.targetTransform) ...
         && isfield(model.targetTransform, "LogMask") && ~isempty(model.targetTransform.LogMask)
-    targetLogMask = logical(model.targetTransform.LogMask);
+    targetLogMask = reshape(logical(model.targetTransform.LogMask), 1, []);
 elseif isfield(dataset, "targetLogMask") && ~isempty(dataset.targetLogMask)
-    targetLogMask = logical(dataset.targetLogMask);
+    targetLogMask = reshape(logical(dataset.targetLogMask), 1, []);
 else
     for k = 1:numTargets
         targetLogMask(k) = any(strcmpi(targetNames(k), logCandidates));
     end
 end
+targetLogMask = reshape(targetLogMask, 1, []);
 if numel(targetLogMask) < numTargets
     targetLogMask = [targetLogMask, false(1, numTargets - numel(targetLogMask))];
 end
@@ -163,36 +180,97 @@ tblBiased = table(targetNames(:), maeBiased, rmseBiased, nrmseBiased, nrmsleBias
     'VariableNames', {'Target', 'MAE', 'RMSE', 'NRMSE_Pct', 'N_RMSLE_Pct', 'R2', 'MaxAbsErr'});
 
 %% 4. Tier 2: Global Unbiased via Inverse Density Weighting (IDW)
-idwWeights = ones(N_test, 1) / N_test;
-hasCoords = false;
+% Determine evaluation set for Tier 2: Holdout Test Set vs. All Simulation Points
+evalAll = (options.IdwScope == "all") && isfield(dataset, "XTrain") && ~isempty(dataset.XTrain);
 
-if ~isempty(XTest) && size(XTest, 2) >= 2
-    % Columns 1 and 2 are period and radius (in micrometers or nanometers)
-    pVals = XTest(:, 1);
-    rVals = XTest(:, 2);
+if evalAll
+    % Assemble all simulation points across train, validation, and test splits
+    X_idw = [dataset.XTrain; dataset.XValidation; dataset.XTest];
+    if isfield(dataset, "YTrainRaw") && ~isempty(dataset.YTrainRaw)
+        YTrue_idw = double([dataset.YTrainRaw; dataset.YValidationRaw; dataset.YTestRaw]);
+    else
+        YTrue_idw = double([dataset.YTrain; dataset.YValidation; dataset.YTest]);
+        if denormApplied
+            if isfield(model, "denormalize") && isa(model.denormalize, "function_handle")
+                YTrue_idw = model.denormalize(YTrue_idw);
+            elseif isfield(dataset, "denormalize") && isa(dataset.denormalize, "function_handle")
+                YTrue_idw = dataset.denormalize(YTrue_idw);
+            end
+        end
+    end
+    
+    % Predict across all samples
+    if isfield(model, "normalize") && isa(model.normalize, "function_handle")
+        XNormAll = model.normalize(X_idw);
+    elseif isfield(dataset, "normalize") && isa(dataset.normalize, "function_handle")
+        XNormAll = dataset.normalize(X_idw);
+    else
+        XNormAll = X_idw;
+    end
+    ZPredAll = predict(model.net, XNormAll);
+    if isa(ZPredAll, "dlarray"), ZPredAll = extractdata(ZPredAll); end
+    ZPredAll = double(ZPredAll);
+    if isfield(model, "denormalize") && isa(model.denormalize, "function_handle")
+        YPred_idw = model.denormalize(ZPredAll);
+    elseif isfield(dataset, "denormalize") && isa(dataset.denormalize, "function_handle")
+        YPred_idw = dataset.denormalize(ZPredAll);
+    else
+        YPred_idw = ZPredAll;
+    end
+else
+    X_idw = XTest;
+    YTrue_idw = YTrue;
+    YPred_idw = YPred;
+end
+
+N_idw = size(YTrue_idw, 1);
+idwWeights = ones(N_idw, 1) / N_idw;
+
+if ~isempty(X_idw) && size(X_idw, 2) >= 2
+    % Columns 1 and 2 are period and radius in parameter space
+    pVals = X_idw(:, 1);
+    rVals = X_idw(:, 2);
+    
+    % Group identical (P, r) samples to operate on UNIQUE nanostructure geometries
+    % (preventing multiple wavelength rows of the same geometry from causing zero distance)
+    geomIntKey = round([pVals, rVals] * 1e6);
+    [uniqueGeomsInt, ~, geomMap] = unique(geomIntKey, 'rows');
+    evalGeoms = uniqueGeomsInt * 1e-6;
+    
+    % Reference design set for density estimation:
+    % Use full simulation dataset geometries if available, otherwise eval geometries
+    if isfield(dataset, "XTrain") && ~isempty(dataset.XTrain)
+        allP = [dataset.XTrain(:, 1); dataset.XValidation(:, 1); dataset.XTest(:, 1)];
+        allR = [dataset.XTrain(:, 2); dataset.XValidation(:, 2); dataset.XTest(:, 2)];
+        [refGeomsInt, ~, ~] = unique(round([allP, allR] * 1e6), 'rows');
+        refGeoms = refGeomsInt * 1e-6;
+    else
+        refGeoms = evalGeoms;
+    end
     
     % Normalize coordinates to unit square for isotropic distance metric
-    pMin = min(pVals); pMax = max(pVals);
-    rMin = min(rVals); rMax = max(rVals);
-    pNorm = (pVals - pMin) / max(pMax - pMin, eps);
-    rNorm = (rVals - rMin) / max(rMax - rMin, eps);
-    coords = [pNorm, rNorm];
+    pMin = min(refGeoms(:, 1)); pMax = max(refGeoms(:, 1));
+    rMin = min(refGeoms(:, 2)); rMax = max(refGeoms(:, 2));
+    refNorm = [(refGeoms(:, 1) - pMin) / max(pMax - pMin, eps), ...
+               (refGeoms(:, 2) - rMin) / max(rMax - rMin, eps)];
+    evalNorm = [(evalGeoms(:, 1) - pMin) / max(pMax - pMin, eps), ...
+                (evalGeoms(:, 2) - rMin) / max(rMax - rMin, eps)];
     
-    % Compute k-nearest-neighbor distances
-    kNN = min(options.KNearestNeighbors, max(2, N_test - 1));
+    kNN = min(options.KNearestNeighbors, max(2, size(refNorm, 1) - 1));
     try
-        % Fast pdist2 for sample spacing
-        distMat = pdist2(coords, coords);
-        distSorted = sort(distMat, 2);
-        dk = distSorted(:, kNN + 1);
+        % Fast knnsearch to find distance to k-th distinct neighbor in parameter space
+        [~, D] = knnsearch(refNorm, evalNorm, 'K', kNN + 1);
+        dk = D(:, end); % distance in normalized parameter space
         
-        % Local density in 2D normalized space
+        % Local sampling density in 2D parameter space
         density = kNN ./ (pi * max(dk, 1e-4).^2);
         
-        % Importance weights w_i proportional to 1 / density
-        rawWeights = 1 ./ max(density, 1e-9);
+        % Importance weights w_g proportional to 1 / density
+        rawWeightsGeom = 1 ./ max(density, 1e-9);
+        
+        % Map geometry weights to all spectral samples
+        rawWeights = rawWeightsGeom(geomMap);
         idwWeights = rawWeights / sum(rawWeights);
-        hasCoords = true;
     catch ME_idw
         if options.Verbose
             warning("computeSurrogateEvaluationMetrics:IdwFailed", ...
@@ -208,8 +286,8 @@ nrmsleIdw = zeros(numTargets, 1);
 r2Idw     = zeros(numTargets, 1);
 
 for k = 1:numTargets
-    yT = YTrue(:, k);
-    yP = YPred(:, k);
+    yT = YTrue_idw(:, k);
+    yP = YPred_idw(:, k);
     diff_k = yP - yT;
     
     maeIdw(k)  = sum(idwWeights .* abs(diff_k), 'omitnan');
@@ -355,82 +433,141 @@ if ~isempty(dbOptima) && isstruct(dbOptima) && isfield(dbOptima, "period") && ~i
     end
 end
 
-%% 6. Generate Journal-Ready LaTeX Table
+%% 6. Generate Journal-Ready LaTeX Table (Transposed Layout)
+targetHeaders = strings(1, numTargets);
+for k = 1:numTargets
+    tName = targetNames(k);
+    if strcmpi(tName, "Absorptance")
+        targetHeaders(k) = "\textbf{Absorptance} $A_L$";
+    elseif strcmpi(tName, "EF_vol")
+        targetHeaders(k) = "\textbf{Volumetric EF} $\text{EF}_V^{\text{cell}}$";
+    elseif strcmpi(tName, "EF_surf")
+        targetHeaders(k) = "\textbf{Surface EF} $\text{EF}_S^{\text{cell}}$";
+    else
+        targetHeaders(k) = "\textbf{" + strrep(tName, "_", "\_") + "}";
+    end
+end
+colAlign = "l" + join(repmat("c", 1, numTargets), "");
+hdrLine = "    \textbf{Evaluation Tier / Metric} & " + strjoin(targetHeaders, " & ") + " \\";
+
+% Build Tier 1 rows
+t1NrmseRow = "    Normalized RMSE, $\text{NRMSE}$ (\%)    & " + ...
+    strjoin(arrayfun(@(k) sprintf("%.2f\\%%", nrmseBiased(k)), 1:numTargets), "  & ") + "  \\";
+t1NrmsleRow = "    Logarithmic RMSE, $\text{N-RMSLE}$ (\%) & " + ...
+    strjoin(arrayfun(@(k) sprintf("%.2f\\%%", nrmsleBiased(k)), 1:numTargets), "  & ") + "  \\";
+t1R2Row = "    Coefficient of determination, $R^2$     & " + ...
+    strjoin(arrayfun(@(k) sprintf("%.4f", r2Biased(k)), 1:numTargets), "  & ") + "  \\";
+
+% Build Tier 2 rows
+t2NrmseRow = "    Density-compensated $\text{NRMSE}_{\text{IDW}}$ (\%) & " + ...
+    strjoin(arrayfun(@(k) sprintf("%.2f\\%%", nrmseIdw(k)), 1:numTargets), "  & ") + "  \\";
+t2R2Row = "    Density-compensated $R^2_{\text{IDW}}$               & " + ...
+    strjoin(arrayfun(@(k) sprintf("%.4f", r2Idw(k)), 1:numTargets), "  & ") + "  \\";
+
+% Build Tier 3 row
+roiVals = strings(1, numTargets);
+for k = 1:numTargets
+    tName = targetNames(k);
+    roiVals(k) = "---";
+    if ~isempty(tblRoiCombined) && ismember("RoI_NRMSE_Pct", tblRoiCombined.Properties.VariableNames)
+        roiIdx = find(string(tblRoiCombined.Target) == tName, 1);
+        if ~isempty(roiIdx) && isfinite(tblRoiCombined.RoI_NRMSE_Pct(roiIdx))
+            roiVals(k) = sprintf("%.2f\\%%", tblRoiCombined.RoI_NRMSE_Pct(roiIdx));
+        end
+    end
+end
+t3NrmseRow = "    Local resonance basin $\text{NRMSE}_{\text{RoI}}$ (\%)\textsuperscript{$a$} & " + ...
+    strjoin(roiVals, " & ") + " \\";
+
 latexLines = [
     "\begin{table}[htbp]"
     "  \caption{Surrogate model generalization across the three-tier evaluation framework: Tier 1 (Holdout Test Split), Tier 2 (Unbiased Inverse Density Weighting, IDW), and Tier 3 (Modal Optima Region of Interest, RoI).}"
     "  \label{tab:surrogate-generalization}"
     "  \centering"
     "  \small"
-    "  \begin{tabular}{lcccccc}"
-    "    \hline"
-    "    \textbf{Target Metric} & \textbf{Holdout NRMSE} & \textbf{Holdout N-RMSLE} & \textbf{Holdout $R^2$} & \textbf{IDW NRMSE} & \textbf{IDW $R^2$} & \textbf{RoI NRMSE} \\"
-    "     & (\%) & (\%) & & (\%) & & (\%) \\"
-    "    \hline"
-];
-
-for k = 1:numTargets
-    tName = targetNames(k);
-    if strcmpi(tName, "Absorptance")
-        tLabel = "Absorptance $A_L$";
-    elseif strcmpi(tName, "EF_vol")
-        tLabel = "Volumetric EF $\text{EF}_V^{\text{cell}}$";
-    elseif strcmpi(tName, "EF_surf")
-        tLabel = "Surface EF $\text{EF}_S^{\text{cell}}$";
-    else
-        tLabel = strrep(tName, "_", "\_");
-    end
-    
-    roiValStr = "---";
-    if ~isempty(tblRoiCombined) && ismember("RoI_NRMSE_Pct", tblRoiCombined.Properties.VariableNames)
-        roiIdx = find(string(tblRoiCombined.Target) == tName, 1);
-        if ~isempty(roiIdx)
-            roiValStr = sprintf("%.2f\\%%", tblRoiCombined.RoI_NRMSE_Pct(roiIdx));
-        end
-    end
-    
-    rowStr = sprintf("    %s & %.2f\\%% & %.2f\\%% & %.4f & %.2f\\%% & %.4f & %s \\\\", ...
-        tLabel, nrmseBiased(k), nrmsleBiased(k), r2Biased(k), ...
-        nrmseIdw(k), r2Idw(k), roiValStr);
-    latexLines(end + 1, 1) = string(rowStr); %#ok<AGROW>
-end
-
-latexLines = [
-    latexLines
-    "    \hline"
+    "  \renewcommand{\arraystretch}{0.95}"
+    "  \begin{tabular}{" + colAlign + "}"
+    "    \toprule"
+    hdrLine
+    "    \midrule"
+    "    \multicolumn{" + (numTargets + 1) + "}{l}{\textit{Tier 1: Global Empirical Test Holdout Split (10\% unique geometries)}} \\"
+    t1NrmseRow
+    t1NrmsleRow
+    t1R2Row
+    "    \midrule"
+    "    \multicolumn{" + (numTargets + 1) + "}{l}{\textit{Tier 2: Global Unbiased Expectation via Inverse Density Weighting (IDW)}} \\"
+    t2NrmseRow
+    t2R2Row
+    "    \midrule"
+    "    \multicolumn{" + (numTargets + 1) + "}{l}{\textit{Tier 3: Modal Optima Region of Interest (RoI) Local Accuracy}} \\"
+    t3NrmseRow
+    "    \bottomrule"
     "  \end{tabular}"
+    "  \vspace{0.4em}"
+    "  \raggedright\footnotesize"
+    "  \textsuperscript{$a$}\,Tier 3 Region of Interest (RoI) metrics are populated tentatively pending final multi-start local basin clustering ($R_{\text{roi}} = 20 \, \text{nm}$)."
     "\end{table}"
 ];
 latexSummary = strjoin(latexLines, newline);
 
-%% 7. Formatted ASCII Summary Text
-asciiLines = [
-    "========================================================================================="
-    "                   ☄️ ASSTEROID SURROGATE MODEL GENERALIZATION REPORT                    "
-    "========================================================================================="
-    sprintf("%-18s | %-24s | %-20s | %-16s", "Target", "Tier 1: Test Holdout", "Tier 2: IDW Unbiased", "Tier 3: Optima RoI")
-    sprintf("%-18s | %-7s %-8s %-7s | %-9s %-9s | %-8s %-7s", ...
-        "", "NRMSE%", "NRMSLE%", "R^2", "NRMSE%", "R^2", "NRMSE%", "R^2")
-    "-----------------------------------------------------------------------------------------"
-];
+%% 7. Formatted ASCII Summary Text (Transposed Layout)
+targetHdrsAscii = strings(1, numTargets);
+for k = 1:numTargets
+    targetHdrsAscii(k) = sprintf("| %-18s", targetNames(k));
+end
+hdrLineAscii = sprintf("%-38s", "Evaluation Tier / Metric") + strjoin(targetHdrsAscii, "");
+totalLen = strlength(hdrLineAscii);
+sepLineAscii = string(repmat('-', 1, totalLen));
+equalLineAscii = string(repmat('=', 1, totalLen));
+
+t1NrmseAscii = strings(1, numTargets);
+t1NrmsleAscii = strings(1, numTargets);
+t1R2Ascii = strings(1, numTargets);
+t2NrmseAscii = strings(1, numTargets);
+t2R2Ascii = strings(1, numTargets);
+t3NrmseAscii = strings(1, numTargets);
 
 for k = 1:numTargets
-    tName = targetNames(k);
-    roiNRMSE = NaN; roiR2 = NaN;
-    if ~isempty(tblRoiCombined)
-        roiIdx = find(string(tblRoiCombined.Target) == tName, 1);
-        if ~isempty(roiIdx)
-            roiNRMSE = tblRoiCombined.RoI_NRMSE_Pct(roiIdx);
-            roiR2 = tblRoiCombined.RoI_R2(roiIdx);
-        end
-    end
+    t1NrmseAscii(k) = sprintf("| %17.2f%%", nrmseBiased(k));
+    t1NrmsleAscii(k) = sprintf("| %17.2f%%", nrmsleBiased(k));
+    t1R2Ascii(k) = sprintf("| %18.4f", r2Biased(k));
+    t2NrmseAscii(k) = sprintf("| %17.2f%%", nrmseIdw(k));
+    t2R2Ascii(k) = sprintf("| %18.4f", r2Idw(k));
     
-    asciiLines(end + 1, 1) = sprintf("%-18s | %6.2f%% %7.2f%% %7.4f | %8.2f%% %9.4f | %7.2f%% %7.4f", ...
-        extractBefore(tName + "                  ", 19), ...
-        nrmseBiased(k), nrmsleBiased(k), r2Biased(k), ...
-        nrmseIdw(k), r2Idw(k), roiNRMSE, roiR2); %#ok<AGROW>
+    tName = targetNames(k);
+    val = NaN;
+    if ~isempty(tblRoiCombined) && ismember("RoI_NRMSE_Pct", tblRoiCombined.Properties.VariableNames)
+        roiIdx = find(string(tblRoiCombined.Target) == tName, 1);
+        if ~isempty(roiIdx), val = tblRoiCombined.RoI_NRMSE_Pct(roiIdx); end
+    end
+    if isfinite(val)
+        t3NrmseAscii(k) = sprintf("| %17.2f%%", val);
+    else
+        t3NrmseAscii(k) = "|               --- ";
+    end
 end
-asciiLines(end + 1, 1) = "=========================================================================================";
+
+emptyColPads = strjoin(repmat("|                   ", 1, numTargets), "");
+
+asciiLines = [
+    equalLineAscii
+    "              ☄️ ASSTEROID SURROGATE MODEL GENERALIZATION REPORT (TRANSPOSED)             "
+    equalLineAscii
+    hdrLineAscii
+    sepLineAscii
+    sprintf("%-38s", "Tier 1: Test Holdout (10% split)") + emptyColPads
+    sprintf("  • Normalized RMSE (NRMSE %%)         ") + strjoin(t1NrmseAscii, "")
+    sprintf("  • Logarithmic RMSE (N-RMSLE %%)      ") + strjoin(t1NrmsleAscii, "")
+    sprintf("  • Determination (R^2)               ") + strjoin(t1R2Ascii, "")
+    sepLineAscii
+    sprintf("%-38s", "Tier 2: IDW Unbiased Expectation") + emptyColPads
+    sprintf("  • Compensated NRMSE (%%)             ") + strjoin(t2NrmseAscii, "")
+    sprintf("  • Compensated R^2                   ") + strjoin(t2R2Ascii, "")
+    sepLineAscii
+    sprintf("%-38s", "Tier 3: Modal Optima RoI (20 nm)") + emptyColPads
+    sprintf("  • Local Basin NRMSE (%%)             ") + strjoin(t3NrmseAscii, "")
+    equalLineAscii
+];
 summaryText = strjoin(asciiLines, newline);
 
 if options.Verbose
@@ -447,6 +584,8 @@ perfReport.latexSummary   = latexSummary;
 perfReport.summaryText    = summaryText;
 perfReport.timestamp      = string(datetime('now', 'Format', 'yyyy-MM-dd HH:mm:ss'));
 perfReport.numTestSamples = N_test;
+perfReport.numIdwSamples  = N_idw;
+perfReport.idwScope       = options.IdwScope;
 perfReport.numRoiSamples  = nnz(roiMaskAll);
 perfReport.idwWeights     = idwWeights;
 end

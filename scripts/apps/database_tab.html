@@ -510,22 +510,17 @@ function fillIfFocused(id, value) {
 
 function handleProgress(data) {
     if (!data) return;
-    var area = document.getElementById("progressArea");
-    area.style.display = "block";
     if (data.message) appendLog(data.message);
-    if (data.fraction !== undefined && data.fraction !== null) {
-        var bar = document.getElementById("progressBar");
-        var container = bar.parentElement;
-        container.style.display = "block";
-        bar.style.width = Math.round(data.fraction * 100) + "%";
+    if (window.htmlComponent) {
+        var pct = (data.fraction !== undefined && data.fraction !== null) ? Math.round(data.fraction * 100) : 0;
+        window.htmlComponent.sendEventToMATLAB("ProgressUpdate", { percent: pct, message: data.message || "", stage: "Stage 0 — Database" });
     }
 }
 
-function appendLog(msg) {
-    var area = document.getElementById("progressArea");
-    area.style.display = "block";
-    area.textContent += msg + "\n";
-    area.scrollTop = area.scrollHeight;
+function appendLog(msg, level) {
+    if (window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("LogMessage", { message: msg, stage: "Stage 0 — Database", level: level || "info" });
+    }
 }
 
 function val(id) { return document.getElementById(id).value; }
@@ -661,7 +656,6 @@ function buildTreeNode(node, startOpen) {
     <div class="control-panel">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);">
             <h2 style="margin:0;padding:0;border:none;">💾 Stage 0 — Database Manager <span id="dirtyBadge" class="dirty-badge empty">No DB</span></h2>
-            <button class="btn-stop" id="btnStopHeader" onclick="stopProcess()">&#9632; Stop</button>
         </div>
 
         <!-- DB File section -->
@@ -680,7 +674,6 @@ function buildTreeNode(node, startOpen) {
                 <button class="btn-secondary" onclick="saveDbAs()">Save As...</button>
                 <button class="btn-secondary" onclick="newDb()">New DB</button>
             </div>
-            <button class="btn-stop" id="btnStopAction" style="width:100%;margin-top:6px;" onclick="stopProcess()">&#9632; Stop Process</button>
         </div>
 
         <!-- Status section -->
@@ -791,10 +784,6 @@ function buildTreeNode(node, startOpen) {
             <div class="btn-row">
                 <button class="btn-secondary" onclick="exportHDF5()">Export HDF5</button>
                 <button class="btn-secondary" onclick="exportONNX()">Export ONNX</button>
-            </div>
-            <div id="progressArea"></div>
-            <div class="progress-bar-container">
-                <div class="progress-bar" id="progressBar"></div>
             </div>
         </div>
     </div> <!-- /control-panel -->

@@ -79,7 +79,8 @@ function figOut = assteroid_app(workFolder)
         "Position", [(screenSize(3)-figW)/2, (screenSize(4)-figH)/2, figW, figH], ...
         "Color", [6, 8, 18]/255, ...
         "Resize", "on", ...
-        "CloseRequestFcn", @onAppClose);
+        "CloseRequestFcn", @onAppClose, ...
+        "DeleteFcn", @(s, ~) cleanupConsole(s));
     figOut = fig;
 
     %% Shared state stored on figure -----------------------------------------
@@ -103,13 +104,32 @@ function figOut = assteroid_app(workFolder)
         "resolveDbPaths", @() resolveDbPaths(fig), ...
         "resolveAnalyteFile", @() resolveAnalyteFile(fig), ...
         "openInVisualizeTab", @(b, m) openInVisualizeTab(fig, b, m), ...
-        "ensureVisExportModelAndRi", @(h, r) ensureVisExportModelAndRi(fig, h, r));
+        "ensureVisExportModelAndRi", @(h, r) ensureVisExportModelAndRi(fig, h, r), ...
+        "logMessage", @(varargin) logToConsole(fig, varargin{:}), ...
+        "updateProgress", @(varargin) updateConsoleProgress(fig, varargin{:}));
 
-    %% Main tab group ---------------------------------------------------------
-    tabGroup = uitabgroup(fig, ...
-        "Units", "normalized", ...
-        "Position", [0 0 1 1], ...
+    %% Main window layout (Tab Group on top, Static Console at bottom) ---------
+    mainGrid = uigridlayout(fig, [2 1]);
+    mainGrid.RowHeight = {"1x", 150};
+    mainGrid.ColumnWidth = {"1x"};
+    mainGrid.Padding = [0 0 0 0];
+    mainGrid.RowSpacing = 0;
+    mainGrid.BackgroundColor = [6, 8, 18]/255;
+
+    tabGroup = uitabgroup(mainGrid, ...
         "SelectionChangedFcn", @(src, ev) handleMainTabSelection(src, ev, fig));
+    tabGroup.Layout.Row = 1;
+    tabGroup.Layout.Column = 1;
+
+    %% Global Bottom Console Panel -------------------------------------------
+    consoleHtml = uihtml(mainGrid);
+    consoleHtml.Layout.Row = 2;
+    consoleHtml.Layout.Column = 1;
+    consoleHtml.HTMLSource = fullfile(fileparts(mfilename("fullpath")), "console_panel.html");
+    consoleHtml.HTMLEventReceivedFcn = @(src, ev) handleConsoleEvent(src, ev, fig);
+    fig.UserData.handles.consoleHtml = consoleHtml;
+    fig.UserData.handles.mainGrid    = mainGrid;
+    initConsoleDiary(fig);
 
     tabColors = [6, 8, 18]/255;
 
@@ -274,7 +294,7 @@ function figOut = assteroid_app(workFolder)
     h6.HTMLEventReceivedFcn = @(src, ev) handleVisualizeEvent(src, ev, fig);
 
     %% Store all HTML handles -------------------------------------------------
-    fig.UserData.handles.htmlPanels = [h0, h1, h2, h3, h4, h5, h5, h6];
+    fig.UserData.handles.htmlPanels = [h0, h1, h2, h3, h4, h5, h5, h6, consoleHtml];
 
     %% Ensure Stage 0 Database tab is the initially selected tab --------------
     tabGroup.SelectedTab = tab0;
@@ -291,6 +311,17 @@ function figOut = assteroid_app(workFolder)
         loadDbFile(fig, defaultDb);
     end
 
+    %% Startup console greeting -----------------------------------------------
+    logToConsole(fig, "ASSTEROID computational engine initialized. Ready.", "system");
+    logToConsole(fig, sprintf("Working directory: %s", workFolder), "info");
+    if isfile(defaultDb)
+        logToConsole(fig, sprintf("Auto-loaded workspace database: %s", defaultDb), "success");
+    else
+        logToConsole(fig, "No workspace database found. Stage 0 — Database is ready to load or create one.", "info");
+    end
+    fprintf("☄️ ASSTEROID inverse design computational engine ready.\n");
+    fprintf("Working directory: %s\n", workFolder);
+
     if nargout < 1
         clear figOut;
     end
@@ -301,6 +332,7 @@ end
 %  ########################################################################
 function handleDatabaseEvent(src, event, fig)
 %handleDatabaseEvent  Dispatch events from the Database tab HTML panel.
+    if interceptCommonEvents(fig, event), return; end
     if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "dbController") ...
             && ~isempty(fig.UserData.handles.dbController)
         fig.UserData.handles.dbController.handleEvent(event.HTMLEventName, event.HTMLEventData);
@@ -568,6 +600,7 @@ end
 function sendDbLogMessage(fig, msg, ~)
 %sendDbLogMessage  Forward database engine log notifications to UI panels.
     if ~isvalid(fig), return; end
+    logToConsole(fig, string(msg), "info");
     if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "htmlPanels")
         panels = fig.UserData.handles.htmlPanels;
         for i = 1:numel(panels)
@@ -1135,11 +1168,15 @@ function Yraw = localDenormalizeModelTargets(Ytrans, targetLogTransform)
     end
 end
 
-function handleMainTabSelection(~, ~, fig)
+function handleMainTabSelection(~, ev, fig)
 %handleMainTabSelection  Ensure deferred-layout tabs expand properly on switch.
     drawnow;
     resizeVisualizePanel(fig);
     broadcastDbStatus(fig);
+    if nargin >= 2 && ~isempty(ev) && isprop(ev, "NewValue") && ~isempty(ev.NewValue)
+        tabTitle = string(ev.NewValue.Title);
+        logToConsole(fig, sprintf("Switched to %s", tabTitle), "system");
+    end
 end
 
 function ax = createDarkAxes(parent, xLabel, yLabel, titleStr)
@@ -1154,7 +1191,7 @@ end
 function [h, visPanel] = buildTabLayout(parentTab, htmlFile)
 %buildTabLayout Create the standard left-HTML / right-vis split.
     grid = uigridlayout(parentTab, [1 2]);
-    grid.ColumnWidth = {400, "1x"};
+    grid.ColumnWidth = {420, "1x"};
     grid.Padding = [0 0 0 0]; grid.ColumnSpacing = 0;
     grid.BackgroundColor = parentTab.BackgroundColor;
 
@@ -1222,26 +1259,246 @@ function varargout = buildOptimizeTabLayout(parentTab, htmlFile)
 end
 
 %% ========================================================================
-%   PROGRESS REPORTER FACTORY
+%   PROGRESS REPORTER FACTORY & GLOBAL CONSOLE ROUTING
 %  ========================================================================
 function reporter = makeReporter(htmlComponent, fig)
-%makeReporter Build a ProgressReporter that forwards to a uihtml panel.
+%makeReporter Build a ProgressReporter that forwards to a uihtml panel and global console.
     if nargin < 2 || isempty(fig) || ~isvalid(fig)
         fig = ancestor(htmlComponent, "figure");
     end
     reporter = ProgressReporter.fromCallback( ...
-        @(type, step, data) sendEventToHTMLSource(htmlComponent, "Progress", data));
+        @(type, step, data) dispatchReporterEvent(fig, htmlComponent, type, step, data));
     if ~isempty(fig) && isvalid(fig)
         reporter.StopCheckFcn = @() isProcessStopRequested(fig);
     end
 end
 
+function dispatchReporterEvent(fig, htmlComponent, type, step, data)
+    if ~isempty(htmlComponent) && isvalid(htmlComponent)
+        try sendEventToHTMLSource(htmlComponent, "Progress", data); catch; end
+    end
+    forwardReporterToConsole(fig, type, step, data);
+end
+
 function reporter = makeOptimizeReporter(fig, src)
-%makeOptimizeReporter Build ProgressReporter that broadcasts to both optimize panels.
+%makeOptimizeReporter Build ProgressReporter that broadcasts to both optimize panels and global console.
     reporter = ProgressReporter.fromCallback( ...
-        @(type, step, data) sendOptimizeEvent(fig, "Progress", data, src));
+        @(type, step, data) dispatchOptimizeReporter(fig, src, type, step, data));
     if ~isempty(fig) && isvalid(fig)
         reporter.StopCheckFcn = @() isProcessStopRequested(fig);
+    end
+end
+
+function dispatchOptimizeReporter(fig, src, type, step, data)
+    try sendOptimizeEvent(fig, "Progress", data, src); catch; end
+    forwardReporterToConsole(fig, type, step, data);
+end
+
+function forwardReporterToConsole(fig, type, step, data)
+    if isempty(fig) || ~isvalid(fig), return; end
+    pct = 0;
+    if isfield(data, "fraction") && ~isempty(data.fraction)
+        pct = double(data.fraction) * 100;
+    elseif isfield(data, "percent") && ~isempty(data.percent)
+        pct = double(data.percent);
+    end
+    msg = "";
+    if isfield(data, "message") && ~isempty(data.message)
+        msg = string(data.message);
+    elseif isfield(data, "msg") && ~isempty(data.msg)
+        msg = string(data.msg);
+    end
+    metrics = struct();
+    if isfield(data, "metrics") && isstruct(data.metrics)
+        metrics = data.metrics;
+    end
+    updateConsoleProgress(fig, pct, msg, string(step), metrics);
+    if msg ~= ""
+        lvl = "info";
+        typeStr = string(type);
+        if typeStr == "complete", lvl = "success"; end
+        if typeStr == "warn", lvl = "warning"; end
+        if typeStr == "fail", lvl = "error"; end
+        logToConsole(fig, msg, lvl, string(step));
+    end
+end
+
+function logToConsole(fig, message, level, ~)
+    if isempty(fig) || ~isvalid(fig), return; end
+    if nargin < 2 || isempty(message), message = ""; end
+    if nargin < 3 || isempty(level), level = "info"; end
+    
+    entry = struct( ...
+        "message", string(message), ...
+        "level", string(level), ...
+        "timestamp", char(datetime('now', 'Format', 'HH:mm:ss')));
+    
+    if ~isfield(fig.UserData, "consoleBuffer")
+        fig.UserData.consoleBuffer = {};
+    end
+    fig.UserData.consoleBuffer{end+1} = entry;
+    if numel(fig.UserData.consoleBuffer) > 200
+        fig.UserData.consoleBuffer(1) = [];
+    end
+
+    if isfield(fig.UserData, "consoleClientReady") && fig.UserData.consoleClientReady && ...
+       isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "consoleHtml") && ...
+       isvalid(fig.UserData.handles.consoleHtml)
+        try
+            sendEventToHTMLSource(fig.UserData.handles.consoleHtml, "ConsoleLog", entry);
+        catch
+        end
+    end
+end
+
+function updateConsoleProgress(fig, percent, message, ~, metrics)
+    if isempty(fig) || ~isvalid(fig), return; end
+    if nargin < 2 || isempty(percent), percent = 0; end
+    if nargin < 3 || isempty(message), message = ""; end
+    if nargin < 5 || isempty(metrics), metrics = struct(); end
+    if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "consoleHtml") && ...
+       isvalid(fig.UserData.handles.consoleHtml)
+        try
+            payload = struct( ...
+                "percent", round(double(percent)), ...
+                "message", string(message));
+            if isstruct(metrics) && ~isempty(fieldnames(metrics))
+                payload.metrics = metrics;
+            end
+            sendEventToHTMLSource(fig.UserData.handles.consoleHtml, "ConsoleProgress", payload);
+        catch
+        end
+    end
+    msgStr = string(message);
+    if strlength(msgStr) > 0 && msgStr ~= "Complete!"
+        logToConsole(fig, msgStr, "info");
+    end
+end
+
+function handleConsoleEvent(~, ev, fig)
+    if isempty(fig) || ~isvalid(fig), return; end
+    if ~isprop(ev, "HTMLEventName") && ~isfield(ev, "HTMLEventName"), return; end
+    eventName = string(ev.HTMLEventName);
+    data = ev.HTMLEventData;
+    switch eventName
+        case "StopProcessRequest"
+            requestProcessStop(fig);
+        case "ToggleConsoleHeight"
+            if isfield(data, "height") && isfield(fig.UserData, "handles") && ...
+               isfield(fig.UserData.handles, "mainGrid") && isvalid(fig.UserData.handles.mainGrid)
+                h = data.height;
+                fig.UserData.handles.mainGrid.RowHeight = {"1x", h};
+            end
+        case {"ClientReady", "ConsoleReady"}
+            wasReady = isfield(fig.UserData, "consoleClientReady") && fig.UserData.consoleClientReady;
+            fig.UserData.consoleClientReady = true;
+            pollConsoleDiary(fig);
+            if ~wasReady && isfield(fig.UserData, "consoleBuffer") && ~isempty(fig.UserData.consoleBuffer) && ...
+               isfield(fig.UserData.handles, "consoleHtml") && isvalid(fig.UserData.handles.consoleHtml)
+                cHtml = fig.UserData.handles.consoleHtml;
+                for k = 1:numel(fig.UserData.consoleBuffer)
+                    try
+                        sendEventToHTMLSource(cHtml, "ConsoleLog", fig.UserData.consoleBuffer{k});
+                    catch
+                    end
+                end
+            end
+    end
+end
+
+function initConsoleDiary(fig)
+%initConsoleDiary  Start capturing MATLAB console stdout to live stream into console panel.
+    diaryFile = fullfile(tempdir, sprintf("assteroid_console_%d_%d.log", ...
+        feature('getpid'), round(posixtime(datetime('now'))*1000)));
+    if isfile(diaryFile), try delete(diaryFile); catch; end; end
+    diary(diaryFile);
+    diary on;
+    fig.UserData.consoleDiary = struct("file", diaryFile, "lastPos", 0);
+    fig.UserData.consoleClientReady = false;
+    fig.UserData.consoleBuffer = {};
+    tConsole = timer("ExecutionMode", "fixedRate", "Period", 0.20, "BusyMode", "drop", ...
+        "TimerFcn", @(~, ~) pollConsoleDiary(fig));
+    fig.UserData.handles.consoleTimer = tConsole;
+    start(tConsole);
+end
+
+function pollConsoleDiary(fig)
+%pollConsoleDiary  Read new bytes from session diary and forward to console UI.
+    if isempty(fig) || ~isvalid(fig), return; end
+    if ~isfield(fig.UserData, "consoleDiary") || ~isfield(fig.UserData.handles, "consoleHtml"), return; end
+    cHtml = fig.UserData.handles.consoleHtml;
+    if isempty(cHtml) || ~isvalid(cHtml), return; end
+    dFile = fig.UserData.consoleDiary.file;
+    if ~isfile(dFile), return; end
+    if ~isfield(fig.UserData, "consoleClientReady") || ~fig.UserData.consoleClientReady
+        return;
+    end
+    try
+        fInfo = dir(dFile);
+        curBytes = fInfo.bytes;
+        lastPos = fig.UserData.consoleDiary.lastPos;
+        if curBytes > lastPos
+            fid = fopen(dFile, "r");
+            if fid > 0
+                fseek(fid, lastPos, "bof");
+                newChars = fread(fid, curBytes - lastPos, "*char")';
+                fig.UserData.consoleDiary.lastPos = ftell(fid);
+                fclose(fid);
+                if ~isempty(newChars)
+                    sendEventToHTMLSource(cHtml, "RawConsoleStream", struct("text", string(newChars)));
+                end
+            end
+        end
+    catch
+    end
+end
+
+function cleanupConsole(fig)
+%cleanupConsole  Stop timer, disable diary, and remove temporary session log.
+    if isempty(fig), return; end
+    try
+        if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "consoleTimer")
+            t = fig.UserData.handles.consoleTimer;
+            if ~isempty(t) && isvalid(t)
+                stop(t);
+                delete(t);
+            end
+        end
+    catch
+    end
+    try
+        diary off;
+        if isfield(fig.UserData, "consoleDiary") && isfield(fig.UserData.consoleDiary, "file")
+            dFile = fig.UserData.consoleDiary.file;
+            if isfile(dFile)
+                delete(dFile);
+            end
+        end
+    catch
+    end
+end
+
+function intercepted = interceptCommonEvents(fig, event)
+    intercepted = false;
+    if isempty(event), return; end
+    if ~isprop(event, "HTMLEventName") && ~isfield(event, "HTMLEventName"), return; end
+    switch string(event.HTMLEventName)
+        case "LogMessage"
+            msg = ""; if isfield(event.HTMLEventData, "message"), msg = event.HTMLEventData.message; end
+            lvl = "info"; if isfield(event.HTMLEventData, "level"), lvl = event.HTMLEventData.level; end
+            stg = ""; if isfield(event.HTMLEventData, "stage"), stg = event.HTMLEventData.stage; end
+            logToConsole(fig, msg, lvl, stg);
+            intercepted = true;
+        case "ProgressUpdate"
+            pct = 0; if isfield(event.HTMLEventData, "percent"), pct = event.HTMLEventData.percent; end
+            msg = ""; if isfield(event.HTMLEventData, "message"), msg = event.HTMLEventData.message; end
+            stg = ""; if isfield(event.HTMLEventData, "stage"), stg = event.HTMLEventData.stage; end
+            metrics = []; if isfield(event.HTMLEventData, "metrics"), metrics = event.HTMLEventData.metrics; end
+            updateConsoleProgress(fig, pct, msg, stg, metrics);
+            intercepted = true;
+        case {"StopProcess", "StopProcessRequest"}
+            requestProcessStop(fig);
+            intercepted = true;
     end
 end
 
@@ -1254,6 +1511,7 @@ function onAppClose(fig, ~)
 %onAppClose Safely tear down active workflows, parallel pool, and close figure.
     if isvalid(fig)
         try, requestProcessStop(fig); catch, end
+        cleanupConsole(fig);
         try
             pool = gcp('nocreate');
             if ~isempty(pool)
@@ -1337,6 +1595,9 @@ function setProcessRunning(fig, value, stageName)
     end
     if value
         fig.UserData.process.stopRequested = false;
+        broadcastProcessEvent(fig, "ProcessStatusChanged", struct("status", "running", "stage", string(fig.UserData.process.activeStage)));
+    else
+        broadcastProcessEvent(fig, "ProcessStatusChanged", struct("status", "idle", "stage", ""));
     end
     if nargin >= 3 && contains(lower(string(stageName)), "train")
         setTrainingRunning(fig, value);
@@ -1455,6 +1716,7 @@ end
 %   STAGE 1 — IMPORT HANDLERS
 %  ########################################################################
 function handleImportEvent(src, event, fig, visPanel)
+    if interceptCommonEvents(fig, event), return; end
     if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "importController") ...
             && ~isempty(fig.UserData.handles.importController)
         fig.UserData.handles.importController.handleEvent(event.HTMLEventName, event.HTMLEventData);
@@ -1745,6 +2007,7 @@ end
 %   STAGE 2 — ADAPTIVE SAMPLING HANDLERS
 %  ########################################################################
 function handleSamplingEvent(src, event, fig)
+    if interceptCommonEvents(fig, event), return; end
     if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "samplingController") ...
             && ~isempty(fig.UserData.handles.samplingController)
         fig.UserData.handles.samplingController.handleEvent(event.HTMLEventName, event.HTMLEventData);
@@ -2279,6 +2542,7 @@ end
 %   STAGE 3 — TRAINING HANDLERS
 %  ########################################################################
 function handleTrainingEvent(src, event, fig, visPanel)
+    if interceptCommonEvents(fig, event), return; end
     name = event.HTMLEventName;
     data = event.HTMLEventData;
 
@@ -2429,8 +2693,17 @@ function runTrainingPipeline(src, d, fig, visPanel)
 
     featureSchema = safeStr(d, "featureSchema", "v2_physics");
     splitMode     = safeStr(d, "splitMode", "geometry");
-    incVertGap    = safeBool(d, "includeVerticalGap", false);
+    incVertGap    = safeBool(d, "includeVerticalGap", true);
     gapHeightUm   = safeNum(d, "gapHeightUm", 0.005);
+
+    defaultCpPath = fullfile(workDir, "DNNCheckpoints");
+    cpPath = safeStr(d, "checkpointPath", "");
+    if cpPath == "" || cpPath == "DNNCheckpoints"
+        cpPath = defaultCpPath;
+    end
+    if ~isfolder(cpPath)
+        try mkdir(cpPath); catch; end
+    end
 
     cfg = trainingConfig( ...
         WorkDir             = workDir, ...
@@ -2494,14 +2767,214 @@ function runTrainingPipeline(src, d, fig, visPanel)
         TargetLossWeights   = targetLossWeights);
     cfg.stopTrainingFcn = @() (getTrainingStopRequested(fig) || isProcessStopRequested(fig));
 
+    % Setup real-time Log-Log Loss vs Iteration plot in right panel (visPanel)
+    hasVisPanel = ~isempty(visPanel) && isvalid(visPanel);
+    trainAx = [];
+    hTrainLoss = [];
+    hValLoss = [];
+    lastIterLogged = 0;
+    lastLossLogged = NaN;
+
+    if hasVisPanel
+        try
+            delete(allchild(visPanel));
+            trainAx = uiaxes(visPanel);
+            trainAx.Units = "normalized";
+            trainAx.Position = [0.10, 0.12, 0.86, 0.80];
+            trainAx.XScale = "log";
+            trainAx.YScale = "log";
+            trainAx.XGrid = "on";
+            trainAx.YGrid = "on";
+            trainAx.Color = [12, 16, 32]/255;          % ASSTEROID deep dark background (#0c1020)
+            trainAx.GridColor = [35, 50, 86]/255;      % Slate navy grid (#233256)
+            trainAx.GridAlpha = 0.5;
+            trainAx.XColor = [160, 178, 214]/255;      % Slate text (#a0b2d6)
+            trainAx.YColor = [160, 178, 214]/255;
+            title(trainAx, "Surrogate DNN Training Loss & Validation vs. Iteration (Log-Log Scale)", ...
+                "Color", [248, 250, 252]/255, "FontSize", 11, "FontWeight", "bold");
+            xlabel(trainAx, "Iteration (log scale)", ...
+                "Color", [160, 178, 214]/255, "FontSize", 10, "FontWeight", "bold");
+            ylabel(trainAx, "Loss (log scale)", ...
+                "Color", [160, 178, 214]/255, "FontSize", 10, "FontWeight", "bold");
+
+            hTrainLoss = animatedline(trainAx, ...
+                "Color", [72, 178, 172]/255, ...       % ASSTEROID Teal (#48b2ac)
+                "LineWidth", 0.5, ...                  % Minimum line thickness
+                "LineStyle", "-", ...
+                "DisplayName", "Training Loss");
+            hValLoss = animatedline(trainAx, ...
+                "Color", [235, 179, 79]/255, ...       % ASSTEROID Gold (#ebb34f)
+                "LineWidth", 1.5, ...
+                "LineStyle", "-", ...                  % Solid line
+                "Marker", "none", ...                  % No point data
+                "DisplayName", "Validation Loss");
+
+            legend(trainAx, [hTrainLoss, hValLoss], ...
+                "TextColor", [248, 248, 248]/255, ...
+                "Color", [19, 26, 51]/255, ...         % ASSTEROID tertiary bg (#131a33)
+                "EdgeColor", [35, 50, 86]/255, ...     % ASSTEROID border (#233256)
+                "Location", "northeast");
+            drawnow;
+        catch ME_ax
+            fprintf("[Training] Error initializing live training axes: %s\n", ME_ax.message);
+        end
+    end
+
+    maxEpochsVal = safeNum(d, "maxEpochs", 200);
+    lastUiUpdateTic = tic;
+    totalItersLocked = NaN;
+
+    cfg.iterationCallback = @(info) onIterProgress(info);
+
+    function onIterProgress(info)
+        if ~isstruct(info) || ~isfield(info, "State")
+            return;
+        end
+
+        % Set and lock X-axis limits to [1 totalIterations] so it doesn't rescale
+        if isfield(info, "TotalIterations") && isfinite(double(info.TotalIterations)) && double(info.TotalIterations) >= 1
+            totIters = max(2, double(info.TotalIterations));
+            if isnan(totalItersLocked) || totalItersLocked ~= totIters
+                totalItersLocked = totIters;
+                if ~isempty(trainAx) && isvalid(trainAx)
+                    try
+                        trainAx.XLim = [1, totIters];
+                        trainAx.XLimMode = "manual";
+                    catch
+                    end
+                end
+            end
+        end
+
+        if strcmpi(string(info.State), "start")
+            return;
+        end
+        if ~strcmpi(string(info.State), "iteration")
+            return;
+        end
+
+        curIter = double(info.Iteration);
+        curEpoch = double(info.Epoch);
+        curLoss = NaN;
+        if isfield(info, "TrainingLoss") && ~isempty(info.TrainingLoss)
+            tLossDbl = double(info.TrainingLoss);
+            if isscalar(tLossDbl) && isfinite(tLossDbl)
+                curLoss = tLossDbl;
+            elseif ~isempty(tLossDbl)
+                curLoss = mean(tLossDbl(isfinite(tLossDbl)), 'all');
+            end
+        elseif isfield(info, "Loss") && ~isempty(info.Loss)
+            tLossDbl = double(info.Loss);
+            if isscalar(tLossDbl) && isfinite(tLossDbl)
+                curLoss = tLossDbl;
+            elseif ~isempty(tLossDbl)
+                curLoss = mean(tLossDbl(isfinite(tLossDbl)), 'all');
+            end
+        end
+
+        curValLoss = NaN;
+        if isfield(info, "ValidationLoss") && ~isempty(info.ValidationLoss)
+            vLossDbl = double(info.ValidationLoss);
+            if isscalar(vLossDbl) && isfinite(vLossDbl)
+                curValLoss = vLossDbl;
+            elseif ~isempty(vLossDbl)
+                curValLoss = mean(vLossDbl(isfinite(vLossDbl)), 'all');
+            end
+        end
+
+        curLr = NaN;
+        if isfield(info, "LearnRate") && ~isempty(info.LearnRate)
+            curLr = double(info.LearnRate);
+        elseif isfield(info, "BaseLearnRate") && ~isempty(info.BaseLearnRate)
+            curLr = double(info.BaseLearnRate);
+        end
+
+        if isfinite(curIter) && curIter >= 1
+            lastIterLogged = curIter;
+        end
+        if isfinite(curLoss)
+            lastLossLogged = curLoss;
+        end
+
+        % Real-time Log-Log plot point additions
+        if ~isempty(trainAx) && isvalid(trainAx) && curIter >= 1
+            try
+                if isfinite(curLoss) && curLoss > 0
+                    addpoints(hTrainLoss, curIter, curLoss);
+                end
+                if isfinite(curValLoss) && curValLoss > 0
+                    addpoints(hValLoss, curIter, curValLoss);
+                end
+            catch
+            end
+        end
+
+        % Throttle UI / HTML updates to ~0.10s for buttery-smooth training performance
+        if toc(lastUiUpdateTic) >= 0.10 || curIter == 1
+            lastUiUpdateTic = tic;
+
+            if ~isempty(trainAx) && isvalid(trainAx)
+                try
+                    subText = sprintf("Epoch %d / %d | Iteration %d | Train Loss: %.4e", ...
+                        curEpoch, maxEpochsVal, curIter, curLoss);
+                    if isfinite(curValLoss) && curValLoss > 0
+                        subText = subText + sprintf(" | Val Loss: %.4e", curValLoss);
+                    end
+                    if isfinite(curLr)
+                        subText = subText + sprintf(" | LR: %.1e", curLr);
+                    end
+                    subtitle(trainAx, subText, "Color", [160, 178, 214]/255, "FontSize", 9);
+                    drawnow limitrate;
+                catch
+                end
+            end
+
+            % Send epoch progress and metrics to HTML UI
+            frac = min(1.0, curEpoch / max(1, maxEpochsVal));
+            progStruct = struct( ...
+                "fraction", frac, ...
+                "epoch", curEpoch, ...
+                "maxEpochs", maxEpochsVal, ...
+                "iteration", curIter, ...
+                "loss", curLoss, ...
+                "valLoss", curValLoss, ...
+                "message", sprintf("Epoch %d/%d (Iter %d) - Loss: %.4e", curEpoch, maxEpochsVal, curIter, curLoss));
+            if isfinite(curLr)
+                progStruct.lr = curLr;
+            end
+            sendEventToHTMLSource(src, "Progress", progStruct);
+        end
+    end
+
     results = runTrainingWorkflow(cfg, reporter);
 
-    % Render training diagnostics into the right panel
-    try
-        delete(allchild(visPanel));
-        visualizeTrainingResults(results, Parent=visPanel);
-    catch ME2
-        fprintf("[Training] Visualization error: %s\n", ME2.message);
+    % Finalize diagnostic plots on right panel
+    if ~isempty(trainAx) && isvalid(trainAx)
+        try
+            if getTrainingStopRequested(fig) || isProcessStopRequested(fig)
+                title(trainAx, sprintf("Training Stopped Early at Iteration %d (Loss: %.4e) — Model Saved", ...
+                    round(lastIterLogged), lastLossLogged), ...
+                    "Color", [230, 74, 111]/255, "FontSize", 11, "FontWeight", "bold");
+                subtitle(trainAx, "Model saved to disk and database. Click 'Evaluate DB Model' to inspect Three-Tier generalization.", ...
+                    "Color", [160, 178, 214]/255, "FontSize", 9);
+            else
+                title(trainAx, sprintf("Training Complete — Final Loss: %.4e (%d Iterations)", ...
+                    lastLossLogged, round(lastIterLogged)), ...
+                    "Color", [72, 178, 172]/255, "FontSize", 11, "FontWeight", "bold");
+                subtitle(trainAx, "Model saved to disk and database. Click 'Evaluate DB Model' to compute and display full Three-Tier Generalization metrics", ...
+                    "Color", [160, 178, 214]/255, "FontSize", 9);
+            end
+            drawnow;
+        catch
+        end
+    else
+        % Fallback bar chart only if live axes was not used
+        try
+            delete(allchild(visPanel));
+            visualizeTrainingResults(results, Parent=visPanel);
+        catch ME2
+            fprintf("[Training] Visualization error: %s\n", ME2.message);
+        end
     end
 
     % Write-back to unified database
@@ -2532,16 +3005,21 @@ function runTrainingPipeline(src, d, fig, visPanel)
             fig.UserData.visExport = ve;
         end
         markDbDirty(fig);
+        try
+            saveDbFile(fig);
+        catch
+        end
     catch ME_db
         fprintf("[Training] DB write-back warning: %s\n", ME_db.message);
     end
 
     if getTrainingStopRequested(fig) || isProcessStopRequested(fig)
         notifyProcessStopped(fig, "Training", ...
-            sprintf("Training stopped by user and finalized in %.1f s", results.elapsedTotal));
+            sprintf("Training stopped early by user at iteration %d (loss: %.4e). Model saved to disk and database.", ...
+                round(lastIterLogged), lastLossLogged));
     else
         sendEventToHTMLSource(src, "TrainComplete", ...
-            sprintf("Training complete in %.1f s", results.elapsedTotal));
+            sprintf("Training complete in %.1f s. Model saved to disk and database.", results.elapsedTotal));
     end
     clear cleanupObj
 end
@@ -2643,6 +3121,7 @@ end
 %   STAGE 5 — OPTIMIZATION HANDLERS
 %  ########################################################################
 function handleOptimizeEvent(src, event, fig, ax)
+    if interceptCommonEvents(fig, event), return; end
     name = event.HTMLEventName;
     data = event.HTMLEventData;
 
@@ -3449,15 +3928,6 @@ function previewOptimizeMetric(src, d, fig, ax)
         
         if dataSource == "predictions"
             reporter.complete("BuildPredictor", "Using pre-computed predictions from db.Pred.");
-            % If model file exists, pre-load model predictor for continuous refinement in Step 3
-            if strlength(dbModelFile) > 0 && isfile(dbModelFile)
-                try
-                    predCfg = struct("dataSource", "model", "workDir", workDir, "modelFile", dbModelFile, "riCsvFile", dbRiCsvFile);
-                    predictor = buildPredictorFromConfig(predCfg);
-                catch
-                    predictor = [];
-                end
-            end
         elseif dataSource == "interpolation"
             reporter.info("Using fast nearest-neighbor mode for preview (interpolation is slower).");
             
@@ -3486,13 +3956,15 @@ function previewOptimizeMetric(src, d, fig, ax)
             reporter.complete("BuildPredictor", "Predictor ready.");
         end
         
-        % Generate dense predictions using predictor's predictGrid method or extract db.Pred
-        reporter.start("GeneratePredictions", "Generating preview predictions...");
-        
+        % Extract db.Pred or generate dense predictions
         if dataSource == "predictions"
+            reporter.start("GeneratePredictions", "Loading pre-computed predictions from db.Pred...");
             allData = extractBranchAsSoA(fig.UserData.db, "Pred");
             reporter.complete("GeneratePredictions", sprintf("Loaded %d predictions from db.Pred.", structRowCount(allData)));
-        elseif dataSource == "interpolation"
+        else
+            reporter.start("GeneratePredictions", "Generating preview predictions...");
+        end
+        if dataSource == "interpolation"
             % For interpolation preview: use raw data directly (already on grid)
             allData = allData_raw;
             
@@ -4138,6 +4610,7 @@ end
 %   STAGE 4 — PREDICTION & VISUALIZATION HANDLERS
 %  ########################################################################
 function handleVisExportEvent(src, event, fig)
+    if interceptCommonEvents(fig, event), return; end
     if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "predController") ...
             && ~isempty(fig.UserData.handles.predController)
         fig.UserData.handles.predController.handleEvent(event.HTMLEventName, event.HTMLEventData);
@@ -4217,7 +4690,7 @@ function runPredictInterpolate(src, d, fig)
     periodMin       = safeNum(d, "periodMin", 400);
     periodMax       = safeNum(d, "periodMax", 1400);
     radiusMin       = safeNum(d, "radiusMin", 50);
-    radiusMax       = safeNum(d, "radiusMax", 450);
+    radiusMax       = safeNum(d, "radiusMax", 700);
     spatialRes      = safeNum(d, "spatialResolution", 2);
     stokesMin       = safeNum(d, "stokesShiftMin", 100);
     stokesMax       = safeNum(d, "stokesShiftMax", 3600);
@@ -4667,6 +5140,7 @@ function handleVisualizeEvent(src, event, fig)
 %handleVisualizeEvent  Dispatch events from the Stage 6 Visualize panel.
 %   All renders are transient: nothing produced here is written to the
 %   database.
+    if interceptCommonEvents(fig, event), return; end
     if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "visController") ...
             && ~isempty(fig.UserData.handles.visController)
         fig.UserData.handles.visController.handleEvent(event.HTMLEventName, event.HTMLEventData);

@@ -322,7 +322,7 @@ function collectPredictConfig() {
         periodMin: numOr("periodMin", 400),
         periodMax: numOr("periodMax", 1400),
         radiusMin: numOr("radiusMin", 50),
-        radiusMax: numOr("radiusMax", 450),
+        radiusMax: numOr("radiusMax", 700),
         stokesShiftMin: numOr("stokesShiftMin", 100),
         stokesShiftMax: numOr("stokesShiftMax", 3600),
         spatialResolution: numOr("spatialResolution", 1),
@@ -431,9 +431,15 @@ function predictInterpolate() {
 function handleProgress(data) {
     if (!data) return;
     if (data.message) appendLog(data.message);
-    if (data.fraction !== undefined && data.fraction !== null) {
-        var pct = Math.round(data.fraction * 100);
-        document.getElementById("progressBar").style.width = pct + "%";
+    var pct = (data.fraction !== undefined && data.fraction !== null) ? Math.round(data.fraction * 100) : 0;
+    var bar = document.getElementById("progressBar");
+    if (bar) bar.style.width = pct + "%";
+    if (window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("ProgressUpdate", {
+            percent: pct,
+            message: data.message || "",
+            stage: "Stage 4 — Predict"
+        });
     }
 }
 
@@ -519,19 +525,28 @@ function updateVisRequirements(d) {
 
 function setStatus(cls, text) {
     var el = document.getElementById("statusBadge");
-    el.className = "status-badge status-" + cls;
-    el.textContent = text;
+    if (el) {
+        el.className = "status-badge status-" + cls;
+        el.textContent = text;
+    }
 }
 
-function appendLog(msg) {
+function appendLog(msg, level) {
+    if (window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("LogMessage", { message: msg, stage: "Stage 4 — Predict", level: level || "info" });
+    }
     var el = document.getElementById("progressLog");
-    el.textContent += msg + "\n";
-    el.scrollTop = el.scrollHeight;
+    if (el) {
+        el.textContent += msg + "\n";
+        el.scrollTop = el.scrollHeight;
+    }
 }
 
 function clearLog() {
-    document.getElementById("progressLog").textContent = "";
-    document.getElementById("progressBar").style.width = "0%";
+    var el = document.getElementById("progressLog");
+    if (el) el.textContent = "";
+    var bar = document.getElementById("progressBar");
+    if (bar) bar.style.width = "0%";
 }
 
 function toggleSection(el) {
@@ -553,7 +568,6 @@ document.addEventListener("DOMContentLoaded", function() {
         <div style="display:flex;gap:6px;align-items:center;">
             <button class="btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="window.htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
             <button class="btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="window.htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
-            <button class="btn-stop" id="btnStopHeader" onclick="stopProcess()">&#9632; Stop</button>
         </div>
     </div>
 
@@ -722,7 +736,7 @@ document.addEventListener("DOMContentLoaded", function() {
                                 </div>
                                 <div class="field">
                                     <label>Radius Max (nm)</label>
-                                    <input type="number" id="radiusMax" value="450" step="1">
+                                    <input type="number" id="radiusMax" value="700" step="1">
                                 </div>
                             </div>
                             </div>
@@ -786,7 +800,6 @@ document.addEventListener("DOMContentLoaded", function() {
                             <p class="hint">Default selection: spectral + laser for Absorptance, EF_vol, EF_surf; plus avg + analyte for EF_vol and EF_surf.</p>
                             <div class="btn-row">
                                 <button id="btnPredict" class="btn-primary" onclick="predictInterpolate()">Predict / Interpolate (Populate DB)</button>
-                                <button class="btn-stop" id="btnStopPredict" style="padding:10px 14px;" onclick="stopProcess()">&#9632; Stop</button>
                             </div>
                             <div class="btn-row">
                                 <button id="btnOpenVisualize" class="btn-secondary" style="display:none;" onclick="openInVisualize()">Open in Visualize &#8594;</button>
@@ -795,20 +808,6 @@ document.addEventListener("DOMContentLoaded", function() {
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <!-- ===== BOTTOM PANEL: Progress Console ===== -->
-        <div class="bottom-panel">
-            <div id="progressArea">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                    <span style="font-weight:600; color:var(--text-primary);">Progress</span>
-                    <span id="statusBadge" class="status-badge status-idle">Idle</span>
-                </div>
-                <div class="progress-bar-container">
-                    <div id="progressBar" class="progress-bar"></div>
-                </div>
-                <pre id="progressLog" style="margin-top:6px; min-height:30px;"></pre>
             </div>
         </div>
     </div>

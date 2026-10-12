@@ -29,13 +29,18 @@
 
         /* Left Panel - Controls */
         .control-panel {
-            width: 420px;
-            min-width: 420px;
+            width: 100%;
+            min-width: 0;
+            flex: 1;
             background: var(--bg-primary);
-            border-right: 1px solid var(--border);
+            border-right: none;
             display: flex;
             flex-direction: column;
             overflow: hidden;
+        }
+
+        .viz-panel {
+            display: none;
         }
 
         .panel-header {
@@ -748,7 +753,6 @@
                 <div style="display:flex;gap:6px;align-items:center;">
                     <button style="padding:4px 10px;font-size:11px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer;" onclick="htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
                     <button style="padding:4px 10px;font-size:11px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer;" onclick="htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
-                    <button class="btn-stop" style="padding:4px 10px;font-size:11px;" id="btnStopHeader" onclick="stopProcess()">&#9632; Stop</button>
                 </div>
             </div>
 
@@ -1133,16 +1137,7 @@
                 </div>
             </div>
 
-            <!-- Progress Bar -->
-            <div class="progress-container" id="progressContainer">
-                <div class="progress-label">
-                    <span id="progressText">Generating samples...</span>
-                    <span id="progressPercent">0%</span>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
-                </div>
-            </div>
+
 
             <!-- Action Buttons -->
             <div class="action-buttons">
@@ -1152,9 +1147,6 @@
                     </button>
                     <button class="btn-secondary" onclick="previewDensity()" id="btnPreview">
                         👁 Preview Density
-                    </button>
-                    <button class="btn-stop" onclick="stopProcess()" id="btnStopAction">
-                        &#9632; Stop
                     </button>
                 </div>
                 <div class="btn-row">
@@ -1898,10 +1890,15 @@
 
         function showProgress(show) {
             const container = document.getElementById("progressContainer");
-            if (show) {
-                container.classList.add("active");
-            } else {
-                container.classList.remove("active");
+            if (container) {
+                if (show) container.classList.add("active");
+                else container.classList.remove("active");
+            }
+        }
+
+        function appendLog(msg, level) {
+            if (window.htmlComponent) {
+                window.htmlComponent.sendEventToMATLAB("LogMessage", { message: msg, stage: "Stage 2 — Sampling", level: level || "info" });
             }
         }
 
@@ -1941,10 +1938,21 @@
         }
 
         function updateProgress(percent, message) {
-            document.getElementById("progressFill").style.width = percent + "%";
-            document.getElementById("progressPercent").textContent = percent.toFixed(0) + "%";
+            var fill = document.getElementById("progressFill");
+            if (fill && percent !== null && percent !== undefined) fill.style.width = percent + "%";
+            var pctEl = document.getElementById("progressPercent");
+            if (pctEl && percent !== null && percent !== undefined) pctEl.textContent = (typeof percent === 'number' ? percent.toFixed(0) : percent) + "%";
             if (message) {
-                document.getElementById("progressText").textContent = message;
+                var txtEl = document.getElementById("progressText");
+                if (txtEl) txtEl.textContent = message;
+                appendLog(message);
+            }
+            if (window.htmlComponent) {
+                window.htmlComponent.sendEventToMATLAB("ProgressUpdate", {
+                    percent: percent || 0,
+                    message: message || "",
+                    stage: "Stage 2 — Sampling"
+                });
             }
         }
 

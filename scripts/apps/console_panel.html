@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASSTEROID Console</title>
+<link rel="stylesheet" href="shared/css/assteroid_tokens.css">
+<link rel="stylesheet" href="shared/css/assteroid_components.css">
+<script src="shared/js/matlab_bridge.js"></script>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+        background: var(--bg-primary, #060812);
+        color: var(--text-primary, #f0f4fc);
+        font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        font-size: 12px;
+        user-select: none;
+    }
+
+    #consoleContainer {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        width: 100%;
+        background: var(--bg-secondary, #0a0e1c);
+        border-top: 1px solid var(--border, #1c2438);
+    }
+
+    /* Top control bar */
+    .console-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 12px;
+        height: 38px;
+        min-height: 38px;
+        background: linear-gradient(180deg, #0f152a 0%, #0a0e1c 100%);
+        border-bottom: 1px solid var(--border, #1c2438);
+        gap: 12px;
+        flex-shrink: 0;
+    }
+
+    .header-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-shrink: 0;
+    }
+
+    .console-title {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 700;
+        font-size: 11px;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        color: var(--pal-c70, #48b2ac);
+    }
+
+    .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+    }
+    .status-pill.idle {
+        background: rgba(160, 178, 214, 0.1);
+        color: var(--text-secondary, #a0b2d6);
+        border: 1px solid rgba(160, 178, 214, 0.2);
+    }
+    .status-pill.running {
+        background: rgba(39, 146, 141, 0.2);
+        color: var(--pal-c80, #6bd1cb);
+        border: 1px solid var(--pal-c60, #27928d);
+        box-shadow: 0 0 8px rgba(39, 146, 141, 0.35);
+    }
+    .status-pill.running .dot {
+        width: 6px; height: 6px; border-radius: 50%;
+        background: var(--pal-c80, #6bd1cb);
+        animation: pulseDot 1.2s infinite;
+    }
+    @keyframes pulseDot {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.3; transform: scale(0.8); }
+    }
+    .status-pill.complete {
+        background: rgba(46, 184, 114, 0.18);
+        color: #4ade80;
+        border: 1px solid rgba(46, 184, 114, 0.4);
+    }
+    .status-pill.error {
+        background: rgba(229, 57, 53, 0.18);
+        color: #f87171;
+        border: 1px solid rgba(229, 57, 53, 0.4);
+    }
+    .status-pill.stopped {
+        background: rgba(235, 179, 79, 0.18);
+        color: #fbbf24;
+        border: 1px solid rgba(235, 179, 79, 0.4);
+    }
+
+    /* Middle Progress Section */
+    .header-center {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 1;
+        max-width: 520px;
+        min-width: 140px;
+    }
+
+    .progress-track {
+        flex: 1;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 3px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .progress-bar-inner {
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, var(--pal-c60, #27928d), var(--pal-c80, #6bd1cb));
+        box-shadow: 0 0 8px rgba(72, 178, 172, 0.5);
+        border-radius: 3px;
+        transition: width 0.15s ease;
+    }
+
+    .progress-percent {
+        font-family: 'Cascadia Code', 'Consolas', monospace;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--pal-c80, #6bd1cb);
+        min-width: 38px;
+        text-align: right;
+    }
+
+    .metrics-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+
+    .metric-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 2px 6px;
+        background: rgba(19, 26, 51, 0.85);
+        border: 1px solid rgba(56, 74, 224, 0.35);
+        border-radius: 4px;
+        font-family: 'Cascadia Code', 'Consolas', monospace;
+        font-size: 10px;
+        color: var(--text-secondary, #a0b2d6);
+        white-space: nowrap;
+    }
+    .metric-chip strong {
+        color: var(--text-primary, #f0f4fc);
+        margin-left: 3px;
+    }
+
+    /* Right controls */
+    .header-right {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+
+    .c-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        padding: 4px 9px;
+        height: 26px;
+        border-radius: 4px;
+        border: 1px solid var(--border, #233256);
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text-secondary, #a0b2d6);
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+    .c-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--text-primary, #ffffff);
+        border-color: rgba(255, 255, 255, 0.25);
+    }
+    .c-btn.stop {
+        background: rgba(229, 57, 53, 0.15);
+        border-color: rgba(229, 57, 53, 0.4);
+        color: #ff8585;
+        font-weight: 700;
+    }
+    .c-btn.stop:hover {
+        background: #e53935;
+        color: #ffffff;
+        border-color: #ff5252;
+        box-shadow: 0 0 8px rgba(229, 57, 53, 0.4);
+    }
+
+    /* Console Terminal Body */
+    .console-body {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 6px 12px;
+        background: #04060c;
+        font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+        font-size: 11px;
+        line-height: 1.45;
+        color: #d1d8ea;
+        user-select: text;
+        word-break: break-all;
+    }
+
+    .console-body::-webkit-scrollbar {
+        width: 8px;
+    }
+    .console-body::-webkit-scrollbar-track {
+        background: #060914;
+    }
+    .console-body::-webkit-scrollbar-thumb {
+        background: #1c2742;
+        border-radius: 4px;
+    }
+    .console-body::-webkit-scrollbar-thumb:hover {
+        background: #2d3c63;
+    }
+
+    .log-entry {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        padding: 1px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+    }
+
+    .log-time {
+        color: #53648a;
+        font-size: 10px;
+        flex-shrink: 0;
+    }
+
+    .log-text {
+        flex: 1;
+        white-space: pre-wrap;
+    }
+
+    .log-text.info { color: #d1d8ea; }
+    .log-text.success { color: #4ade80; font-weight: 600; }
+    .log-text.warning { color: #fbbf24; font-weight: 600; }
+    .log-text.error { color: #f87171; font-weight: 700; }
+    .log-text.system { color: #a7bbf9; font-style: italic; }
+
+    #copyToast {
+        position: fixed;
+        bottom: 16px;
+        right: 16px;
+        background: #27928d;
+        color: #ffffff;
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        pointer-events: none;
+    }
+    #copyToast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="consoleContainer">
+    <div class="console-header">
+        <div class="header-left">
+            <div class="console-title">
+                <span>☄️</span>
+                <span>MATLAB Console</span>
+            </div>
+            <div id="statusPill" class="status-pill idle">
+                <span class="dot"></span>
+                <span id="statusLabel">Idle</span>
+            </div>
+        </div>
+
+        <div class="header-center">
+            <div class="progress-track" title="Active workflow progress">
+                <div id="progressBar" class="progress-bar-inner"></div>
+            </div>
+            <span id="progressPercent" class="progress-percent">0%</span>
+            <div id="metricsBox" class="metrics-row" style="display:none;"></div>
+        </div>
+
+        <div class="header-right">
+            <button id="btnStopGlobal" class="c-btn stop" onclick="requestStop()" title="Halt current computational job immediately">
+                ⏹ Stop
+            </button>
+            <button class="c-btn" onclick="clearConsole()" title="Clear terminal text buffer">
+                🧹 Clear
+            </button>
+            <button class="c-btn" onclick="copyConsoleLog()" title="Copy all console output to clipboard">
+                📋 Copy
+            </button>
+            <button id="btnHeightToggle" class="c-btn" onclick="cycleHeight()" title="Toggle console height (Collapsed / Normal / Expanded)">
+                ↕ Size
+            </button>
+        </div>
+    </div>
+
+    <div id="consoleBody" class="console-body">
+        <div class="log-entry" id="initialLog">
+            <span class="log-time">[Init]</span>
+            <span class="log-text system">☄️ ASSTEROID inverse design computational engine initialized. Ready.</span>
+        </div>
+    </div>
+</div>
+
+<div id="copyToast">Copied to clipboard!</div>
+
+<script>
+    var heightModes = [150, 260, 38]; // Normal, Expanded, Collapsed
+    var heightIndex = 0; // Starts at 150
+    var maxLogEntries = 1200;
+    var rawLogs = [];
+
+    // Initialize AssteroidBridge if available
+    if (window.AssteroidBridge) {
+        window.AssteroidBridge.init("ConsolePanel");
+    }
+
+    function getTimeString() {
+        var now = new Date();
+        var h = String(now.getHours()).padStart(2, '0');
+        var m = String(now.getMinutes()).padStart(2, '0');
+        var s = String(now.getSeconds()).padStart(2, '0');
+        return h + ":" + m + ":" + s;
+    }
+
+    var lastLogMsg = "";
+    var lastLogTimeMs = 0;
+
+    function appendLog(msg, level) {
+        if (!msg) return;
+        if (typeof msg !== "string") {
+            try { msg = JSON.stringify(msg); } catch (e) { msg = String(msg); }
+        }
+        msg = msg.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").trim();
+        if (!msg) return;
+
+        var nowMs = Date.now();
+        if (lastLogMsg === msg && (nowMs - lastLogTimeMs) < 1200) {
+            return;
+        }
+        lastLogMsg = msg;
+        lastLogTimeMs = nowMs;
+        var t = getTimeString();
+
+        var initLog = document.getElementById("initialLog");
+        if (initLog && initLog.parentNode) {
+            initLog.parentNode.removeChild(initLog);
+        }
+
+        // Auto-detect level if not explicitly provided
+        if (!level || level === "info") {
+            if (/error|exception|fail|failed|fault/i.test(msg)) {
+                level = "error";
+            } else if (/warn|warning/i.test(msg)) {
+                level = "warning";
+            } else if (/complete|completed|passed|success|saved/i.test(msg)) {
+                level = "success";
+            } else {
+                level = "info";
+            }
+        }
+
+        var body = document.getElementById("consoleBody");
+        var entry = document.createElement("div");
+        entry.className = "log-entry";
+
+        var timeSpan = document.createElement("span");
+        timeSpan.className = "log-time";
+        timeSpan.textContent = "[" + t + "]";
+
+        var textSpan = document.createElement("span");
+        textSpan.className = "log-text " + level;
+        textSpan.textContent = msg;
+
+        entry.appendChild(timeSpan);
+        entry.appendChild(textSpan);
+        body.appendChild(entry);
+
+        rawLogs.push("[" + t + "] " + msg);
+
+        // Cap buffer to avoid DOM bloating
+        if (body.children.length > maxLogEntries) {
+            body.removeChild(body.firstChild);
+            rawLogs.shift();
+        }
+
+        // Auto-scroll to bottom
+        body.scrollTop = body.scrollHeight;
+    }
+
+    function appendRawStream(text) {
+        if (!text) return;
+        var lines = text.split(/\r?\n/);
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            if (i === lines.length - 1 && line === "") continue;
+            if (line.trim() === "") continue;
+            appendLog(line);
+        }
+    }
+
+    function setStatus(statusClass, label) {
+        var pill = document.getElementById("statusPill");
+        var text = document.getElementById("statusLabel");
+        pill.className = "status-pill " + statusClass;
+        text.textContent = label;
+    }
+
+    function setProgress(pct, msg) {
+        var bar = document.getElementById("progressBar");
+        var label = document.getElementById("progressPercent");
+        pct = Math.max(0, Math.min(100, Math.round(pct || 0)));
+        bar.style.width = pct + "%";
+        label.textContent = pct + "%";
+
+        if (pct > 0 && pct < 100) {
+            setStatus("running", "Running (" + pct + "%)");
+        } else if (pct >= 100) {
+            setStatus("complete", "Complete");
+        }
+    }
+
+    function setMetrics(metrics) {
+        var box = document.getElementById("metricsBox");
+        if (!metrics || Object.keys(metrics).length === 0) {
+            box.style.display = "none";
+            box.innerHTML = "";
+            return;
+        }
+        box.innerHTML = "";
+        box.style.display = "flex";
+        for (var k in metrics) {
+            if (metrics.hasOwnProperty(k)) {
+                var chip = document.createElement("span");
+                chip.className = "metric-chip";
+                chip.innerHTML = k + ": <strong>" + metrics[k] + "</strong>";
+                box.appendChild(chip);
+            }
+        }
+    }
+
+    function clearConsole() {
+        var body = document.getElementById("consoleBody");
+        body.innerHTML = "";
+        rawLogs = [];
+        appendLog("Console cleared.", "system");
+        if (window.htmlComponent) {
+            window.htmlComponent.sendEventToMATLAB("ConsoleCleared", {});
+        }
+    }
+
+    function copyConsoleLog() {
+        var fullText = rawLogs.join("\n");
+        if (!navigator.clipboard) {
+            var ta = document.createElement("textarea");
+            ta.value = fullText;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+        } else {
+            navigator.clipboard.writeText(fullText);
+        }
+        var toast = document.getElementById("copyToast");
+        toast.classList.add("show");
+        setTimeout(function() { toast.classList.remove("show"); }, 1800);
+    }
+
+    function cycleHeight() {
+        heightIndex = (heightIndex + 1) % heightModes.length;
+        var newH = heightModes[heightIndex];
+        if (window.htmlComponent) {
+            window.htmlComponent.sendEventToMATLAB("ToggleConsoleHeight", { height: newH });
+        }
+    }
+
+    function requestStop() {
+        appendLog("⏹ Stop requested by user... Halting active operations.", "warning");
+        setStatus("stopped", "Stopping...");
+        if (window.htmlComponent) {
+            window.htmlComponent.sendEventToMATLAB("StopProcessRequest", {});
+        }
+    }
+
+    // Universal Event Router
+    function handleIncomingEvent(name, data) {
+        if (!name) return;
+        data = data || {};
+        switch (name) {
+            case "RawConsoleStream":
+                var text = typeof data === "string" ? data : (data.text || "");
+                appendRawStream(text);
+                break;
+            case "ConsoleLog":
+                var msg = typeof data === "string" ? data : (data.message || data.msg || "");
+                var lvl = data.level || "info";
+                appendLog(msg, lvl);
+                break;
+            case "Progress":
+            case "ConsoleProgress":
+                var pct = data.percent !== undefined ? data.percent : (data.fraction !== undefined ? data.fraction * 100 : 0);
+                var pMsg = data.message || data.msg || "";
+                setProgress(pct, pMsg);
+                if (data.metrics) setMetrics(data.metrics);
+                if (pMsg && pMsg !== "Complete!") appendLog(pMsg, "info");
+                break;
+            case "StatusUpdate":
+                var sMsg = typeof data === "string" ? data : (data.message || data.msg || "");
+                if (sMsg) appendLog(sMsg, "info");
+                break;
+            case "ProcessStatusChanged":
+                if (data.status === "running") setStatus("running", "Running");
+                else if (data.status === "complete") setStatus("complete", "Complete");
+                else if (data.status === "error") setStatus("error", "Error");
+                else if (data.status === "stopped") setStatus("stopped", "Stopped");
+                else { setStatus("idle", "Idle"); setProgress(0, ""); setMetrics(null); }
+                break;
+            case "ProcessStopAck":
+                setStatus("stopped", "Stopped");
+                appendLog(data.message || "Process stopped.", "warning");
+                break;
+            case "ProcessStopped":
+                setStatus("stopped", "Stopped");
+                appendLog(data.message || "Process terminated.", "warning");
+                break;
+            case "ClearConsole":
+                clearConsole();
+                break;
+        }
+    }
+
+    var isListenersAttached = false;
+    function attachListeners(component) {
+        if (isListenersAttached) return;
+        if (!component) component = window.htmlComponent;
+        if (!component) return;
+        isListenersAttached = true;
+        window.htmlComponent = component;
+
+        var eventNames = [
+            "RawConsoleStream", "ConsoleLog", "Progress", "ConsoleProgress",
+            "StatusUpdate", "ProcessStatusChanged", "ProcessStopAck", "ProcessStopped", "ClearConsole"
+        ];
+        eventNames.forEach(function(ename) {
+            try {
+                component.addEventListener(ename, function(ev) {
+                    handleIncomingEvent(ename, ev.Data !== undefined ? ev.Data : ev);
+                });
+            } catch(e) {}
+        });
+
+        // Also listen to generic HTMLEvent in case MATLAB wraps events
+        try {
+            component.addEventListener("HTMLEvent", function(ev) {
+                var d = ev.Data || {};
+                var name = d.name || ev.EventName || "";
+                var payload = d.payload !== undefined ? d.payload : d;
+                handleIncomingEvent(name, payload);
+            });
+        } catch(e) {}
+
+        // Listen for DataChanged
+        try {
+            component.addEventListener("DataChanged", function(ev) {
+                if (ev && ev.Data) {
+                    if (ev.Data.rawStream) appendRawStream(ev.Data.rawStream);
+                    if (ev.Data.message) appendLog(ev.Data.message, ev.Data.level || "info");
+                }
+            });
+        } catch(e) {}
+
+        // Ping MATLAB that console is ready
+        try {
+            component.sendEventToMATLAB("ConsoleReady", { timestamp: Date.now() });
+        } catch (e) {}
+    }
+
+    // Official MATLAB uihtml entry point
+    function setup(htmlComponent) {
+        window.htmlComponent = htmlComponent;
+        if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", function() {
+                attachListeners(htmlComponent);
+            });
+        } else {
+            attachListeners(htmlComponent);
+        }
+    }
+    window.setup = setup;
+
+    document.addEventListener("DOMContentLoaded", function() {
+        if (window.htmlComponent) {
+            attachListeners(window.htmlComponent);
+        }
+    });
+</script>
+</body>
+</html>

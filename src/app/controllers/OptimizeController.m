@@ -135,12 +135,10 @@ classdef OptimizeController < handle
 
             cfg.metricVariant = metricVariant;
 
-            % Re-use cached predictions from db.Pred when requested
-            if isfield(obj.session.db, "Pred") && structRowCount(obj.session.db.Pred) > 0
-                cfg.cachedAllData = extractBranchAsSoA(obj.session.db, "Pred");
-                if dataSource == "predictions"
-                    cfg.recomputePredictions = false;
-                end
+            % Handle pre-computed predictions preview without generating new predictions
+            if dataSource == "predictions"
+                obj.previewPrecomputedPredictions(d, baseMetric, metricVariant, rep);
+                return;
             end
 
             results = runLocalizationWorkflow(cfg, rep);
@@ -242,11 +240,18 @@ classdef OptimizeController < handle
 
             cfg.metricVariant = metricVariant;
 
+            % Sync db.Pred from fig.UserData if needed
+            if (~isfield(obj.session.db, "Pred") || structRowCount(obj.session.db.Pred) == 0) && ...
+               (~isempty(obj.fig) && isvalid(obj.fig) && isfield(obj.fig.UserData, "db") && ...
+                isfield(obj.fig.UserData.db, "Pred") && structRowCount(obj.fig.UserData.db.Pred) > 0)
+                obj.session.db.Pred = obj.fig.UserData.db.Pred;
+            end
+
             % Re-use cached predictions when available
             if isfield(obj.session.db, "Pred") && structRowCount(obj.session.db.Pred) > 0
                 cfg.cachedAllData = extractBranchAsSoA(obj.session.db, "Pred");
-                if cfg.DataSource == "predictions"
-                    cfg.RecomputePredictions = false;
+                if cfg.dataSource == "predictions"
+                    cfg.recomputePredictions = false;
                 end
             end
 
@@ -658,6 +663,147 @@ classdef OptimizeController < handle
 
     %% Internal Helpers
     methods (Access = private)
+        function previewPrecomputedPredictions(obj, d, baseMetric, metricVariant, rep)
+        % PREVIEWPRECOMPUTEDPREDICTIONS Fast preview of existing db.Pred without new predictions.
+            rep.info("Loading pre-computed predictions from db.Pred...");
+
+            % Sync db.Pred from fig.UserData if needed
+            if (~isfield(obj.session.db, "Pred") || structRowCount(obj.session.db.Pred) == 0) && ...
+               (~isempty(obj.fig) && isvalid(obj.fig) && isfield(obj.fig.UserData, "db") && ...
+                isfield(obj.fig.UserData.db, "Pred") && structRowCount(obj.fig.UserData.db.Pred) > 0)
+                obj.session.db.Pred = obj.fig.UserData.db.Pred;
+            end
+
+            % If still missing, check predictionFile on disk
+            if ~isfield(obj.session.db, "Pred") || structRowCount(obj.session.db.Pred) == 0
+                [~, ~, ~, predictionFile] = obj.resolvePaths();
+                if strlength(predictionFile) > 0 && isfile(predictionFile)
+                    loaded = load(predictionFile);
+                    if isfield(loaded, "allData"), obj.session.db.Pred = loaded.allData;
+                    elseif isfield(loaded, "predictions"), obj.session.db.Pred = loaded.predictions;
+                    elseif isfield(loaded, "db") && isfield(loaded.db, "Pred"), obj.session.db.Pred = loaded.db.Pred;
+                    else, obj.session.db.Pred = loaded;
+                    end
+                    if ~isempty(obj.fig) && isvalid(obj.fig)
+                        obj.fig.UserData.db.Pred = obj.session.db.Pred;
+                    end
+                end
+            end
+
+            if ~isfield(obj.session.db, "Pred") || structRowCount(obj.session.db.Pred) == 0
+                obj.sendError("No pre-computed predictions found in database (db.Pred). Please generate or load predictions first.");
+                return;
+            end
+
+            allData = extractBranchAsSoA(obj.session.db, "Pred");
+
+            % Resolve derived metric field name
+            if metricVariant == "weighted"
+                variantForField = "analyte";
+            elseif metricVariant == "laser"
+                variantForField = "laser";
+            else
+                variantForField = "avg";
+            end
+            avgFieldName = resolveDerivedMetricField(baseMetric, variantForField, allData);
+
+            % If derived field not present, compute from existing spectral tensor (no fresh evaluation)
+            if ~isfield(allData, avgFieldName) && isfield(allData, baseMetric)
+                specMat = double(allData.(baseMetric));
+                if variantForField == "laser"
+                    laserWl = obj.safeNum(d, "laserWavelength", 785);
+                    if isfield(allData, "LaserWl") && isscalar(allData.LaserWl)
+                        laserWl = double(allData.LaserWl);
+                    elseif isfield(allData, "LaserWavelength") && isscalar(allData.LaserWavelength)
+                        laserWl = double(allData.LaserWavelength);
+                    end
+                    if isfield(allData, "lambda") && ~isempty(allData.lambda)
+                        lamVec = allData.lambda(1, :);
+                        if max(lamVec) < 50, lamVec = lamVec * 1e3; end % um -> nm
+                        [~, lIdx] = min(abs(lamVec - laserWl));
+                    else
+                        lIdx = 1;
+                    end
+                    allData.(avgFieldName) = specMat(:, lIdx);
+                elseif variantForField == "avg"
+                    allData.(avgFieldName) = mean(specMat, 2, "omitnan");
+                elseif variantForField == "analyte"
+                    analyteSpec = [];
+                    try
+                        analyteSpec = getDefaultAnalyteSpectrum();
+                    catch
+                    end
+                    if isstruct(analyteSpec) && isfield(analyteSpec, "shift_cm") && isfield(allData, "RamanShift")
+                        shifts = allData.RamanShift(:)';
+                        aw = interp1(analyteSpec.shift_cm(:), analyteSpec.intensity(:), shifts, "makima", 0);
+                        aw = max(0, aw);
+                        if sum(aw) > 0
+                            weights = aw / sum(aw);
+                            allData.(avgFieldName) = specMat * weights(:);
+                        else
+                            allData.(avgFieldName) = mean(specMat, 2, "omitnan");
+                        end
+                    else
+                        allData.(avgFieldName) = mean(specMat, 2, "omitnan");
+                    end
+                end
+            end
+
+            if ~isfield(allData, avgFieldName)
+                obj.sendError(sprintf("Metric '%s' (%s) not found in db.Pred.", baseMetric, metricVariant));
+                return;
+            end
+
+            % Construct preview results struct
+            results = struct();
+            results.allData = allData;
+            results.metricName = baseMetric;
+            results.metricVariant = metricVariant;
+            if isfield(allData, "period")
+                results.pSamples = unique(allData.period(:)') * 1e-3;
+            else
+                results.pSamples = [];
+            end
+            if isfield(allData, "radius")
+                results.rSamples = unique(allData.radius(:)') * 1e-3;
+            else
+                results.rSamples = [];
+            end
+            if isfield(allData, "lambda") && ~isempty(allData.lambda)
+                lamVals = allData.lambda(1, :);
+                if max(lamVals) > 50, lamVals = lamVals * 1e-3; end
+                results.lambdaSamples = lamVals;
+            else
+                results.lambdaSamples = [];
+            end
+
+            previewMetricEntry = struct( ...
+                "metricName", baseMetric, ...
+                "candidateTable", table(), ...
+                "maximaResults", table(), ...
+                "lambdaSamples", results.lambdaSamples);
+            results.metrics = {previewMetricEntry};
+
+            % Update session/app state
+            obj.updateOptimizeState("previewResults", results);
+            obj.updateOptimizeState("lastResults", results);
+            obj.updateOptimizeState("config", d);
+
+            % Render preview to axes
+            ax = obj.getAxes();
+            if ~isempty(ax) && isvalid(ax)
+                try
+                    delete(allchild(ax));
+                    plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, [], [], [], false);
+                catch ME_plot
+                    fprintf("[OptimizeController] Visualization warning: %s\n", ME_plot.message);
+                end
+            end
+
+            obj.sendToHTML("PreviewComplete", struct("metric", baseMetric, "variant", metricVariant));
+            rep.complete("Preview", sprintf("Loaded %d pre-computed points from db.Pred. Heatmap preview ready.", structRowCount(allData)));
+        end
+
         function [modelFile, riCsvFile, dataFile, predictionFile] = resolvePaths(obj)
             modelFile = ""; riCsvFile = ""; dataFile = ""; predictionFile = "";
             if ~isempty(obj.fig) && isvalid(obj.fig) && isfield(obj.fig.UserData, "app") ...

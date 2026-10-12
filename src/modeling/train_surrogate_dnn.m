@@ -68,6 +68,7 @@ arguments
     options.CategoricalTargetEncoding (1,1) string = "auto"
     options.ExtraTrainingOptions cell = {}
     options.StopTrainingFcn function_handle = function_handle.empty
+    options.IterationCallback function_handle = function_handle.empty
 end
 
 % trainnet metric is computed on the training-space targets; MAPE there is
@@ -100,6 +101,7 @@ opts.ValidationFrequency = options.ValidationFrequency;
 opts.ValidationPatience = options.ValidationPatience;
 opts.VerboseFrequency = options.VerboseFrequency;
 opts.StopTrainingFcn = options.StopTrainingFcn;
+opts.IterationCallback = options.IterationCallback;
 opts.Plots = options.Plots;
 opts.ObjectiveMetricName = options.ObjectiveMetricName;
 opts.OutputNetwork = options.OutputNetwork;
@@ -411,8 +413,13 @@ if ~isempty(opts.ExtraTrainingOptions)
     end
 end
 
+numTrainSamples = size(XTrain, 1);
+batchSize = max(1, opts.MiniBatchSize);
+itersPerEpoch = ceil(numTrainSamples / batchSize);
+totalIterations = max(1, opts.MaxEpochs * itersPerEpoch);
+
 isPlotMonitor = strcmpi(opts.Plots, "training-progress");
-outputFcn = @(info)localTrainingOutputFcn(info, trainMetricsList, opts.StopTrainingFcn, isPlotMonitor);
+outputFcn = @(info)localTrainingOutputFcn(info, trainMetricsList, opts.StopTrainingFcn, isPlotMonitor, opts.IterationCallback, totalIterations);
 optionsArgs(end+1:end+2) = {'OutputFcn', outputFcn};
 
 if strcmpi(opts.Optimizer, "lm") && ~strcmpi(opts.LossFunction, "mse")
@@ -421,8 +428,20 @@ end
 trainingOpts = trainingOptions(char(opts.Optimizer), optionsArgs{:});
 
 if opts.Verbose
-    fprintf('  Starting training (epochs: %d, batch size: %d, lr: %.1e)...\n', ...
-        opts.MaxEpochs, opts.MiniBatchSize, opts.LearningRate);
+    fprintf('  Starting training (epochs: %d, batch size: %d, lr: %.1e, total iterations: %d)...\n', ...
+        opts.MaxEpochs, opts.MiniBatchSize, opts.LearningRate, totalIterations);
+end
+
+if ~isempty(opts.IterationCallback)
+    try
+        opts.IterationCallback(struct( ...
+            "State", "start", ...
+            "Iteration", 0, ...
+            "Epoch", 0, ...
+            "TotalIterations", totalIterations, ...
+            "MaxEpochs", opts.MaxEpochs));
+    catch
+    end
 end
 
 lossFcn = localResolveLossFunction(opts.LossFunction);
@@ -599,6 +618,15 @@ model.flags = struct( ...
     "FeatureNames", {cellstr(model.featureNames)});
 opts.MetricsList = metricsList;
 opts.TrainMetricsList = trainMetricsList;
+% Strip callback handles to prevent capturing GUI / controller closures in saved models
+if isfield(opts, "StopTrainingFcn"), opts = rmfield(opts, "StopTrainingFcn"); end
+if isfield(opts, "OutputFcn"), opts = rmfield(opts, "OutputFcn"); end
+fnames = fieldnames(opts);
+for k = 1:numel(fnames)
+    if isa(opts.(fnames{k}), "function_handle")
+        opts = rmfield(opts, fnames{k});
+    end
+end
 model.options = opts;
 
 % v2 physics schema: persist the feature/target statistics so the model is
@@ -965,7 +993,7 @@ switch split
 end
 end
 
-function stop = localTrainingOutputFcn(info, metricsList, stopCheckFcn, isPlotMonitor) %#ok<INUSD>
+function stop = localTrainingOutputFcn(info, metricsList, stopCheckFcn, isPlotMonitor, iterCallback, totalIterations) %#ok<INUSD>
 persistent lastCheckTic
 stop = false;
 
@@ -974,6 +1002,12 @@ if nargin < 3
 end
 if nargin < 4
     isPlotMonitor = false;
+end
+if nargin < 5
+    iterCallback = function_handle.empty;
+end
+if nargin >= 6 && ~isempty(totalIterations) && isfinite(totalIterations)
+    info.TotalIterations = double(totalIterations);
 end
 
 % Fast stop check on every iteration
@@ -984,6 +1018,14 @@ if ~isempty(stopCheckFcn)
             fprintf('[train_surrogate_dnn] Stop signal detected - terminating training.\n');
             return;
         end
+    catch
+    end
+end
+
+% Invoke external iteration callback if provided
+if ~isempty(iterCallback)
+    try
+        iterCallback(info);
     catch
     end
 end

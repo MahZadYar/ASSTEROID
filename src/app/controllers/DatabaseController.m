@@ -242,7 +242,23 @@ classdef DatabaseController < handle
     methods (Access = private)
         function sendToHTML(obj, eventName, payload)
             if ~isempty(obj.htmlComponent) && isvalid(obj.htmlComponent)
-                sendEventToHTMLSource(obj.htmlComponent, eventName, payload);
+                try
+                    sendEventToHTMLSource(obj.htmlComponent, eventName, payload);
+                catch
+                end
+            end
+            if ~isempty(obj.fig) && isvalid(obj.fig) && isstruct(obj.fig.UserData) && isfield(obj.fig.UserData, "app")
+                if strcmp(eventName, "Progress") && isstruct(payload)
+                    pct = 0;
+                    if isfield(payload, "fraction") && ~isempty(payload.fraction), pct = payload.fraction * 100; end
+                    msg = ""; if isfield(payload, "message"), msg = payload.message; end
+                    try obj.fig.UserData.app.updateProgress(pct, msg, "Stage 0 — Database"); catch; end
+                elseif (strcmp(eventName, "Error") || strcmp(eventName, "ExportComplete") || strcmp(eventName, "SaveComplete") || strcmp(eventName, "LoadComplete"))
+                    lvl = "info";
+                    if strcmp(eventName, "Error"), lvl = "error";
+                    else, lvl = "success"; end
+                    try obj.fig.UserData.app.logMessage(string(payload), lvl, "Stage 0 — Database"); catch; end
+                end
             end
         end
 

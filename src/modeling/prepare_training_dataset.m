@@ -106,6 +106,7 @@ end
 fprintf('  Extracting features from %d geometries...\n', numRows);
 featList = {};
 respList = {};
+respListRaw = {};
 
 % Extract geometry columns (period, radius)
 pVals = getColumn(allData, 'period');
@@ -162,11 +163,12 @@ efSurfData = getColumn(allData, 'EF_surf');
 
 % Ensure all have [N × L] shape; pad if needed
 maxLambdaWidth = size(lambdaData, 2);
-absorptanceData = padSpectra(absorptanceData, maxLambdaWidth);
-mVolData = padSpectra(mVolData, maxLambdaWidth);
-mSurfData = padSpectra(mSurfData, maxLambdaWidth);
-efVolData = padSpectra(efVolData, maxLambdaWidth);
-efSurfData = padSpectra(efSurfData, maxLambdaWidth);
+numRowsExpected = size(lambdaData, 1);
+absorptanceData = padSpectra(absorptanceData, maxLambdaWidth, numRowsExpected);
+mVolData = padSpectra(mVolData, maxLambdaWidth, numRowsExpected);
+mSurfData = padSpectra(mSurfData, maxLambdaWidth, numRowsExpected);
+efVolData = padSpectra(efVolData, maxLambdaWidth, numRowsExpected);
+efSurfData = padSpectra(efSurfData, maxLambdaWidth, numRowsExpected);
 
 % Build full metric matrix [N × L × 5]
 metricStack = cat(3, absorptanceData, mVolData, mSurfData, efVolData, efSurfData);
@@ -276,6 +278,7 @@ for idx = 1:numRows
     metricsAtRowValid = metricsAtRow(validMask, :);  % [nSamples × 5]
     selectedIdx = cellfun(@(name) find(strcmp(allTargetFieldOrder, name), 1, 'first'), targetFields);
     targetMatrix = metricsAtRowValid(:, selectedIdx);
+    targetMatrixRaw = targetMatrix;
     
     % Apply log transformation to specified targets (using decimal log: log10(1 + y))
     if any(targetLogMask)
@@ -312,6 +315,7 @@ for idx = 1:numRows
         featList{end+1} = [pCol, rCol, lambdaCol, nVals, kVals]; %#ok<AGROW>
     end
     respList{end+1} = targetMatrix;
+    respListRaw{end+1} = targetMatrixRaw;
 end
 
 if isempty(featList)
@@ -320,6 +324,7 @@ end
 
 X = vertcat(featList{:});
 Y = vertcat(respList{:});
+YRaw = vertcat(respListRaw{:});
 
 if size(X,1) ~= size(Y,1)
     error('prepare_training_dataset:SizeMismatch', ...
@@ -354,6 +359,7 @@ if any(invalidMask)
 end
 X(invalidMask, :) = [];
 Y(invalidMask, :) = [];
+YRaw(invalidMask, :) = [];
 if any(invalidMask)
     fprintf('  Removed %d rows with NaN/Inf values\n', sum(invalidMask));
 end
@@ -368,6 +374,7 @@ if needsPositiveGeometry
         fprintf('  Removed %d rows with non-positive geometric features (p, r, or lambda)\n', nRemoved);
         X(geomFeaturesNotPositive, :) = [];
         Y(geomFeaturesNotPositive, :) = [];
+        YRaw(geomFeaturesNotPositive, :) = [];
     end
 end
 
@@ -382,6 +389,7 @@ if ~isempty(opts.RatioLimit)
     removedCount = sum(~keep);
     X = X(keep, :);
     Y = Y(keep, :);
+    YRaw = YRaw(keep, :);
     if removedCount > 0
         fprintf('  Filtered by r/p ratio: removed %d samples\n', removedCount);
     end
@@ -410,11 +418,14 @@ switch opts.SplitMode
         if opts.Shuffle
             geomOrder = randperm(nGeom);
         end
-        nHoldG = max(1, round(opts.Holdout * nGeom));
-        nTrainG = nGeom - nHoldG;
-        nValG = min(round(opts.ValSplit * nHoldG), nHoldG);
-        if nTrainG < 1
-            error('prepare_training_dataset:TrainSplit', 'Training split is empty. Adjust Holdout or dataset size.');
+        if nGeom > 1
+            nHoldG = min(nGeom - 1, max(1, round(opts.Holdout * nGeom)));
+            nTrainG = nGeom - nHoldG;
+            nValG = min(round(opts.ValSplit * nHoldG), nHoldG);
+        else
+            nHoldG = 0;
+            nTrainG = 1;
+            nValG = 0;
         end
         trainGeoms = geomOrder(1:nTrainG);
         valGeoms   = geomOrder(nTrainG+1:nTrainG+nValG);
@@ -443,12 +454,14 @@ switch opts.SplitMode
         if opts.Shuffle
             permIdx = randperm(numSamples);
         end
-        holdoutCount = max(1, round(opts.Holdout * numSamples));
-        trainCount = numSamples - holdoutCount;
-        valCount = round(opts.ValSplit * holdoutCount);
-        valCount = min(valCount, max(0, numSamples - trainCount));
-        if trainCount < 1
-            error('prepare_training_dataset:TrainSplit', 'Training split is empty. Adjust Holdout or dataset size.');
+        if numSamples > 1
+            holdoutCount = min(numSamples - 1, max(1, round(opts.Holdout * numSamples)));
+            trainCount = numSamples - holdoutCount;
+            valCount = min(round(opts.ValSplit * holdoutCount), max(0, numSamples - trainCount));
+        else
+            trainCount = 1;
+            holdoutCount = 0;
+            valCount = 0;
         end
         trainIdx = permIdx(1:trainCount)';
         valIdx   = permIdx(trainCount+1:trainCount+valCount)';
@@ -461,6 +474,10 @@ XValidation = X(valIdx, :);
 YValidation = Y(valIdx, :);
 XTest = X(testIdx, :);
 YTest = Y(testIdx, :);
+
+YTrainRaw = YRaw(trainIdx, :);
+YValidationRaw = YRaw(valIdx, :);
+YTestRaw = YRaw(testIdx, :);
 
 % DEBUG: Check what's actually in the dataset
 fprintf('\n=== Dataset Feature Ranges (before normalization) ===\n');
@@ -509,6 +526,9 @@ dataset.XValidation = XValidation;
 dataset.YValidation = YValidation;
 dataset.XTest = XTest;
 dataset.YTest = YTest;
+dataset.YTrainRaw = YTrainRaw;
+dataset.YValidationRaw = YValidationRaw;
+dataset.YTestRaw = YTestRaw;
 dataset.featureNames = featureNames;
 dataset.targetNames = targetNames;
 dataset.targetFieldMap = targetFields;
@@ -659,17 +679,32 @@ end
 Xtrans(:, logMask) = log(geomCols);
 end
 
-function dataPadded = padSpectra(data, targetWidth)
-% Pad spectral data to target width with NaN
-if isempty(data)
-    dataPadded = nan(0, targetWidth);
+function dataPadded = padSpectra(data, targetWidth, targetRows)
+% Pad spectral data to target width and row count with NaN
+if nargin < 3
+    targetRows = size(data, 1);
+end
+if isempty(data) || size(data, 1) == 0
+    dataPadded = nan(targetRows, targetWidth);
     return;
+end
+if size(data, 1) ~= targetRows
+    if size(data, 1) == 1
+        data = repmat(data, targetRows, 1);
+    else
+        padded = nan(targetRows, targetWidth);
+        minR = min(size(data, 1), targetRows);
+        minC = min(size(data, 2), targetWidth);
+        padded(1:minR, 1:minC) = data(1:minR, 1:minC);
+        dataPadded = padded;
+        return;
+    end
 end
 sz = size(data);
 if sz(2) >= targetWidth
     dataPadded = data(:, 1:targetWidth);
 else
-    dataPadded = [data, nan(sz(1), targetWidth - sz(2))];
+    dataPadded = [data, nan(targetRows, targetWidth - sz(2))];
 end
 end
 
@@ -707,20 +742,6 @@ for k = 1:numel(flds)
 end
 end
 
-function N = structRowCount(S)
-N = 0;
-if ~isstruct(S)
-    return;
-end
-flds = fieldnames(S);
-for k = 1:numel(flds)
-    val = S.(flds{k});
-    if ~isempty(val)
-        N = size(val, 1);
-        return;
-    end
-end
-end
 
 function mustBeAllDataStruct(allData)
 % Validate allData is a struct with expected fields

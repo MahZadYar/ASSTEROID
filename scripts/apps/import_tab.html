@@ -624,9 +624,15 @@ function browse(fieldId, type) {
 function handleProgress(data) {
     if (!data) return;
     if (data.message) appendLog(data.message);
-    if (data.fraction !== undefined && data.fraction !== null) {
-        var pct = Math.round(data.fraction * 100);
-        document.getElementById("progressBar").style.width = pct + "%";
+    var pct = (data.fraction !== undefined && data.fraction !== null) ? Math.round(data.fraction * 100) : 0;
+    var bar = document.getElementById("progressBar");
+    if (bar) bar.style.width = pct + "%";
+    if (window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("ProgressUpdate", {
+            percent: pct,
+            message: data.message || "",
+            stage: "Stage 1 — Import"
+        });
     }
 }
 
@@ -653,19 +659,28 @@ function updateDbBanner(d) {
 
 function setStatus(cls, text) {
     var el = document.getElementById("statusBadge");
-    el.className = "status-badge status-" + cls;
-    el.textContent = text;
+    if (el) {
+        el.className = "status-badge status-" + cls;
+        el.textContent = text;
+    }
 }
 
-function appendLog(msg) {
+function appendLog(msg, level) {
+    if (window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("LogMessage", { message: msg, stage: "Stage 1 — Import", level: level || "info" });
+    }
     var el = document.getElementById("progressLog");
-    el.textContent += msg + "\n";
-    el.scrollTop = el.scrollHeight;
+    if (el) {
+        el.textContent += msg + "\n";
+        el.scrollTop = el.scrollHeight;
+    }
 }
 
 function clearLog() {
-    document.getElementById("progressLog").textContent = "";
-    document.getElementById("progressBar").style.width = "0%";
+    var el = document.getElementById("progressLog");
+    if (el) el.textContent = "";
+    var bar = document.getElementById("progressBar");
+    if (bar) bar.style.width = "0%";
 }
 
 function toggleSection(el) {
@@ -685,7 +700,6 @@ function toggleSection(el) {
             <div style="display:flex;gap:6px;align-items:center;">
                 <button class="btn-secondary" style="padding:4px 10px;font-size:11px;margin-top:0;" onclick="window.htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
                 <button class="btn-secondary" style="padding:4px 10px;font-size:11px;margin-top:0;" onclick="window.htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
-                <button class="btn-stop" id="btnStopHeader" onclick="stopProcess()">&#9632; Stop</button>
             </div>
         </div>
 
@@ -774,19 +788,6 @@ function toggleSection(el) {
         <!-- Actions -->
         <button id="btnRecalc" class="btn-secondary" onclick="recalculateDerived()">Recalculate Derived Metrics</button>
         <button id="btnRun" class="btn-primary" onclick="runImport()" disabled>▶ Run Import (Preview first)</button>
-        <button id="btnStopAction" class="btn-stop" style="width:100%;margin-top:6px;padding:9px;" onclick="stopProcess()">&#9632; Stop Process</button>
-
-        <!-- Progress -->
-        <div id="progressArea">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                <span style="font-weight:600; color:var(--text-primary);">Progress</span>
-                <span id="statusBadge" class="status-badge status-idle">Idle</span>
-            </div>
-            <div class="progress-bar-container">
-                <div id="progressBar" class="progress-bar"></div>
-            </div>
-            <pre id="progressLog" style="margin-top:6px; min-height:40px;"></pre>
-        </div>
     </div> <!-- /control-panel -->
 
     <!-- RIGHT PANEL: Main / Preview -->
