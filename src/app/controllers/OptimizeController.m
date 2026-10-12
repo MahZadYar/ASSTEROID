@@ -1083,12 +1083,11 @@ classdef OptimizeController < handle
             if ~isempty(obj.fig) && isvalid(obj.fig)
                 if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "notifyProcessStopped")
                     obj.fig.UserData.app.notifyProcessStopped("Optimize", msg);
-                else
-                    obj.sendToHTML("Progress", struct("status", "Stopped", "message", msg));
                 end
-            else
-                obj.sendToHTML("Progress", struct("status", "Stopped", "message", msg));
             end
+            obj.sendToHTML("Progress", struct("status", "Stopped", "message", msg));
+            obj.sendToHTML("OptimizeStopped", msg);
+            obj.sendToHTML("ProcessStopped", msg);
         end
 
         function refreshDbState(obj)

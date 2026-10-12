@@ -563,6 +563,24 @@ function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runLocalM
     end
 
     for seedIdx = 1:maxSeeds
+        if isobject(reporter) && ismethod(reporter, "isStopRequested") && reporter.isStopRequested()
+            error("Process:Terminated", "Optimization terminated by user.");
+        end
+
+        % Reset parallel execution mode to user's configured option for each new seed
+        useParallelLocal = logical(cfg.multiStartUseParallel);
+        if useParallelLocal
+            try
+                pool = gcp('nocreate');
+                if isempty(pool) || ~isvalid(pool) || ~pool.Connected
+                    parpool("Processes");
+                end
+            catch
+                % Fall back to serial for this seed if pool creation fails
+                useParallelLocal = false;
+            end
+        end
+
         pSeed = candidateTable.P_um(seedIdx);
         rSeed = candidateTable.R_um(seedIdx);
         if ismember('Tag', candidateTable.Properties.VariableNames)
@@ -574,6 +592,9 @@ function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runLocalM
         basinRejectCounts = zeros(maxSeeds, 1);
 
         for attempt = 1:maxRetryCount
+            if isobject(reporter) && ismethod(reporter, "isStopRequested") && reporter.isStopRequested()
+                error("Process:Terminated", "Optimization terminated by user.");
+            end
             shrinkScale = retryShrink^(attempt - 1);
             attemptPadP = max(cfg.minLocalWindow, localPadP * shrinkScale);
             attemptPadR = max(cfg.minLocalWindow, localPadR * shrinkScale);
