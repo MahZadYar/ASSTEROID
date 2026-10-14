@@ -435,6 +435,22 @@
     .req-ok { color: #66bb6a; }
     .req-missing { color: #ef5350; }
     .req-optional { color: var(--text-secondary); }
+
+    /* Watershed basin controls */
+    .basin-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
+    .mode-dimmed { opacity: 0.4; transition: opacity 0.2s ease; }
+    .basin-display, .depth-display { font-size: 11px; color: var(--text-secondary); }
+    .status-display {
+        display: inline-block; padding: 1px 6px; border-radius: 8px;
+        font-size: 10px; white-space: nowrap; color: var(--text-secondary);
+    }
+    .status-display.status-peak { background: rgba(102, 187, 106, 0.18); color: #81c784; }
+    .status-display.status-single { background: rgba(144, 202, 249, 0.15); color: #90caf9; }
+    .status-display.status-ridge { background: rgba(255, 213, 79, 0.18); color: #ffd54f; }
+    .status-display.status-multi { background: rgba(255, 167, 38, 0.18); color: #ffb74d; }
+    .status-display.status-duplicate { background: rgba(186, 104, 200, 0.18); color: #ce93d8; }
+    .status-display.status-fallback,
+    .status-display.status-edge { background: rgba(239, 83, 80, 0.16); color: #ef9a9a; }
 </style>
 <script type="text/javascript">
 function setup(htmlComponent) {
@@ -448,6 +464,7 @@ function setup(htmlComponent) {
     } catch (e) {}
 
     applyPanelMode();
+    toggleWatershedMode();
 
     htmlComponent.addEventListener("Progress", function(event) {
         handleProgress(event.Data);
@@ -491,12 +508,14 @@ function setup(htmlComponent) {
         handleSeedsFound(event.Data);
     });
         htmlComponent.addEventListener("SeedsUpdated", function(event) {
-            if (event.Data && event.Data.seeds) {
-                var seeds = event.Data.seeds;
-                // Normalize to array (MATLAB single-element structs may arrive as objects)
-                if (!Array.isArray(seeds)) {
-                    seeds = [seeds];
-                }
+            var d = event.Data;
+            var seeds = [];
+            if (Array.isArray(d)) {
+                seeds = d.map(function(item) { return (item && item.seeds) ? item.seeds : item; });
+            } else if (d && d.seeds) {
+                seeds = Array.isArray(d.seeds) ? d.seeds : [d.seeds];
+            }
+            if (seeds && seeds.length > 0) {
                 renderSeedsTable(seeds);
             }
             setStatus("done", "Updated");
@@ -538,9 +557,15 @@ function setup(htmlComponent) {
         setStatus("done", "Saved to DB");
     });
     htmlComponent.addEventListener("DbOptimaData", function(event) {
-        var d = event.Data || {};
-        var optima = d.optima || [];
-        if (!Array.isArray(optima)) optima = [optima];
+        var d = event.Data;
+        var optima = [];
+        if (Array.isArray(d)) {
+            optima = d.map(function(item) {
+                return (item && item.optima) ? item.optima : item;
+            });
+        } else if (d && d.optima) {
+            optima = Array.isArray(d.optima) ? d.optima : [d.optima];
+        }
         renderDbOptimaTable(optima);
     });
 
@@ -658,7 +683,7 @@ function initializeEmptySeedTable() {
     if (tbody.children.length > 0) return;
 
     var tr = document.createElement("tr");
-    tr.innerHTML = '<td colspan="5" style="color:var(--text-secondary);font-size:11px;padding:10px;">No seeds yet. Use Preview + Initialize Seeds, or Add / Import CSV.</td>';
+    tr.innerHTML = '<td colspan="8" style="color:var(--text-secondary);font-size:11px;padding:10px;">No seeds yet. Use Preview + Initialize Seeds, or Add / Import CSV.</td>';
     tbody.appendChild(tr);
 }
 
@@ -708,9 +733,23 @@ function collectConfig() {
         gradientSeedCount: num("gradientSeedCount"),
         gradientSeedGridSize: num("gradientSeedGridSize"),
         candidateTopN: num("candidateTopN"),
-        prominenceThreshold: num("prominenceThreshold"),
-        refinementRadius: num("refinementRadius")
+        prominenceThreshold: 0,
+        refinementRadius: num("refinementRadius"),
+        useWatershedBasins: chk("useWatershedBasins"),
+        basinSensitivity: num("basinSensitivity"),
+        inBasinStarts: num("inBasinStarts")
     };
+}
+
+// Dim controls that do not apply to the selected refinement mode
+function toggleWatershedMode() {
+    var on = chk("useWatershedBasins");
+    document.querySelectorAll(".watershed-only").forEach(function(el) { el.classList.toggle("mode-dimmed", !on); });
+    document.querySelectorAll(".radius-mode-only").forEach(function(el) { el.classList.toggle("mode-dimmed", on); });
+}
+
+function finiteNum(x) {
+    return typeof x === "number" && isFinite(x);
 }
 
 function generatePredictions() {
@@ -880,21 +919,36 @@ function handleSeedsFound(candidates) {
         var tbody = document.querySelector("#seedsTable tbody");
         tbody.innerHTML = "";
         seeds.forEach((s, idx) => {
-            var tr = document.createElement("tr");
-            var tagStr = s.Tag ? s.Tag : `Seed ${idx+1}`;
-            var valStr = isFinite(s.Value) ? s.Value.toFixed(3) : 'N/A';
-            var pVal = isFinite(s.P) ? s.P : 0;
-            var rVal = isFinite(s.R) ? s.R : 0;
-            tr.innerHTML = `
-                <td><input type="checkbox" class="seed-checkbox" checked></td>
-                <td><input type="text" class="tag-input" value="${tagStr}"></td>
-                <td><input type="number" class="p-input" value="${pVal.toFixed(2)}" step="0.1"></td>
-                <td><input type="number" class="r-input" value="${rVal.toFixed(2)}" step="0.1"></td>
-                <td><span class="val-display">${valStr}</span></td>
-            `;
-            tbody.appendChild(tr);
+            tbody.appendChild(buildSeedRow(s, idx));
         });
     }
+
+// One editable seed row: checkbox, tag, P, R, value + read-only basin metadata
+function buildSeedRow(s, idx) {
+    var tr = document.createElement("tr");
+    var tagStr = s.Tag ? s.Tag : `Seed ${idx+1}`;
+    var valStr = finiteNum(s.Value) ? s.Value.toFixed(3) : 'N/A';
+    var pVal = finiteNum(s.P) ? s.P : 0;
+    var rVal = finiteNum(s.R) ? s.R : 0;
+    var basinId = finiteNum(s.BasinId) && s.BasinId > 0 ? s.BasinId : null;
+    var depth = finiteNum(s.Depth) ? s.Depth : null;
+    var status = (typeof s.Status === "string") ? s.Status : "";
+    var areaTip = finiteNum(s.Area) ? ` title="${s.Area} grid cells"` : "";
+    if (basinId !== null) tr.dataset.basinId = basinId;
+    if (depth !== null) tr.dataset.depth = depth;
+    var statusClass = status ? "status-" + status.split(" ")[0] : "";
+    tr.innerHTML = `
+        <td><input type="checkbox" class="seed-checkbox" checked></td>
+        <td><input type="text" class="tag-input" value="${tagStr}"></td>
+        <td><input type="number" class="p-input" value="${pVal.toFixed(2)}" step="0.1"></td>
+        <td><input type="number" class="r-input" value="${rVal.toFixed(2)}" step="0.1"></td>
+        <td><span class="val-display">${valStr}</span></td>
+        <td><span class="basin-display"${areaTip}>${basinId !== null ? "#" + basinId : "–"}</span></td>
+        <td><span class="depth-display">${depth !== null ? depth.toFixed(2) : "–"}</span></td>
+        <td><span class="status-display ${statusClass}">${status || "–"}</span></td>
+    `;
+    return tr;
+}
 
 // Collect seeds from editable table
 function collectSeeds() {
@@ -910,12 +964,15 @@ function collectSeeds() {
             
             // Validate coordinates before adding
             if (isFinite(pVal) && isFinite(rVal)) {
-                seeds.push({
+                var seed = {
                     Tag: row.querySelector(".tag-input").value || ("Point " + (seeds.length + 1)),
                     P: pVal,
                     R: rVal,
                     Value: valText !== 'N/A' ? parseFloat(valText) : NaN
-                });
+                };
+                if (row.dataset.basinId) seed.BasinId = parseFloat(row.dataset.basinId);
+                if (row.dataset.depth) seed.Depth = parseFloat(row.dataset.depth);
+                seeds.push(seed);
             } else {
                 console.warn("[collectSeeds] Skipping row with invalid coordinates: P=" + pVal + ", R=" + rVal);
             }
@@ -1030,7 +1087,10 @@ function normalizeMatlabStructArray(data) {
                 P: data.P[i],
                 R: data.R[i],
                 Value: Array.isArray(data.Value) ? data.Value[i] : data.Value,
-                Tag: Array.isArray(data.Tag) ? data.Tag[i] : (data.Tag || ("Optimum " + (i + 1)))
+                Tag: Array.isArray(data.Tag) ? data.Tag[i] : (data.Tag || ("Optimum " + (i + 1))),
+                BasinId: Array.isArray(data.BasinId) ? data.BasinId[i] : data.BasinId,
+                Depth: Array.isArray(data.Depth) ? data.Depth[i] : data.Depth,
+                Status: Array.isArray(data.Status) ? data.Status[i] : data.Status
             });
         }
         return arr;
@@ -1110,19 +1170,12 @@ function addSeed() {
     var tbody = document.querySelector("#seedsTable tbody");
     if (tbody.children.length === 1) {
         var c = tbody.children[0];
-        if (c.children.length === 1 && c.children[0].colSpan === 5) {
+        if (c.children.length === 1 && c.children[0].colSpan > 1) {
             tbody.innerHTML = "";
         }
     }
 
-    var tr = document.createElement("tr");
-    tr.innerHTML = `
-        <td><input type="checkbox" class="seed-checkbox" checked></td>
-        <td><input type="text" class="tag-input" value="Seed ${idx}"></td>
-        <td><input type="number" class="p-input" value="${pDefault}" step="0.1"></td>
-        <td><input type="number" class="r-input" value="${rDefault}" step="0.1"></td>
-        <td><span class="val-display">N/A</span></td>
-    `;
+    var tr = buildSeedRow({ Tag: `Seed ${idx}`, P: parseFloat(pDefault), R: parseFloat(rDefault), Value: NaN }, idx - 1);
     tbody.appendChild(tr);
 
     if (window.hasPreview) {
@@ -1376,6 +1429,14 @@ function getCellSortValue(row, colIdx) {
             var txt = disp.textContent.trim();
             return txt === "N/A" ? NaN : parseFloat(txt);
         }
+        case 5:
+            return row.dataset.basinId ? parseFloat(row.dataset.basinId) : NaN;
+        case 6:
+            return row.dataset.depth ? parseFloat(row.dataset.depth) : NaN;
+        case 7: {
+            var st = row.querySelector(".status-display");
+            return st ? st.textContent.trim() : "";
+        }
     }
     return "";
 }
@@ -1428,14 +1489,21 @@ function renderDbOptimaTable(optima) {
     }
     for (var i = 0; i < optima.length; i++) {
         var o = optima[i];
+        if (!o) continue;
         var tr = document.createElement("tr");
-        tr.dataset.index = i + 1; // 1-based for MATLAB
+        tr.dataset.index = (o.index != null) ? o.index : (i + 1); // 1-based for MATLAB
+        var tag = o.basinTag || o.tag || "";
+        var metric = o.metric || o.optimizedMetric || "";
+        var period = o.period != null ? o.period : (o.p != null ? o.p : null);
+        var radius = o.radius != null ? o.radius : (o.r != null ? o.r : null);
+        var pStr = (period != null && !isNaN(period)) ? Number(period).toFixed(2) : "";
+        var rStr = (radius != null && !isNaN(radius)) ? Number(radius).toFixed(2) : "";
         tr.innerHTML =
             '<td><input type="checkbox" class="db-optima-cb"></td>' +
-            '<td style="font-size:11px;">' + (o.basinTag || "") + '</td>' +
-            '<td style="font-size:11px;">' + (o.metric || "") + '</td>' +
-            '<td style="font-size:11px;">' + (o.period != null ? o.period.toFixed(2) : "") + '</td>' +
-            '<td style="font-size:11px;">' + (o.radius != null ? o.radius.toFixed(2) : "") + '</td>';
+            '<td style="font-size:11px;">' + tag + '</td>' +
+            '<td style="font-size:11px;">' + metric + '</td>' +
+            '<td style="font-size:11px;">' + pStr + '</td>' +
+            '<td style="font-size:11px;">' + rStr + '</td>';
         tbody.appendChild(tr);
     }
     document.getElementById("dbOptimaCount").textContent = optima.length + " rows";
@@ -1694,15 +1762,22 @@ function toggleAllDbOptima(masterCb) {
                         <div>
                             <div class="field-row">
                                 <div class="field">
-                                    <label>Number of Seeds</label>
+                                    <label>Number of Seeds (max basins)</label>
                                     <input type="number" id="candidateTopN" value="10" step="1" min="1">
                                 </div>
                                 <div class="field">
-                                    <label>Prominence Threshold (fraction of max)</label>
-                                    <input type="number" id="prominenceThreshold" value="0.05" step="0.01" min="0" max="1">
+                                    <label>Watershed Basins</label>
+                                    <input type="checkbox" id="useWatershedBasins" checked onchange="toggleWatershedMode()">
                                 </div>
                             </div>
-                            <p class="hint">Algorithm detects peaks and returns the requested number of seeds above prominence threshold.</p>
+                            <div class="field watershed-only">
+                                <label>Basin Sensitivity: <span id="basinSensitivityLabel">0.5</span> % of range</label>
+                                <input type="range" id="basinSensitivity" class="basin-slider" min="0.1" max="5" step="0.1" value="0.5"
+                                    oninput="document.getElementById('basinSensitivityLabel').textContent = parseFloat(this.value).toFixed(1)">
+                            </div>
+                            <p class="hint">Each local maximum owns a watershed basin. Peaks whose height above the
+                                saddle to a higher neighbour is below the sensitivity are merged into that neighbour;
+                                lower values keep more shoulder peaks. Basins are drawn in the seed colour on the heatmap.</p>
                         </div>
                     </div>
 
@@ -1723,9 +1798,15 @@ function toggleAllDbOptima(masterCb) {
                     <div class="section">
                         <div class="section-title open" onclick="toggleSection(this)">MultiStart Settings</div>
                         <div>
-                            <div class="field-row">
+                            <div class="field-row watershed-only">
                                 <div class="field">
-                                    <label>Start Points per Seed</label>
+                                    <label>Starts per Basin (incl. seed)</label>
+                                    <input type="number" id="inBasinStarts" value="4" step="1" min="1" max="20">
+                                </div>
+                            </div>
+                            <div class="field-row radius-mode-only">
+                                <div class="field">
+                                    <label>Start Points per Seed (radius mode)</label>
                                     <input type="number" id="numStartPoints" value="15" step="5" min="1">
                                 </div>
                                 <div class="field">
@@ -1807,15 +1888,15 @@ function toggleAllDbOptima(masterCb) {
                                     <label>Optimality Tolerance</label>
                                     <input type="number" id="optimalityTolerance" value="1e-4" step="1e-5" min="1e-15">
                                 </div>
-                                <div class="field">
-                                    <label>Basin Retry Count</label>
+                                <div class="field radius-mode-only">
+                                    <label>Basin Retry Count (radius mode)</label>
                                     <input type="number" id="basinRetryCount" value="2" step="1" min="1" max="20">
                                 </div>
                             </div>
 
-                            <div class="field-row">
+                            <div class="field-row radius-mode-only">
                                 <div class="field">
-                                    <label>Retry Radius Factor</label>
+                                    <label>Retry Radius Factor (radius mode)</label>
                                     <input type="number" id="basinRetryShrinkFactor" value="0.5" step="0.05" min="0.1" max="0.95">
                                 </div>
                             </div>
@@ -1894,6 +1975,9 @@ function toggleAllDbOptima(masterCb) {
                                     <th class="sortable" data-col="2" onclick="sortTable(2)">P (nm)</th>
                                     <th class="sortable" data-col="3" onclick="sortTable(3)">R (nm)</th>
                                     <th class="sortable" data-col="4" onclick="sortTable(4)">Value</th>
+                                    <th class="sortable" data-col="5" onclick="sortTable(5)" title="Watershed basin id (hover a cell for its area)">Basin</th>
+                                    <th class="sortable" data-col="6" onclick="sortTable(6)" title="Peak value minus saddle level to the neighbouring basin">Depth</th>
+                                    <th class="sortable" data-col="7" onclick="sortTable(7)" title="peak: all in-basin starts converged within 1 nm; ridge: spread &gt; 1 nm at equal value; multi: distinct sub-peaks; single: one start stayed in basin; edge: grid peak on the domain edge">Status</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>

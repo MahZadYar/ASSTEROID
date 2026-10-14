@@ -7,7 +7,8 @@ function seedTable = buildSeedTable(seeds)
 %       seeds - Struct array with fields P, R (nm), optional Tag.
 %
 %   Output:
-%       seedTable - Table with columns CandidateIndex, P_um, R_um, Tag, GridValue.
+%       seedTable - Table with columns CandidateIndex, P_um, R_um, Tag,
+%                   GridValue (seed Value, NaN if unknown), BasinId.
 
     seeds = normalizeSeedInput(seeds);
     if isempty(seeds)
@@ -22,6 +23,8 @@ function seedTable = buildSeedTable(seeds)
     pUmCol  = NaN(N, 1);
     rUmCol  = NaN(N, 1);
     tagsCol = strings(N, 1);
+    valCol  = NaN(N, 1);
+    basinCol = NaN(N, 1);
 
     for k = 1:N
         s = seeds(k);
@@ -35,9 +38,12 @@ function seedTable = buildSeedTable(seeds)
         else
             tagsCol(k) = t(1);
         end
+        valCol(k) = double(s.Value);
+        basinCol(k) = double(s.BasinId);
     end
 
     seedTable = table(idxCol, pUmCol, rUmCol, tagsCol, ...
         'VariableNames', {'CandidateIndex', 'P_um', 'R_um', 'Tag'});
-    seedTable.GridValue = NaN(N, 1);
+    seedTable.GridValue = valCol;
+    seedTable.BasinId = basinCol;
 end

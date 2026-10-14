@@ -152,6 +152,7 @@ classdef OptimizeController < handle
             obj.updateOptimizeState("previewResults", results);
             obj.updateOptimizeState("lastResults", results);
             obj.updateOptimizeState("config", d);
+            obj.updateOptimizeState("basinMap", []);
 
             % Render preview to axes
             ax = obj.getAxes();
@@ -207,6 +208,8 @@ classdef OptimizeController < handle
             tuningRadiusNm = obj.safeNum(d, "refinementRadius", 10);
             forceTraceMode = obj.safeBool(d, "showMultiStartPaths", false);
             multiStartDisplayMode = obj.safeStr(d, "multiStartDisplay", "off");
+            useBasins = obj.safeBool(d, "useWatershedBasins", true);
+            basinSens = max(0, obj.safeNum(d, "basinSensitivity", 0.5)) / 100;   % UI: % of range
 
             cfg = localizeMaximaConfig( ...
                 WorkDir          = workDir, ...
@@ -245,7 +248,10 @@ classdef OptimizeController < handle
                 UseGradientSeedInit = obj.safeBool(d, "useGradientSeedInit", true), ...
                 GradientSeedCount = round(obj.safeNum(d, "gradientSeedCount", 0)), ...
                 GradientSeedGridSize = round(obj.safeNum(d, "gradientSeedGridSize", 20)), ...
-                TuningRadius     = tuningRadiusNm * 1e-3);
+                TuningRadius     = tuningRadiusNm * 1e-3, ...
+                UseWatershedBasins = useBasins, ...
+                BasinSensitivity = basinSens, ...
+                InBasinStarts    = max(1, round(obj.safeNum(d, "inBasinStarts", 4))));
 
             cfg.metricVariant = metricVariant;
 
@@ -285,9 +291,19 @@ classdef OptimizeController < handle
             if mode == "refine" && isfield(d, "seeds") && ~isempty(d.seeds)
                 cfg.initialCandidates = buildSeedTable(d.seeds);
                 cfg.skipGridGeneration = true;
+                % Refine every seed the user kept (Top-N only limits detection).
+                cfg.numLocalMaxima = max(1, height(cfg.initialCandidates));
 
-                % Ensure process-based parallel pool is ready
-                if ~forceTraceMode && cfg.multiStartUseParallel
+                if useBasins
+                    % Reuse the partition shown at seed initialisation when it
+                    % matches the current metric and sensitivity; otherwise
+                    % runLocalizationWorkflow rebuilds it from cached predictions.
+                    cfg.basinMap = obj.storedBasinMap(baseMetric, metricVariant, basinSens, [pMin pMax], [rMin rMax]);
+                end
+
+                % Ensure process-based parallel pool is ready (radius-box mode only;
+                % in-basin refinement runs serially)
+                if ~useBasins && ~forceTraceMode && cfg.multiStartUseParallel
                     try
                         pool = gcp('nocreate');
                         if isempty(pool) || isa(pool, 'parallel.ThreadPool')
@@ -307,6 +323,17 @@ classdef OptimizeController < handle
             obj.updateOptimizeState("config", d);
 
             ax = obj.getAxes();
+            basinMap = [];
+            if isfield(results, "metrics") && ~isempty(results.metrics) && isstruct(results.metrics{1}) ...
+                    && isfield(results.metrics{1}, "basinMap") && isstruct(results.metrics{1}.basinMap)
+                basinMap = results.metrics{1}.basinMap;
+                obj.updateOptimizeState("basinMap", basinMap);
+                obj.updateOptimizeState("basinMapMeta", struct("metric", string(baseMetric), ...
+                    "variant", string(metricVariant), "sensitivity", basinSens, ...
+                    "pLimits", [pMin pMax], "rLimits", [rMin rMax]));
+            elseif mode == "detect"
+                obj.updateOptimizeState("basinMap", []);
+            end
 
             if mode == "detect"
                 candidates = extractCandidatesFromResults(results, ...
@@ -316,7 +343,7 @@ classdef OptimizeController < handle
                 if ~isempty(ax) && isvalid(ax)
                     try
                         delete(allchild(ax));
-                        plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, [], candidates, [], false);
+                        plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, [], candidates, [], false, basinMap);
                     catch ME_plt
                         fprintf("[OptimizeController] Visualization warning: %s\n", ME_plt.message);
                     end
@@ -341,7 +368,7 @@ classdef OptimizeController < handle
                 try
                     delete(allchild(ax));
                     plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, ...
-                        originalSeeds, refinedSeeds, attemptTrajectories, forceTraceMode);
+                        originalSeeds, refinedSeeds, attemptTrajectories, forceTraceMode, basinMap);
                 catch ME_plt2
                     fprintf("[OptimizeController] Visualization warning: %s\n", ME_plt2.message);
                 end
@@ -408,7 +435,8 @@ classdef OptimizeController < handle
             if ~isempty(lastRes) && ~isempty(ax) && isvalid(ax)
                 try
                     delete(allchild(ax));
-                    plotOptimizeHeatmap(lastRes, baseMetric, metricVariant, ax, [], seedsNorm, [], false);
+                    plotOptimizeHeatmap(lastRes, baseMetric, metricVariant, ax, [], seedsNorm, [], false, ...
+                        obj.getOptimizeState("basinMap"));
                 catch ME
                     fprintf("[OptimizeController] Update plot warning: %s\n", ME.message);
                 end
@@ -481,23 +509,85 @@ classdef OptimizeController < handle
         function sendDbOptimaToPanel(obj)
         % SENDDBOPTIMATOPANEL Stream DB optima list to HTML table.
             db_ = obj.session.db;
-            if ~isfield(db_, "Optima") || ~isstruct(db_.Optima) || ~isfield(db_.Optima, "period")
-                obj.sendToHTML("DbOptimaData", struct("optima", []));
+
+            % 1. Sync from fig.UserData.db if session.db is empty
+            if (~isfield(db_, "Optima") || ~isstruct(db_.Optima) || ~isfield(db_.Optima, "period") || isempty(db_.Optima.period)) && ...
+               (~isempty(obj.fig) && isvalid(obj.fig) && isfield(obj.fig.UserData, "db") && ...
+                isfield(obj.fig.UserData.db, "Optima") && isfield(obj.fig.UserData.db.Optima, "period") && ...
+                ~isempty(obj.fig.UserData.db.Optima.period))
+                obj.session.db.Optima = obj.fig.UserData.db.Optima;
+                db_ = obj.session.db;
+            end
+
+            % 2. Auto-load from disk candidates if still empty
+            if ~isfield(db_, "Optima") || ~isstruct(db_.Optima) || ~isfield(db_.Optima, "period") || isempty(db_.Optima.period)
+                candidates = [
+                    string(obj.session.dbFile), ...
+                    string(fullfile(obj.session.workDir, "database.mat")), ...
+                    string(fullfile(obj.session.workDir, "Data", "Data Analysis", "database.mat")), ...
+                    string(fullfile(obj.session.workDir, "..", "Data", "Data Analysis", "database.mat")), ...
+                    string(fullfile(fileparts(obj.session.workDir), "Data", "Data Analysis", "database.mat"))
+                ];
+                if ~isempty(obj.fig) && isvalid(obj.fig) && isfield(obj.fig.UserData, "workDir")
+                    candidates(end+1) = string(fullfile(obj.fig.UserData.workDir, "database.mat")); %#ok<AGROW>
+                    candidates(end+1) = string(fullfile(obj.fig.UserData.workDir, "Data", "Data Analysis", "database.mat")); %#ok<AGROW>
+                    candidates(end+1) = string(fullfile(obj.fig.UserData.workDir, "..", "Data", "Data Analysis", "database.mat")); %#ok<AGROW>
+                end
+                for k = 1:numel(candidates)
+                    cf = candidates(k);
+                    if strlength(cf) > 0 && isfile(cf)
+                        try
+                            loaded = load(cf, "db");
+                            if isfield(loaded, "db") && isfield(loaded.db, "Optima") && ...
+                               isfield(loaded.db.Optima, "period") && ~isempty(loaded.db.Optima.period)
+                                obj.session.db.Optima = loaded.db.Optima;
+                                if strlength(obj.session.dbFile) == 0
+                                    obj.session.dbFile = cf;
+                                end
+                                if ~isempty(obj.fig) && isvalid(obj.fig)
+                                    obj.fig.UserData.db.Optima = loaded.db.Optima;
+                                    if isfield(obj.fig.UserData, "dbFile") && strlength(obj.fig.UserData.dbFile) == 0
+                                        obj.fig.UserData.dbFile = cf;
+                                    end
+                                end
+                                db_ = obj.session.db;
+                                break;
+                            end
+                        catch
+                        end
+                    end
+                end
+            end
+
+            if ~isfield(db_, "Optima") || ~isstruct(db_.Optima) || ~isfield(db_.Optima, "period") || isempty(db_.Optima.period)
+                obj.sendToHTML("DbOptimaData", struct("optima", {cell(0, 1)}));
                 return;
             end
 
             n = numel(db_.Optima.period);
             optimaList = cell(n, 1);
             for i = 1:n
+                tagVal = "";
+                if isfield(db_.Optima, "basinTag") && numel(db_.Optima.basinTag) >= i
+                    tagVal = string(db_.Optima.basinTag(i));
+                end
+                metricVal = "";
+                if isfield(db_.Optima, "optimizedMetric") && numel(db_.Optima.optimizedMetric) >= i
+                    metricVal = string(db_.Optima.optimizedMetric(i));
+                end
                 optimaList{i} = struct( ...
                     "index", i, ...
-                    "tag", string(db_.Optima.basinTag(i)), ...
-                    "metric", string(db_.Optima.optimizedMetric(i)), ...
+                    "tag", tagVal, ...
+                    "basinTag", tagVal, ...
+                    "metric", metricVal, ...
+                    "optimizedMetric", metricVal, ...
                     "p", double(db_.Optima.period(i)), ...
-                    "r", double(db_.Optima.radius(i)));
+                    "period", double(db_.Optima.period(i)), ...
+                    "r", double(db_.Optima.radius(i)), ...
+                    "radius", double(db_.Optima.radius(i)));
             end
 
-            obj.sendToHTML("DbOptimaData", struct("optima", optimaList));
+            obj.sendToHTML("DbOptimaData", struct("optima", {optimaList}));
         end
 
         function deleteDbOptima(obj, d)
@@ -514,10 +604,12 @@ classdef OptimizeController < handle
             idxValid = idx(idx >= 1 & idx <= numel(keep));
             keep(idxValid) = false;
 
-            db_.Optima.period = db_.Optima.period(keep);
-            db_.Optima.radius = db_.Optima.radius(keep);
-            db_.Optima.basinTag = db_.Optima.basinTag(keep);
-            db_.Optima.optimizedMetric = db_.Optima.optimizedMetric(keep);
+            fns = fieldnames(db_.Optima);
+            for f = 1:numel(fns)
+                if numel(db_.Optima.(fns{f})) == numel(keep)
+                    db_.Optima.(fns{f}) = db_.Optima.(fns{f})(keep);
+                end
+            end
 
             obj.session.db = db_;
             obj.session.dbDirty = true;
@@ -543,15 +635,19 @@ classdef OptimizeController < handle
             seeds = cell(numel(idxValid), 1);
             for k = 1:numel(idxValid)
                 i = idxValid(k);
+                tagVal = "";
+                if isfield(db_.Optima, "basinTag") && numel(db_.Optima.basinTag) >= i
+                    tagVal = string(db_.Optima.basinTag(i));
+                end
                 seeds{k} = struct( ...
-                    "Tag", string(db_.Optima.basinTag(i)), ...
+                    "Tag", tagVal, ...
                     "P", double(db_.Optima.period(i)), ...
                     "R", double(db_.Optima.radius(i)), ...
                     "Value", NaN);
             end
 
-            obj.sendToHTML("SeedsUpdated", struct("seeds", seeds));
-            obj.updateSeeds(struct("seeds", seeds));
+            obj.sendToHTML("SeedsUpdated", struct("seeds", {seeds}));
+            obj.updateSeeds(struct("seeds", {seeds}));
         end
 
         function importSeedsCsv(obj, d)
@@ -828,6 +924,23 @@ classdef OptimizeController < handle
                 val = obj.localOptimizeState.(key);
             end
         end
+
+        function bm = storedBasinMap(obj, baseMetric, metricVariant, sensitivity, pLimits, rLimits)
+        % STOREDBASINMAP Basin map from seed initialisation if it matches the
+        % current metric, variant, sensitivity and bounds; [] otherwise.
+            bm = struct([]);
+            stored = obj.getOptimizeState("basinMap");
+            meta = obj.getOptimizeState("basinMapMeta");
+            if isempty(stored) || ~isstruct(stored) || isempty(meta) || ~isstruct(meta)
+                return;
+            end
+            same = meta.metric == string(baseMetric) && meta.variant == string(metricVariant) ...
+                && abs(meta.sensitivity - sensitivity) < 1e-12 ...
+                && isequal(meta.pLimits, pLimits) && isequal(meta.rLimits, rLimits);
+            if same
+                bm = stored;
+            end
+        end
     end
 
     %% Internal Helpers
@@ -917,6 +1030,7 @@ classdef OptimizeController < handle
             obj.updateOptimizeState("previewResults", results);
             obj.updateOptimizeState("lastResults", results);
             obj.updateOptimizeState("config", d);
+            obj.updateOptimizeState("basinMap", []);
 
             % Render preview to axes
             ax = obj.getAxes();

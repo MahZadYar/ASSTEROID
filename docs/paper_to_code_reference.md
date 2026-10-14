@@ -222,15 +222,16 @@ Code implementation:
 Mechanism:
 
 1. Generate/load dense predictions (model mode or interpolation mode)
-2. Convert SoA → 2D grid of averaged metric via `reshapeSoAToVolume`
-3. Compute gradient magnitude and Laplacian (`gradient`, `del2`)
-4. Candidate maxima are grid points that are:
-   - local maxima (8-connected neighborhood)
-   - below a configurable gradient percentile threshold
-   - negative Laplacian (maxima-like curvature)
-   - satisfy geometric constraints (e.g., `ratioLimit` bounds on $r/p$)
-5. Suppress neighbors (non-max suppression radius)
-6. Refine candidates with localized MultiStart SQP (unless `DiscreteOnly=true`)
+2. Convert SoA → 2D grid of target metric via `reshapeSoAToVolume`
+3. Segment metric landscape into non-overlapping catchment basins via marker-controlled topological watershed transform ([src/modeling/detect_watershed_basins.m](src/modeling/detect_watershed_basins.m)):
+   - Morphological extended $H$-maxima detection (`imextendedmax`)
+   - Minima imposition on inverted relief surface (`imimposemin`)
+   - Topological watershed transform (`watershed`)
+   - Quantitative basin metrics: summit coordinates, peak value, boundary saddle elevation, catchment area $\Omega_k$, and depth/prominence
+4. Filter/curate candidates (thresholds on depth, area, packing ratio $r/P \leq 0.49$)
+5. Interactive curation or automated dispatch
+6. In-basin MultiStart gradient ascent (`fmincon` with SQP/Interior-Point and analytical `dlgradient`) drawing starts strictly within catchment territory $\Omega_k$ ([src/modeling/find_local_maxima.m](src/modeling/find_local_maxima.m))
+7. Trajectory coalescence clustering and topography classification (`peak`, `ridge`, `multi`, `single`, `fallback`)
 
 Dual-mode behavior:
 

@@ -306,15 +306,25 @@ function figOut = assteroid_app(workFolder)
     loadRefractiveIndexData(fig);
 
     %% Attempt DB auto-load ---------------------------------------------------
-    defaultDb = fullfile(workFolder, "database.mat");
-    if isfile(defaultDb)
-        loadDbFile(fig, defaultDb);
+    dbCandidates = [
+        string(fullfile(workFolder, "database.mat")), ...
+        string(fullfile(workFolder, "Data", "Data Analysis", "database.mat")), ...
+        string(fullfile(workFolder, "..", "Data", "Data Analysis", "database.mat")), ...
+        string(fullfile(fileparts(workFolder), "Data", "Data Analysis", "database.mat"))
+    ];
+    defaultDb = "";
+    for k = 1:numel(dbCandidates)
+        if isfile(dbCandidates(k))
+            defaultDb = dbCandidates(k);
+            loadDbFile(fig, defaultDb);
+            break;
+        end
     end
 
     %% Startup console greeting -----------------------------------------------
     logToConsole(fig, "ASSTEROID computational engine initialized. Ready.", "system");
     logToConsole(fig, sprintf("Working directory: %s", workFolder), "info");
-    if isfile(defaultDb)
+    if defaultDb ~= ""
         logToConsole(fig, sprintf("Auto-loaded workspace database: %s", defaultDb), "success");
     else
         logToConsole(fig, "No workspace database found. Stage 0 — Database is ready to load or create one.", "info");
@@ -3392,8 +3402,40 @@ end
 function sendDbOptimaToPanel(src, fig)
 %sendDbOptimaToPanel  Send current db.Optima rows to the HTML panel.
     db = fig.UserData.db;
+    if (~isfield(db, "Optima") || ~isfield(db.Optima, "period") || isempty(db.Optima.period)) && ...
+       isfield(fig.UserData, "session") && ~isempty(fig.UserData.session) && ...
+       isfield(fig.UserData.session.db, "Optima") && isfield(fig.UserData.session.db.Optima, "period") && ...
+       ~isempty(fig.UserData.session.db.Optima.period)
+        db.Optima = fig.UserData.session.db.Optima;
+        fig.UserData.db.Optima = db.Optima;
+    end
     if ~isfield(db, "Optima") || ~isfield(db.Optima, "period") || isempty(db.Optima.period)
-        sendOptimizeEvent(fig, "DbOptimaData", struct("optima", []), src);
+        candidates = [
+            string(fullfile(fig.UserData.workDir, "database.mat")), ...
+            string(fullfile(fig.UserData.workDir, "Data", "Data Analysis", "database.mat")), ...
+            string(fullfile(fig.UserData.workDir, "..", "Data", "Data Analysis", "database.mat")), ...
+            string(fullfile(fileparts(fig.UserData.workDir), "Data", "Data Analysis", "database.mat"))
+        ];
+        for k = 1:numel(candidates)
+            if isfile(candidates(k))
+                try
+                    loaded = load(candidates(k), "db");
+                    if isfield(loaded, "db") && isfield(loaded.db, "Optima") && ...
+                       isfield(loaded.db.Optima, "period") && ~isempty(loaded.db.Optima.period)
+                        db.Optima = loaded.db.Optima;
+                        fig.UserData.db.Optima = db.Optima;
+                        if isfield(fig.UserData, "session") && ~isempty(fig.UserData.session)
+                            fig.UserData.session.db.Optima = db.Optima;
+                        end
+                        break;
+                    end
+                catch
+                end
+            end
+        end
+    end
+    if ~isfield(db, "Optima") || ~isfield(db.Optima, "period") || isempty(db.Optima.period)
+        sendOptimizeEvent(fig, "DbOptimaData", struct("optima", {cell(0, 1)}), src);
         return
     end
     opt = db.Optima;
@@ -3402,17 +3444,22 @@ function sendDbOptimaToPanel(src, fig)
     for i = 1:n
         tagVal = "";
         if isfield(opt, "basinTag") && numel(opt.basinTag) >= i
-            tagVal = opt.basinTag(i);
+            tagVal = string(opt.basinTag(i));
         end
         metricVal = "";
         if isfield(opt, "optimizedMetric") && numel(opt.optimizedMetric) >= i
-            metricVal = opt.optimizedMetric(i);
+            metricVal = string(opt.optimizedMetric(i));
         end
         rows{i} = struct( ...
-            "period", opt.period(i), ...
-            "radius", opt.radius(i), ...
+            "index", i, ...
+            "period", double(opt.period(i)), ...
+            "p", double(opt.period(i)), ...
+            "radius", double(opt.radius(i)), ...
+            "r", double(opt.radius(i)), ...
             "basinTag", tagVal, ...
-            "metric", metricVal);
+            "tag", tagVal, ...
+            "metric", metricVal, ...
+            "optimizedMetric", metricVal);
     end
     sendOptimizeEvent(fig, "DbOptimaData", struct("optima", {rows}), src);
 end

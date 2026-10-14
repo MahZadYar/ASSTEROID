@@ -3,7 +3,7 @@
 **Adaptive Sampling, Surrogate Training, Exploration and Refinement for Optimal Inverse Design**
 
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2023b%2B%20%7C%20R2026a-blue.svg)](https://www.mathworks.com/products/matlab.html)
-[![Version](https://img.shields.io/badge/Version-5.1-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
+[![Version](https://img.shields.io/badge/Version-5.2-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.1021%2Facsnano.XXXXXXX-orange.svg)](#citation)
 [![Zenodo](https://img.shields.io/badge/Data-10.5281%2Fzenodo.XXXXXXX-blue.svg)](#dataset--trained-models)
@@ -20,7 +20,7 @@ While ASSTEROID is demonstrated on the rational geometric design of Nanoparticle
 3. 🎯 **Curvature- & Density-Aware Adaptive Sampling**: Directing subsequent simulation batches toward informative, high-enhancement modal regions using 9-point discrete Laplacian curvature operators and dual-tier minimum-distance rejection sampling.
 4. 🧠 **Physics-Informed Deep Residual Surrogates**: Training multi-task ResNets featuring explicit material dispersion ($n, k$), geometric scale invariance, target-specific scaling (linear for $A_L$, decadic $\log_{10}(1+y)$ for near-field Raman proxies), Layer Normalization, and a three-tier performance evaluation suite (Empirical, Inverse Density Weighted, and Modal Optima RoI).
 5. 🔮 **Dense Landscape Exploration & Spectral Integration**: Ultra-dense sub-nanometer grid inference coupled with Modified Akima piecewise cubic Hermite interpolation (`makima`) for continuous figures of merit.
-6. 🔍 **Topology-Aware Multimodal Optimization**: Detecting discrete stationary points ($\nabla F \approx 0$, $\nabla^2 F < 0$), interactive seed curation/tagging, and continuous constrained gradient refinement via `fmincon` (SQP/Interior-Point) using analytical automatic differentiation (`dlgradient`).
+6. 🔍 **Topology-Aware Multimodal Optimization**: Partitioning the multi-objective optical landscape into discrete topological catchment basins via marker-controlled watershed segmentation (`imextendedmax`, `imimposemin`, `watershed`), interactive basin curation/tagging with 25% transparent basin color overlays, in-basin stratified MultiStart gradient ascent (`fmincon` with SQP/Interior-Point) driven by analytical neural graph gradients (`dlgradient`), and trajectory coalescence diagnostics.
 7. 🌌 **Multi-Dimensional 3D Visualization & Export**: Rendering 1D spectra, 2D scattered/contour maps, 3D volume slices, and exporting to HDF5, ONNX, and relational MAT tables.
 
 > **Associated Publication:**  
@@ -94,9 +94,9 @@ flowchart LR
     end
 
     subgraph S5 ["🔍 Stage 5: Multimodal Optimization"]
-        Efficacies --> PeakFinder["Topological Extrema Filter<br/>(&nabla;F &asymp; 0, &nabla;&sup2;F &lt; 0)"]
-        PeakFinder --> Curation["Interactive Seed Curation<br/>&amp; Semantic Modal Tagging"]
-        Curation --> MultiStart["MultiStart fmincon (SQP)<br/>Analytical dlgradient"]
+        Efficacies --> PeakFinder["Topological Watershed Partitioning<br/>(H-Maxima &amp; Catchment Basins)"]
+        PeakFinder --> Curation["Interactive Basin Curation<br/>&amp; Semantic Modal Tagging"]
+        Curation --> MultiStart["In-Basin MultiStart fmincon (SQP)<br/>Analytical dlgradient &amp; Coalescence"]
         MultiStart --> OptimaFile[("maximaResults.mat<br/>Optimal Geometries")]
     end
 
@@ -117,7 +117,7 @@ flowchart TD
         Sampling["🎯 Stage 2: Adaptive Density Estimation<br/>(&nabla;&sup2;F Curvature + Metric Density)"]
         Train["🧠 Stage 3: Physics-Informed ResNet<br/>(Material Dispersion + Scale Invariance)"]
         Pred["🔮 Stage 4: High-Throughput Inference<br/>(&gt; 100,000 spectra/s)"]
-        Opt["🔍 Stage 5: Topology Optimization<br/>(Seed Curation + MultiStart SQP)"]
+        Opt["🔍 Stage 5: Watershed Topology Optimization<br/>(Basin Curation + In-Basin MultiStart SQP)"]
         Vis["🌌 Stage 6: Multi-Dimensional Visualization<br/>(Interactive 1D / 2D / 3D Canvas)"]
         
         Ingest --> DB
@@ -165,10 +165,10 @@ flowchart TD
 * **Core Orchestrator:** [`src/orchestration/runPredictionVisWorkflow.m`](src/orchestration/runPredictionVisWorkflow.m)
 * **Function:** Evaluates the surrogate across an ultra-dense continuous grid ($> 1.2 \times 10^6$ nodes at $\Delta P = \Delta r = 0.7 \, \text{nm}$). Reconstructs high-resolution continuous Stokes spectra ($100$--$3600 \, \text{cm}^{-1}$) via Modified Akima Hermite splines (`makima`) and evaluates all single-frequency and spectrally integrated optical efficacy landscapes.
 
-#### 🔍 Stage 5: Topology-Aware Multimodal Optimization & Seed Curation
+#### 🔍 Stage 5: Topology-Aware Multimodal Optimization & Basin Curation
 * **CLI Entry Point:** [`scripts/pipeline/run_locate_maxima.m`](scripts/pipeline/run_locate_maxima.m)
 * **Core Orchestrator:** [`src/orchestration/runLocalizationWorkflow.m`](src/orchestration/runLocalizationWorkflow.m)
-* **Function:** Extracts all distinct resonant mode maxima (rather than a single global peak) through 8-connected local peak detection, gradient percentile filtering ($\nabla F \approx 0$), and negative-definite Laplacian concavity checks. Seeds localized MultiStart constrained optimization (`fmincon` with SQP/Interior-Point) driven by analytical neural graph gradients (`dlgradient`), permanently archiving optimal parameters, convergence trajectories, and modal tags.
+* **Function:** Partitions complex multimodal optical landscapes into discrete catchment basins via marker-controlled topological watershed segmentation (`imextendedmax`, `imimposemin`, `watershed`). Characterizes each basin by summit coordinates, catchment area, boundary saddle elevation, and topological depth/prominence. Enables interactive basin inspection with 25% transparent color-coded basin boundary overlays, seed curation, and modal tagging. Refines parameters using in-basin stratified MultiStart gradient ascent (`fmincon` with SQP/Interior-Point) powered by exact analytical automatic differentiation (`dlgradient`), enforcing physical packing ($r/P \leq 0.49$) and classifying trajectory coalescence (`peak`, `ridge`, `multi`, `single`, `duplicate of X`, `fallback`).
 
 #### 🌌 Stage 6: Multi-Dimensional 3D Visualization & Export
 * **GUI Component:** Stage 6 Tab (`scripts/apps/visualize_tab.html`)

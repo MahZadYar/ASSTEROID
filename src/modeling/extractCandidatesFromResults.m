@@ -9,7 +9,9 @@ function candidates = extractCandidatesFromResults(results, topN, prominenceThre
 %       prominenceThreshold  - Minimum GridValue as fraction of max (0-1).
 %
 %   Output:
-%       candidates - Struct array with fields P, R, Value, Tag (nm units).
+%       candidates - Struct array with fields P, R, Value, Tag (nm units) and
+%                    watershed metadata BasinId, Depth, Area, PeakOnEdge,
+%                    Status (NaN / false / "" when not available).
 
     arguments
         results struct
@@ -17,7 +19,7 @@ function candidates = extractCandidatesFromResults(results, topN, prominenceThre
         prominenceThreshold (1,1) double = 0
     end
 
-    candidates = struct("P", {}, "R", {}, "Value", {}, "Tag", {});
+    candidates = localEmpty();
     if isempty(results) || ~isfield(results, "metrics") || isempty(results.metrics)
         return;
     end
@@ -49,24 +51,35 @@ function candidates = extractCandidatesFromResults(results, topN, prominenceThre
 end
 
 function candidates = candidateTableToStruct(candidateTable)
-    candidates = struct("P", {}, "R", {}, "Value", {}, "Tag", {});
+    candidates = localEmpty();
     if isempty(candidateTable) || height(candidateTable) == 0
         return;
     end
-    hasGridValue = any(strcmp(candidateTable.Properties.VariableNames, "GridValue"));
-    hasTag = any(strcmp(candidateTable.Properties.VariableNames, "Tag"));
+    vn = candidateTable.Properties.VariableNames;
+    hasGridValue = any(strcmp(vn, "GridValue"));
+    hasTag = any(strcmp(vn, "Tag"));
     for i = 1:height(candidateTable)
-        candidates(i).P = candidateTable.P_um(i) * 1e3;
-        candidates(i).R = candidateTable.R_um(i) * 1e3;
+        c = struct("P", candidateTable.P_um(i) * 1e3, "R", candidateTable.R_um(i) * 1e3, ...
+            "Value", NaN, "Tag", sprintf("Seed %d", i), "BasinId", NaN, "Depth", NaN, ...
+            "Area", NaN, "PeakOnEdge", false, "Status", "");
         if hasGridValue
-            candidates(i).Value = candidateTable.GridValue(i);
-        else
-            candidates(i).Value = NaN;
+            c.Value = candidateTable.GridValue(i);
         end
         if hasTag && strlength(candidateTable.Tag(i)) > 0
-            candidates(i).Tag = char(candidateTable.Tag(i));
-        else
-            candidates(i).Tag = sprintf("Seed %d", i);
+            c.Tag = char(candidateTable.Tag(i));
         end
+        if any(strcmp(vn, "BasinId")), c.BasinId = double(candidateTable.BasinId(i)); end
+        if any(strcmp(vn, "Depth")), c.Depth = double(candidateTable.Depth(i)); end
+        if any(strcmp(vn, "BasinArea")), c.Area = double(candidateTable.BasinArea(i)); end
+        if any(strcmp(vn, "PeakOnEdge")), c.PeakOnEdge = logical(candidateTable.PeakOnEdge(i)); end
+        if c.PeakOnEdge
+            c.Status = "edge";
+        end
+        candidates(i) = c;
     end
+end
+
+function s = localEmpty()
+    s = struct("P", {}, "R", {}, "Value", {}, "Tag", {}, "BasinId", {}, ...
+        "Depth", {}, "Area", {}, "PeakOnEdge", {}, "Status", {});
 end

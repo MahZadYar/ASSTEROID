@@ -46,6 +46,9 @@ function [maximaTable, solutions, msOutput, allLocalRuns] = find_local_maxima(mo
 %   Display          'off'|'final'|'iter'|'diagnose' for solver verbosity (default 'off').
 %   InitialPoints    Optional N-by-2 matrix of [p, r] seeds appended to the
 %                    random start set.
+%   StartPointsOnly  When true and InitialPoints is non-empty, InitialPoints
+%                    is used as the complete start set (no random or
+%                    gradient-seeded starts are added) (default false).
 %   CaptureAllLocalRuns  When true and UseParallel is false, collect all
 %                    local solver runs via @savelocalsolutions and map
 %                    them to generated start points (default false).
@@ -431,8 +434,13 @@ problem.nonlcon = nonlconFcn;
 problem.solver = 'fmincon';
 problem.options = fminconOpts;
 
-randomMatrix = localGenerateStartPoints(opts.NumStartPoints, pStartBounds, rStartBounds, ratioLower, ratioUpper);
-if opts.UseGradientSeedInit && canUseAnalyticalGradients
+useExactStarts = logical(opts.StartPointsOnly) && ~isempty(opts.InitialPoints);
+if useExactStarts
+    randomMatrix = zeros(0, 2);
+else
+    randomMatrix = localGenerateStartPoints(opts.NumStartPoints, pStartBounds, rStartBounds, ratioLower, ratioUpper);
+end
+if ~useExactStarts && opts.UseGradientSeedInit && canUseAnalyticalGradients
     gradientSeedCount = opts.GradientSeedCount;
     if gradientSeedCount <= 0
         gradientSeedCount = max(8, ceil(0.2 * opts.NumStartPoints));
@@ -643,6 +651,7 @@ parser.addParameter('ConstraintTolerance', 1e-8, @(x)isnumeric(x) && isscalar(x)
 parser.addParameter('OptimalityTolerance', 1e-8, @(x)isnumeric(x) && isscalar(x) && x > 0);
 parser.addParameter('Display', 'off', @(s)ischar(s) || (isstring(s) && isscalar(s)));
 parser.addParameter('InitialPoints', [], @(m)isnumeric(m) && (isempty(m) || size(m,2) == 2));
+parser.addParameter('StartPointsOnly', false, @(b)islogical(b) || isnumeric(b));
 parser.addParameter('Predictor', [], @(p) isempty(p) || isstruct(p));
 parser.addParameter('CaptureAllLocalRuns', false, @(b)islogical(b) || isnumeric(b));
 parser.addParameter('ShowIterationPaths', false, @(b)islogical(b) || isnumeric(b));
@@ -964,8 +973,9 @@ pRow = repmat(pVal, 1, numLambda);  % [1 × numLambda] dlarray, RAW p
 rRow = repmat(rVal, 1, numLambda);  % [1 × numLambda] dlarray, RAW r
 
 % v2 physics schema: reuse the exact inference feature map
-% (buildPhysicsFeatures + train-split z-score) and target inversion
-% (Z*sigma + mu, then exp(max(Z,0)) - 1), all elementwise on dlarray.
+% (buildPhysicsFeatures + train-split z-score) and the target inversion of
+% denormalizeModelTargets (Z*sigma + mu, then base^max(Z,0) - 1 for
+% log-transformed targets, max(Z,0) for linear ones), elementwise on dlarray.
 if isPhysicsSchemaModel(model)
     schema = model.featureSchema;
     tt = model.targetTransform;
@@ -974,10 +984,15 @@ if isPhysicsSchemaModel(model)
     predNorm = predict(model.net, dlarray(Xs.', 'CB'));       % [nTargets × numLambda]
     Zs = predNorm(metricIdx, :);
     Z = Zs .* double(tt.Std(metricIdx)) + double(tt.Mean(metricIdx));
-    if logical(tt.Log1p)
-        metricSeries = exp(max(Z, 0)) - 1;
+    [isLogTarget, logBase] = localTargetInversionSpec(tt, metricIdx);
+    if isLogTarget
+        if abs(logBase - 10) < 1e-6
+            metricSeries = 10 .^ max(Z, 0) - 1;
+        else
+            metricSeries = exp(max(Z, 0)) - 1;
+        end
     else
-        metricSeries = Z;
+        metricSeries = max(Z, 0);
     end
     avgVal = sum(metricSeries .* wRow, 2);
     grads = dlgradient(avgVal, {pVal, rVal});
@@ -1226,5 +1241,31 @@ if isobject(reporter) && ismethod(reporter, "isStopRequested")
     catch
         stop = false;
     end
+end
+end
+
+function [isLogTarget, logBase] = localTargetInversionSpec(tt, metricIdx)
+% localTargetInversionSpec  Per-target inversion rule identical to ensureModelFlags.
+%   The mask may be scalar (legacy) or per-target; LogMask takes precedence
+%   over Log1p; LogBase defaults to 10 unless the legacy scalar mask is used.
+logMask = true;
+if isfield(tt, "Log1p") && ~isempty(tt.Log1p)
+    logMask = logical(tt.Log1p);
+end
+if isfield(tt, "LogMask") && ~isempty(tt.LogMask)
+    logMask = logical(tt.LogMask);
+end
+logBase = 10;
+if isfield(tt, "LogBase") && ~isempty(tt.LogBase)
+    logBase = double(tt.LogBase);
+elseif isscalar(logMask) && logMask
+    logBase = exp(1);
+end
+if isscalar(logMask)
+    isLogTarget = logMask;
+elseif metricIdx <= numel(logMask)
+    isLogTarget = logMask(metricIdx);
+else
+    isLogTarget = logMask(end);
 end
 end

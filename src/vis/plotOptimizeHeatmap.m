@@ -1,4 +1,4 @@
-function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSeeds, refinedOptima, attemptTrajectories, showMultiStartPaths)
+function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSeeds, refinedOptima, attemptTrajectories, showMultiStartPaths, basinMap)
 %plotOptimizeHeatmap Plot metric heatmap with seeds, optima, and trajectories.
 %   Renders a pcolor heatmap for the specified metric from localization results,
 %   overlaying original seed positions (X), refined optima (filled circles with
@@ -15,6 +15,9 @@ function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSee
 %       refinedOptima        - (optional) Struct array of refined optima.
 %       attemptTrajectories  - (optional) Struct array from extractAttemptTrajectories.
 %       showMultiStartPaths  - (optional) Logical, whether to draw iteration paths.
+%       basinMap             - (optional) Struct from detect_watershed_basins. Each
+%                              displayed seed's basin is filled with the seed
+%                              colour (25 % opacity, dashed outline).
 
     arguments
         results struct
@@ -25,6 +28,7 @@ function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSee
         refinedOptima = []
         attemptTrajectories = []
         showMultiStartPaths (1,1) logical = false
+        basinMap = []
     end
 
     if ~isfield(results, "allData") || isempty(results.allData)
@@ -108,7 +112,26 @@ function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSee
         seedCount = max(seedCount, max(arrayfun(@(t) t.SeedIndex, attemptTrajectories)));
     end
     seedCount = max(1, seedCount);
-    seedColors = lines(seedCount);
+    try
+        palette = orderedcolors("gem12");
+        seedColors = palette(mod(0:seedCount-1, size(palette, 1)) + 1, :);
+    catch
+        seedColors = lines(seedCount);
+    end
+
+    % Basin territories (drawn first so markers and labels stay on top)
+    if ~isempty(basinMap) && isstruct(basinMap) && isfield(basinMap, "labels")
+        if ~isempty(refinedOptima)
+            basinSeeds = refinedOptima;
+        else
+            basinSeeds = originalSeeds;
+        end
+        try
+            renderBasinTerritories(ax, basinMap, basinSeeds, seedColors);
+        catch basinErr
+            fprintf("[plotOptimizeHeatmap] Basin overlay warning: %s\n", basinErr.message);
+        end
+    end
 
     % Overlay original seed positions (empty O markers)
     if ~isempty(originalSeeds)
@@ -225,6 +248,81 @@ function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSee
     end
 
     hold(ax, "off");
+end
+
+function renderBasinTerritories(ax, basinMap, seeds, seedColors)
+%renderBasinTerritories  Fill seeded basins with the seed colour, outline the rest.
+    seededIds = [];
+    if ~isempty(seeds) && isstruct(seeds)
+        seeds = seeds(:);
+        for i = 1:numel(seeds)
+            s = seeds(i);
+            if ~isfield(s, "P") || ~isfield(s, "R") || ~isfinite(double(s.P)) || ~isfinite(double(s.R))
+                continue;
+            end
+            % Position lookup, except when the point sits within one cell of
+            % its stored basin (refined optima on a watershed line).
+            bid = assignSeedsToBasins(basinMap, s.P, s.R);
+            if isfield(s, "BasinId") && isnumeric(s.BasinId) && isscalar(s.BasinId) ...
+                    && isfinite(s.BasinId) && s.BasinId > 0 && bid ~= s.BasinId ...
+                    && localNearBasin(basinMap, s.P, s.R, s.BasinId)
+                bid = double(s.BasinId);
+            end
+            if bid == 0
+                continue;
+            end
+            [px, py] = localBasinOutline(basinMap, bid);
+            if isempty(px)
+                continue;
+            end
+            clr = seedColors(max(1, min(i, size(seedColors, 1))), :);
+            patch(ax, px, py, clr, FaceAlpha=0.25, EdgeColor=clr, LineStyle="--", ...
+                LineWidth=1.2, HandleVisibility="off", PickableParts="none", HitTest="off");
+            seededIds(end + 1) = bid; %#ok<AGROW>
+        end
+    end
+
+    % Listed basins without a seed: faint dotted outline for context
+    if isfield(basinMap, "polygons") && ~isempty(basinMap.polygons)
+        for k = 1:numel(basinMap.polygons)
+            poly = basinMap.polygons(k);
+            if any(seededIds == poly.BasinId) || isempty(poly.P_nm)
+                continue;
+            end
+            plot(ax, poly.P_nm, poly.R_nm, ":", Color=[0.85 0.85 0.85], LineWidth=0.75, ...
+                HandleVisibility="off", PickableParts="none", HitTest="off");
+        end
+    end
+end
+
+function tf = localNearBasin(basinMap, P_nm, R_nm, bid)
+%localNearBasin  True when the cell nearest (P, R) or one of its 8 neighbours is in bid.
+    [~, ip] = min(abs(double(basinMap.pAxis_nm(:)) - double(P_nm)));
+    [~, ir] = min(abs(double(basinMap.rAxis_nm(:)) - double(R_nm)));
+    L = basinMap.labels;
+    nb = L(max(ir-1, 1):min(ir+1, size(L, 1)), max(ip-1, 1):min(ip+1, size(L, 2)));
+    tf = any(nb(:) == bid);
+end
+
+function [px, py] = localBasinOutline(basinMap, bid)
+%localBasinOutline  Outer boundary (nm) of basin bid, from cache or bwboundaries.
+    px = [];  py = [];
+    if isfield(basinMap, "polygons") && ~isempty(basinMap.polygons)
+        k = find([basinMap.polygons.BasinId] == bid, 1);
+        if ~isempty(k) && ~isempty(basinMap.polygons(k).P_nm)
+            px = basinMap.polygons(k).P_nm(:);
+            py = basinMap.polygons(k).R_nm(:);
+            return;
+        end
+    end
+    B = bwboundaries(basinMap.labels == bid, 8, "noholes");
+    if isempty(B)
+        return;
+    end
+    [~, longest] = max(cellfun(@(b) size(b, 1), B));
+    b = B{longest};
+    px = double(basinMap.pAxis_nm(b(:, 2)));  px = px(:);
+    py = double(basinMap.rAxis_nm(b(:, 1)));  py = py(:);
 end
 
 function renderTrajectoryPaths(ax, trajectories, seedColors)

@@ -70,7 +70,13 @@ function refinedSeeds = extractRefinedSeeds(results, baseMetric, seeds)
         end
     end
     n = height(tbl);
-    refinedSeeds = repmat(struct("Tag", "", "P", NaN, "R", NaN, "Value", NaN), n, 1);
+    refinedSeeds = repmat(struct("Tag", "", "P", NaN, "R", NaN, "Value", NaN, ...
+        "BasinId", NaN, "Depth", NaN, "Status", ""), n, 1);
+    hasSeedIdx = any(strcmp(varNames, 'SeedIndex'));
+    hasBasin = any(strcmp(varNames, 'BasinId'));
+    hasStatus = any(strcmp(varNames, 'Status'));
+    hasSpread = any(strcmp(varNames, 'Spread_nm'));
+    hasFallback = any(strcmp(varNames, 'IsFallback'));
     for j = 1:n
         refinedSeeds(j).P = double(tbl.P_um(j)) * 1e3;
         refinedSeeds(j).R = double(tbl.R_um(j)) * 1e3;
@@ -78,17 +84,48 @@ function refinedSeeds = extractRefinedSeeds(results, baseMetric, seeds)
             refinedSeeds(j).Value = double(tbl.(valueField)(j));
         end
         refinedSeeds(j).Tag = sprintf("Optimum %d", j);
+        if hasBasin
+            refinedSeeds(j).BasinId = double(tbl.BasinId(j));
+        end
+        if hasStatus
+            st = string(tbl.Status(j));
+            if hasSpread && isfinite(tbl.Spread_nm(j)) && any(st == ["ridge", "multi"])
+                st = st + sprintf(" (%.1f nm)", tbl.Spread_nm(j));
+            end
+            refinedSeeds(j).Status = st;
+        elseif hasFallback && logical(tbl.IsFallback(j))
+            refinedSeeds(j).Status = "fallback";
+        end
     end
 
     if ~isempty(seeds) && isstruct(seeds)
         seedP = arrayfun(@(s) double(s.P), seeds(:));
         seedR = arrayfun(@(s) double(s.R), seeds(:));
         for j = 1:numel(refinedSeeds)
-            dP = seedP - refinedSeeds(j).P;
-            dR = seedR - refinedSeeds(j).R;
-            [~, minIdx] = min(dP.^2 + dR.^2);
-            if ~isempty(minIdx) && isfield(seeds(minIdx), "Tag")
-                refinedSeeds(j).Tag = string(seeds(minIdx).Tag);
+            srcIdx = [];
+            if hasSeedIdx
+                k = double(tbl.SeedIndex(j));
+                if isfinite(k) && k >= 1 && k <= numel(seeds)
+                    srcIdx = k;
+                end
+            end
+            if isempty(srcIdx)
+                dP = seedP - refinedSeeds(j).P;
+                dR = seedR - refinedSeeds(j).R;
+                [~, srcIdx] = min(dP.^2 + dR.^2);
+            end
+            if isempty(srcIdx)
+                continue;
+            end
+            src = seeds(srcIdx);
+            if isfield(src, "Tag")
+                refinedSeeds(j).Tag = string(src.Tag);
+            end
+            if ~isfinite(refinedSeeds(j).BasinId) && isfield(src, "BasinId")
+                refinedSeeds(j).BasinId = double(src.BasinId);
+            end
+            if isfield(src, "Depth")
+                refinedSeeds(j).Depth = double(src.Depth);
             end
         end
     end

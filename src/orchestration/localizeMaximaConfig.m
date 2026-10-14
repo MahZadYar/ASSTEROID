@@ -53,6 +53,13 @@ function cfg = localizeMaximaConfig(options)
     %       MinLocalWindow         (1,1) double — Minimum local bounds half-width (µm)
     %       TuningRadius           (1,1) double — Refinement radius (µm)
     %       NeighborTolerance      (1,1) double — Tolerance for plateau detection
+    %       UseWatershedBasins     (1,1) logical — Detect seeds as watershed basins and
+    %                              refine with in-basin multi-start (default true)
+    %       BasinSensitivity       (1,1) double — H-maxima merge threshold as a fraction
+    %                              of the metric range (default 0.005)
+    %       BasinMinArea           (1,1) double — Minimum basin size in grid cells (default 4)
+    %       InBasinStarts          (1,1) double — Starts per basin incl. the seed (default 4)
+    %       BasinMap               struct — Pre-computed basin map (refine mode)
     %
     %   Output:
     %       cfg — struct with all configuration fields, ready for runLocalizationWorkflow
@@ -120,6 +127,11 @@ function cfg = localizeMaximaConfig(options)
         options.KeepRejectedSeeds (1,1) logical = true
         options.BorderRejectFraction (1,1) double {mustBeNonnegative} = 0.02
         options.MetricVariant (1,1) string {mustBeMember(options.MetricVariant, ["laser","avg","weighted"])} = "avg"
+        options.UseWatershedBasins (1,1) logical = true
+        options.BasinSensitivity (1,1) double {mustBeNonnegative} = 0.005
+        options.BasinMinArea (1,1) double {mustBePositive} = 4
+        options.InBasinStarts (1,1) double {mustBePositive, mustBeInteger} = 4
+        options.BasinMap struct = struct([])
     end
 
     %% Normalise metrics using centralised alias resolver
@@ -225,4 +237,11 @@ function cfg = localizeMaximaConfig(options)
     cfg.keepRejectedSeeds = options.KeepRejectedSeeds;
     cfg.borderRejectFraction = options.BorderRejectFraction;
     cfg.metricVariant = options.MetricVariant;
+
+    % Watershed basins
+    cfg.useWatershedBasins = options.UseWatershedBasins;
+    cfg.basinSensitivity = options.BasinSensitivity;
+    cfg.basinMinArea = options.BasinMinArea;
+    cfg.inBasinStarts = options.InBasinStarts;
+    cfg.basinMap = options.BasinMap;
 end

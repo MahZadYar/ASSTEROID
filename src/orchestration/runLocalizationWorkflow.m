@@ -337,6 +337,16 @@ function results = runLocalizationWorkflow(cfg, reporter)
         end
 
         % Detect candidate maxima (or use initial set)
+        useBasins = isfield(cfg, 'useWatershedBasins') && logical(cfg.useWatershedBasins);
+        basinSens = 0.005;
+        if isfield(cfg, 'basinSensitivity') && isfinite(cfg.basinSensitivity)
+            basinSens = double(cfg.basinSensitivity);
+        end
+        basinMinArea = 4;
+        if isfield(cfg, 'basinMinArea') && isfinite(cfg.basinMinArea)
+            basinMinArea = double(cfg.basinMinArea);
+        end
+        basinMap = [];
         if isfield(cfg, 'initialCandidates') && ~isempty(cfg.initialCandidates)
             candidateTable = cfg.initialCandidates;
             % Verify structure
@@ -358,6 +368,51 @@ function results = runLocalizationWorkflow(cfg, reporter)
             gradMagnitude = [];
             laplacianField = [];
             divergenceField = [];
+
+            % Basin territories for in-basin refinement: prefer the map the
+            % user saw at seed initialisation; otherwise rebuild it from the
+            % grid (or cached predictions in refine-only mode).
+            if useBasins
+                if isfield(cfg, 'basinMap') && isstruct(cfg.basinMap) && ~isempty(cfg.basinMap) ...
+                        && isfield(cfg.basinMap, 'labels') && any(cfg.basinMap.labels(:) > 0)
+                    basinMap = cfg.basinMap;
+                    reporter.info(sprintf("  Using stored basin map (%d basins).", numel(basinMap.basinIds)));
+                else
+                    basinGrid = avgMetricGrid;
+                    pBasin = pSamplesLocal;
+                    rBasin = rSamplesLocal;
+                    if isempty(basinGrid) && isfield(allData, candidateField) && numel(allData.period) > 4
+                        [bMap, pGB, rGB, ~] = reshapeSoAToVolume(allData, candidateField, 'UnitConversion', 'none');
+                        basinGrid = double(bMap);
+                        pBasin = double(pGB(:)') * 1e-3;
+                        rBasin = double(rGB(:)') * 1e-3;
+                    end
+                    if ~isempty(basinGrid)
+                        basinGrid = localMaskToLimits(basinGrid, pBasin, rBasin, cfg);
+                        [~, basinMap] = detect_watershed_basins(basinGrid, pBasin, rBasin, ...
+                            Sensitivity=basinSens, RatioLimit=[ratioLowerVal, ratioUpperVal], ...
+                            MinArea=basinMinArea);
+                        reporter.info(sprintf("  Rebuilt basin map from grid (%d basins, sensitivity %.2f %%).", ...
+                            numel(basinMap.basinIds), 100 * basinSens));
+                    else
+                        reporter.warn("Metric_" + primaryMetric, ...
+                            "No grid available for basin map; using radius-box refinement.");
+                    end
+                end
+            end
+        elseif useBasins
+            [candidateTable, basinMap] = detect_watershed_basins( ...
+                localMaskToLimits(avgMetricGrid, pSamplesLocal, rSamplesLocal, cfg), ...
+                pSamplesLocal, rSamplesLocal, ...
+                Sensitivity=basinSens, RatioLimit=[ratioLowerVal, ratioUpperVal], ...
+                MinArea=basinMinArea, MaxBasins=cfg.numLocalMaxima);
+            basePeakMask = [];
+            gradMagnitude = [];
+            laplacianField = [];
+            divergenceField = [];
+            reporter.info(sprintf("  Watershed: %d basins (H = %.4g = %.2f %% of range, %d total in map).", ...
+                height(candidateTable), basinMap.hThreshold, 100 * basinSens, ...
+                numel(unique(basinMap.labels(basinMap.labels > 0)))));
         else
             [candidateTable, basePeakMask, gradMagnitude, laplacianField, divergenceField] = ...
                 detect_maxima_candidates(avgMetricGrid, pSamplesLocal, rSamplesLocal, ...
@@ -392,6 +447,7 @@ function results = runLocalizationWorkflow(cfg, reporter)
             res.gradMagnitude = gradMagnitude;
             res.laplacianField = laplacianField;
             res.divergenceField = divergenceField;
+            res.basinMap = basinMap;
             metricResults{metricIdx} = res;
 
             reporter.complete("Metric_" + primaryMetric, ...
@@ -407,6 +463,11 @@ function results = runLocalizationWorkflow(cfg, reporter)
                 model, ri, lambdaSamples, primaryMetric, cfg, pBounds, rBounds, ...
                 ratioLowerVal, ratioUpperVal, predictor, analyteWeights);
             attemptTrajectories = table();
+        elseif useBasins && ~isempty(basinMap)
+            [maximaResults, msSolutions, msOutput, attemptTrajectories] = runBasinMultiStart( ...
+                model, ri, lambdaSamples, primaryMetric, primaryMetricAvgField, ...
+                cfg, candidateTable, basinMap, pBounds, rBounds, ...
+                ratioLowerVal, ratioUpperVal, reporter, predictor, analyteWeights);
         else
             [maximaResults, msSolutions, msOutput, attemptTrajectories] = runLocalMultiStart( ...
                 model, ri, lambdaSamples, primaryMetric, primaryMetricAvgField, ...
@@ -437,6 +498,7 @@ function results = runLocalizationWorkflow(cfg, reporter)
         res.gradMagnitude = gradMagnitude;
         res.laplacianField = laplacianField;
         res.divergenceField = divergenceField;
+        res.basinMap = basinMap;
         metricResults{metricIdx} = res;
     end
 
@@ -1078,6 +1140,357 @@ function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runLocalM
     end
 end
 
+function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runBasinMultiStart( ...
+        model, ri, lambdaSamples, primaryMetric, primaryMetricAvgField, ...
+        cfg, candidateTable, basinMap, pBounds, rBounds, ...
+        ratioLowerVal, ratioUpperVal, reporter, predictor, analyteWeights)
+    % runBasinMultiStart  Refine each seed inside its watershed basin.
+    %
+    %   For every seed the owning basin is looked up in basinMap. Starts are
+    %   the seed itself plus (InBasinStarts - 1) farthest-point samples from
+    %   the basin core (cells in the upper 75 % of the basin depth). Each
+    %   start runs one bounded fmincon (serial) on the model objective,
+    %   boxed to the basin's bounding box plus a two-cell margin. A run is
+    %   accepted when its endpoint lies in (or within one cell of) the same
+    %   basin. The best accepted run is reported, and the spread of the
+    %   accepted endpoints classifies the basin top:
+    %       "peak"   all accepted endpoints within 1 nm
+    %       "ridge"  endpoints spread > 1 nm but values within 0.2 % of best
+    %       "multi"  endpoints spread with distinct values (sub-peaks)
+    %       "single" only one accepted run
+    %   Seeds with no accepted run fall back to the seed (IsFallback=true).
+
+    msSolutions = [];
+    msOutput = [];
+    nStarts = 4;
+    if isfield(cfg, "inBasinStarts") && isfinite(cfg.inBasinStarts) && cfg.inBasinStarts >= 1
+        nStarts = round(cfg.inBasinStarts);
+    end
+    showIterationPaths = isfield(cfg, "showIterationPaths") && logical(cfg.showIterationPaths);
+
+    extraArgs = {};
+    if ~isempty(predictor)
+        extraArgs = {'Predictor', predictor};
+    end
+    if ~isempty(analyteWeights)
+        extraArgs = [extraArgs, {'AnalyteWeights', analyteWeights}];
+    end
+
+    pAx = double(basinMap.pAxis(:)');      % µm
+    rAx = double(basinMap.rAxis(:)');
+    labels = double(basinMap.labels);
+    vals = double(basinMap.values);
+    dpCell = median(abs(diff(pAx)));
+    drCell = median(abs(diff(rAx)));
+    [pMesh, rMesh] = meshgrid(pAx, rAx);
+
+    maxSeeds = min(cfg.numLocalMaxima, height(candidateTable));
+    seedIds = assignSeedsToBasins(basinMap, candidateTable.P_um(1:maxSeeds) * 1e3, ...
+        candidateTable.R_um(1:maxSeeds) * 1e3);
+    if ismember('BasinId', candidateTable.Properties.VariableNames)
+        fromTable = double(candidateTable.BasinId(1:maxSeeds));
+        useTable = seedIds == 0 & isfinite(fromTable) & fromTable > 0;
+        seedIds(useTable) = fromTable(useTable);
+    end
+    [uIds, ~, grp] = unique(seedIds(seedIds > 0));
+    dupCounts = accumarray(grp, 1);
+    for k = find(dupCounts > 1)'
+        reporter.warn("Metric_" + primaryMetric, sprintf( ...
+            "%d seeds share basin %d; they will refine to the same optimum.", dupCounts(k), uIds(k)));
+    end
+
+    trajNames = {'SeedIndex','Attempt','StartP_um','StartR_um','EndP_um','EndR_um','ExitFlag', ...
+        'MetricValue','Accepted','ConstrViol','Iterations','FirstOrderOpt','DistFromSeed_um','IterPath'};
+    maximaBlocks = cell(maxSeeds, 1);
+    trajBlocks = cell(maxSeeds, 1);
+    tAll = tic;
+
+    for seedIdx = 1:maxSeeds
+        if isobject(reporter) && ismethod(reporter, "isStopRequested") && reporter.isStopRequested()
+            error("Process:Terminated", "Optimization terminated by user.");
+        end
+        tSeed = tic;
+        pSeed = double(candidateTable.P_um(seedIdx));
+        rSeed = double(candidateTable.R_um(seedIdx));
+        if ismember('Tag', candidateTable.Properties.VariableNames)
+            seedLabel = char(string(candidateTable.Tag(seedIdx)));
+        else
+            seedLabel = sprintf('Seed #%d', seedIdx);
+        end
+        seedValue = NaN;
+        if ismember('GridValue', candidateTable.Properties.VariableNames)
+            seedValue = double(candidateTable.GridValue(seedIdx));
+        end
+        bid = seedIds(seedIdx);
+
+        %% Start set and bounds
+        if bid > 0
+            terr = labels == bid;
+            pIn = pMesh(terr);  rIn = rMesh(terr);  vIn = vals(terr);
+            pBox = [max(pBounds(1), min(pIn) - 2*dpCell), min(pBounds(2), max(pIn) + 2*dpCell)];
+            rBox = [max(rBounds(1), min(rIn) - 2*drCell), min(rBounds(2), max(rIn) + 2*drCell)];
+            row = find(basinMap.basinIds == bid, 1);
+            if ~isempty(row) && isfinite(basinMap.saddle(row))
+                sad = basinMap.saddle(row);
+                pk = basinMap.peakValue(row);
+                core = vIn >= sad + 0.25 * (pk - sad);
+            else
+                vSorted = sort(vIn);
+                core = vIn >= vSorted(max(1, ceil(0.75 * numel(vSorted))));
+            end
+            if nnz(core) < nStarts
+                core = true(size(vIn));
+            end
+            starts = localFarthestPointStarts([pSeed, rSeed], [pIn(core), rIn(core)], ...
+                nStarts, [dpCell, drCell]);
+            boxStr = "basin";
+        else
+            pad = cfg.tuningRadius;
+            pBox = [max(pBounds(1), pSeed - pad), min(pBounds(2), pSeed + pad)];
+            rBox = [max(rBounds(1), rSeed - pad), min(rBounds(2), rSeed + pad)];
+            starts = [pSeed, rSeed];
+            boxStr = "radius box (seed outside basin map)";
+        end
+        if pBox(1) >= pBox(2), pBox = pBounds; end
+        if rBox(1) >= rBox(2), rBox = rBounds; end
+
+        reporter.progress("Metric_" + primaryMetric, seedIdx / maxSeeds, sprintf( ...
+            "Refining %s (%d/%d) in basin %d: %d starts", seedLabel, seedIdx, maxSeeds, bid, size(starts, 1)));
+        reporter.info(sprintf("[Metric_%s] %s %s box p=[%.1f, %.1f] r=[%.1f, %.1f] nm, %d starts", ...
+            primaryMetric, seedLabel, boxStr, pBox * 1e3, rBox * 1e3, size(starts, 1)));
+
+        %% Run fmincon from every start (serial: no worker payload overhead)
+        sols = [];
+        allRuns = table();
+        try
+            [~, sols, ~, allRuns] = find_local_maxima(model, ri, lambdaSamples, ...
+                'MetricName', primaryMetric, ...
+                'InitialPoints', starts, ...
+                'StartPointsOnly', true, ...
+                'NumMaxima', size(starts, 1), ...
+                'PBounds', pBox, 'RBounds', rBox, ...
+                'RatioLower', ratioLowerVal, 'RatioUpper', ratioUpperVal, ...
+                'FunctionTolerance', cfg.functionTolerance, ...
+                'StepTolerance', cfg.stepTolerance, ...
+                'OptimalityTolerance', cfg.optimalityTolerance, ...
+                'ConstraintTolerance', cfg.constraintTolerance, ...
+                'MaxIterations', cfg.maxIterations, ...
+                'MaxFunctionEvaluations', cfg.maxFunctionEvaluations, ...
+                'FminconAlgorithm', cfg.fminconAlgorithm, ...
+                'UseParallel', false, ...
+                'UseGradientSeedInit', false, ...
+                'CaptureAllLocalRuns', showIterationPaths, ...
+                'ShowIterationPaths', showIterationPaths, ...
+                'Display', char(cfg.multiStartDisplay), ...
+                'Reporter', reporter, ...
+                extraArgs{:});
+        catch err
+            if strcmp(err.identifier, "Process:Terminated")
+                rethrow(err);
+            end
+            reporter.warn("Metric_" + primaryMetric, sprintf("%s: fmincon failed: %s", seedLabel, err.message));
+        end
+
+        %% Classify runs
+        nRun = numel(sols);
+        endPts = NaN(nRun, 2);  startPts = NaN(nRun, 2);
+        runVal = NaN(nRun, 1);  runExit = NaN(nRun, 1);
+        runIter = NaN(nRun, 1); runFoo = NaN(nRun, 1); runCv = NaN(nRun, 1);
+        acceptedRun = false(nRun, 1);
+        for k = 1:nRun
+            endPts(k, :) = sols(k).X(:)';
+            x0 = sols(k).X0;
+            if iscell(x0), x0 = x0{1}; end
+            startPts(k, :) = x0(:)';
+            runVal(k) = -sols(k).Fval;
+            runExit(k) = double(sols(k).Exitflag);
+            if isstruct(sols(k).Output)
+                if isfield(sols(k).Output, 'iterations'), runIter(k) = sols(k).Output.iterations; end
+                if isfield(sols(k).Output, 'firstorderopt'), runFoo(k) = sols(k).Output.firstorderopt; end
+                if isfield(sols(k).Output, 'constrviolation'), runCv(k) = sols(k).Output.constrviolation; end
+            end
+            if bid > 0
+                acceptedRun(k) = localInBasin(labels, pAx, rAx, endPts(k, :), bid);
+            else
+                acceptedRun(k) = all(isfinite(endPts(k, :)));
+            end
+            acceptedRun(k) = acceptedRun(k) && isfinite(runVal(k)) && runExit(k) >= 0;
+        end
+
+        % Trajectory rows (start → end per run), with iteration paths if captured
+        trajRows = cell(nRun, 1);
+        for k = 1:nRun
+            iterPathCell = {[]};
+            if ~isempty(allRuns) && ismember("IterPath", allRuns.Properties.VariableNames)
+                d = hypot(allRuns.StartP_um - startPts(k, 1), allRuns.StartR_um - startPts(k, 2));
+                [dMin, j] = min(d);
+                if dMin < 1e-6
+                    iterPathCell = allRuns.IterPath(j, :);
+                end
+            end
+            trajRows{k} = table(seedIdx, k, startPts(k, 1), startPts(k, 2), endPts(k, 1), endPts(k, 2), ...
+                runExit(k), runVal(k), acceptedRun(k), runCv(k), runIter(k), runFoo(k), ...
+                hypot(endPts(k, 1) - pSeed, endPts(k, 2) - rSeed), iterPathCell, 'VariableNames', trajNames);
+        end
+        if nRun > 0
+            trajBlocks{seedIdx} = vertcat(trajRows{:});
+        end
+
+        %% Best accepted run + coalescence diagnostic
+        nAcc = nnz(acceptedRun);
+        if nAcc > 0
+            accIdx = find(acceptedRun);
+            [bestVal, b] = max(runVal(accIdx));
+            best = accIdx(b);
+            accPts_nm = endPts(accIdx, :) * 1e3;
+            spread = 0;
+            if nAcc > 1
+                pairD = hypot(accPts_nm(:, 1) - accPts_nm(:, 1)', accPts_nm(:, 2) - accPts_nm(:, 2)');
+                spread = max(pairD(:));
+            end
+            relGap = (bestVal - min(runVal(accIdx))) / max(abs(bestVal), eps);
+            if nAcc == 1
+                status = "single";
+            elseif spread <= 1
+                status = "peak";
+            elseif relGap < 2e-3
+                status = "ridge";
+            else
+                status = "multi";
+            end
+            pBest = endPts(best, 1);  rBest = endPts(best, 2);
+            isFallback = false;
+            exitBest = runExit(best);
+            reporter.info(sprintf( ...
+                "[Metric_%s] %s: [%.1f, %.1f] → [%.2f, %.2f] nm, val=%.4g (seed grid %.4g), %d/%d in basin, spread=%.2f nm, %s, %.1fs", ...
+                primaryMetric, seedLabel, pSeed*1e3, rSeed*1e3, pBest*1e3, rBest*1e3, bestVal, seedValue, ...
+                nAcc, nRun, spread, status, toc(tSeed)));
+            if isfinite(seedValue) && bestVal < seedValue * (1 - 1e-3)
+                reporter.warn("Metric_" + primaryMetric, sprintf( ...
+                    "%s: refined value %.4g is below the seed grid value %.4g (grid and model may differ).", ...
+                    seedLabel, bestVal, seedValue));
+            end
+        else
+            status = "fallback";
+            spread = NaN;
+            pBest = pSeed;  rBest = rSeed;
+            bestVal = seedValue;
+            isFallback = true;
+            exitBest = -999;
+            reporter.warn("Metric_" + primaryMetric, sprintf( ...
+                "%s: no run ended inside basin %d (%d runs); keeping the seed.", seedLabel, bid, nRun));
+            if ~cfg.keepRejectedSeeds
+                continue;
+            end
+        end
+
+        maximaBlocks{seedIdx} = table(pBest, rBest, rBest / pBest, bestVal, exitBest, ...
+            seedIdx, pSeed, rSeed, seedValue, isFallback, 1, bid, status, spread, nAcc, nRun, ...
+            'VariableNames', {'P_um','R_um','Ratio',primaryMetricAvgField,'ExitFlag', ...
+            'SeedIndex','SeedP_um','SeedR_um','SeedValue','IsFallback','RetryCount', ...
+            'BasinId','Status','Spread_nm','NumAccepted','NumStarts'});
+    end
+
+    reporter.info(sprintf("[Metric_%s] In-basin refinement of %d seeds finished in %.1fs.", ...
+        primaryMetric, maxSeeds, toc(tAll)));
+
+    maximaBlocks = maximaBlocks(~cellfun(@isempty, maximaBlocks));
+    if isempty(maximaBlocks)
+        maximaResults = table();
+    else
+        maximaResults = vertcat(maximaBlocks{:});
+        maximaResults = localFlagDuplicateOptima(maximaResults, candidateTable, primaryMetricAvgField, reporter, primaryMetric);
+    end
+    trajBlocks = trajBlocks(~cellfun(@isempty, trajBlocks));
+    if isempty(trajBlocks)
+        attemptTrajectories = table();
+    else
+        attemptTrajectories = vertcat(trajBlocks{:});
+    end
+end
+
+function grid = localMaskToLimits(grid, pS, rS, cfg)
+    % Set cells outside cfg.pLimits × cfg.rLimits (nm) to NaN so watershed
+    % basins never extend beyond the refinement search domain.
+    if isempty(grid) || ~isfield(cfg, 'pLimits') || ~isfield(cfg, 'rLimits')
+        return;
+    end
+    tol = 1e-9;
+    pIn = pS(:)' >= cfg.pLimits(1) * 1e-3 - tol & pS(:)' <= cfg.pLimits(2) * 1e-3 + tol;
+    rIn = rS(:) >= cfg.rLimits(1) * 1e-3 - tol & rS(:) <= cfg.rLimits(2) * 1e-3 + tol;
+    grid(~(rIn & pIn)) = NaN;
+end
+
+function tbl = localFlagDuplicateOptima(tbl, candidateTable, valueField, reporter, primaryMetric)
+    % Seeds from different grid basins that refine to the same continuous
+    % optimum (≤ 1 nm apart) are one peak split by grid discretisation. The
+    % lower-valued seed (ties: later seed) is marked "duplicate of <Tag>".
+    if height(tbl) < 2 || ~ismember('Status', tbl.Properties.VariableNames)
+        return;
+    end
+    hasTag = ismember('Tag', candidateTable.Properties.VariableNames);
+    live = find(~tbl.IsFallback);
+    [~, ord] = sort(tbl.(valueField)(live), 'descend');
+    live = live(ord);
+    for a = 1:numel(live)
+        i = live(a);
+        if startsWith(tbl.Status(i), "duplicate")
+            continue;
+        end
+        for b = a+1:numel(live)
+            j = live(b);
+            if startsWith(tbl.Status(j), "duplicate")
+                continue;
+            end
+            d_nm = 1e3 * hypot(tbl.P_um(i) - tbl.P_um(j), tbl.R_um(i) - tbl.R_um(j));
+            if d_nm <= 1
+                if hasTag
+                    keepTag = string(candidateTable.Tag(tbl.SeedIndex(i)));
+                    dupTag = string(candidateTable.Tag(tbl.SeedIndex(j)));
+                else
+                    keepTag = "#" + tbl.SeedIndex(i);
+                    dupTag = "#" + tbl.SeedIndex(j);
+                end
+                tbl.Status(j) = "duplicate of " + keepTag;
+                reporter.info(sprintf("[Metric_%s] %s refined to the same optimum as %s (%.2f nm apart).", ...
+                    primaryMetric, dupTag, keepTag, d_nm));
+            end
+        end
+    end
+end
+
+function starts = localFarthestPointStarts(seedPt, pool, nStarts, cellSize)
+    % Greedy farthest-point sampling (in grid-cell units) seeded at seedPt.
+    starts = seedPt;
+    if nStarts <= 1 || isempty(pool)
+        return;
+    end
+    scaledPool = pool ./ cellSize;
+    dMin = hypot(scaledPool(:, 1) - seedPt(1) / cellSize(1), scaledPool(:, 2) - seedPt(2) / cellSize(2));
+    for k = 2:nStarts
+        [dBest, j] = max(dMin);
+        if dBest < 1   % pool exhausted (all within one cell of a start)
+            break;
+        end
+        starts(end + 1, :) = pool(j, :); %#ok<AGROW>
+        dMin = min(dMin, hypot(scaledPool(:, 1) - scaledPool(j, 1), scaledPool(:, 2) - scaledPool(j, 2)));
+    end
+end
+
+function tf = localInBasin(labels, pAx, rAx, pt, bid)
+    % True when the grid cell nearest pt, or any of its 8 neighbours, is in basin bid.
+    tf = false;
+    if any(~isfinite(pt))
+        return;
+    end
+    [dp, ip] = min(abs(pAx - pt(1)));
+    [dr, ir] = min(abs(rAx - pt(2)));
+    if numel(pAx) > 1 && dp > 1.5 * median(abs(diff(pAx))), return; end
+    if numel(rAx) > 1 && dr > 1.5 * median(abs(diff(rAx))), return; end
+    nb = labels(max(ir-1, 1):min(ir+1, size(labels, 1)), max(ip-1, 1):min(ip+1, size(labels, 2)));
+    tf = labels(ir, ip) == bid || any(nb(:) == bid);
+end
+
 function localLogTableBuildInputs(reporter, contextLabel, varNames, varValues)
     try
         if isempty(reporter)
@@ -1115,6 +1528,7 @@ function res = buildEmptyResult(metricName)
     res.msSolutions = [];
     res.msOutput = [];
     res.attemptTrajectories = table();
+    res.basinMap = [];
     res.gradMagnitude = [];
     res.laplacianField = [];
     res.divergenceField = [];
