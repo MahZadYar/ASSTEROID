@@ -240,17 +240,10 @@ end
 
 %% ========================================================================
 function tags = localBasinTags(n)
-%localBasinTags  Spreadsheet-style labels: A..Z, AA, AB, ...
+%localBasinTags  Numerical seed labels: Seed 1, Seed 2, ...
     tags = strings(n, 1);
     for i = 1:n
-        k = i;
-        s = "";
-        while k > 0
-            m = mod(k - 1, 26);
-            s = char('A' + m) + s;
-            k = floor((k - 1) / 26);
-        end
-        tags(i) = s;
+        tags(i) = sprintf("Seed %d", i);
     end
 end
 

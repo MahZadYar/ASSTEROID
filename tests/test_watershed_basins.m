@@ -19,7 +19,7 @@ F = g(1.10, 0.30, 100, 0.08) ...        % main peak
 [T, bmap] = detect_watershed_basins(F, pUm, rUm, Sensitivity = 0.01);
 assert(height(T) == 3, "Expected 3 basins (main, shoulder, separate); got %d.", height(T));
 assert(issorted(T.GridValue, "descend"), "Candidates must be sorted by peak value.");
-assert(all(T.Tag == ["A"; "B"; "C"]), "Tags must be A, B, C.");
+assert(all(T.Tag == ["Seed 1"; "Seed 2"; "Seed 3"]), "Tags must be Seed 1, Seed 2, Seed 3.");
 fprintf("  V 3 basins detected, ripple merged.\n");
 
 %% 2. Shoulder maximum is preserved and located on the flank

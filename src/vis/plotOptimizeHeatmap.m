@@ -180,18 +180,7 @@ function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSee
                     tagStr = sprintf("Optimum %d", i);
                 end
 
-                if isfield(s, "Value") && isfinite(s.Value)
-                    valStr = sprintf("%.3f", s.Value);
-                else
-                    valStr = "N/A";
-                end
-
-                pStr = sprintf("p=%.1f", s.P);
-                rStr = sprintf("r=%.1f", s.R);
-
-                txtLines = {['\bf' char(tagStr) '\rm'], ...
-                            char(pStr + ", " + rStr), ...
-                            char(baseMetric + " = " + valStr)};
+                txtLines = ['\bf' char(tagStr) '\rm'];
 
                 try
                     t = text(ax, s.P, s.R, txtLines, ...
