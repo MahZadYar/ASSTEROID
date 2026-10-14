@@ -83,7 +83,34 @@ assert(numel(curSeedsAfter) == 1, "Expected 1 seed after merge.");
 assert(curSeedsAfter(1).Tag == "Custom_Optimum_1", "Winner tag should be preserved.");
 metaAfter = ctl.getOptimizeState("basinMapMeta");
 assert(isfield(metaAfter, "isUserMerged") && metaAfter.isUserMerged, "Meta should be marked isUserMerged.");
-fprintf("  ✓ MergeBasins correctly merged territories, polygons, and seeds.\n");
+
+% Verify merging a subset keeps other unmerged seeds intact
+dummyBasinMap3 = struct();
+dummyBasinMap3.labels = uint32([1 1 2 2 3 3; 1 1 2 2 3 3]);
+dummyBasinMap3.pAxis_nm = [400 500 600 700 800 900];
+dummyBasinMap3.rAxis_nm = [100 200];
+dummyBasinMap3.basinIds = [1; 2; 3];
+dummyBasinMap3.peakValue = [150; 120; 80];
+dummyBasinMap3.saddle = [50; 50; 40];
+dummyBasinMap3.polygons = [
+    struct("BasinId", 1, "P_nm", [400 500 500 400], "R_nm", [100 100 200 200]), ...
+    struct("BasinId", 2, "P_nm", [600 700 700 600], "R_nm", [100 100 200 200]), ...
+    struct("BasinId", 3, "P_nm", [800 900 900 800], "R_nm", [100 100 200 200])
+];
+ctl.updateOptimizeState("basinMap", dummyBasinMap3);
+
+allThreeSeeds = [
+    struct("Tag", "A", "P", 450.0, "R", 150.0, "Value", 150.0, "BasinId", 1), ...
+    struct("Tag", "C", "P", 850.0, "R", 150.0, "Value", 80.0, "BasinId", 3)  % B was merged into A; C remained unselected
+];
+ctl.handleEvent("MergeBasins", struct("targetBasinId", 1, "mergedBasinIds", [1 2], "seeds", allThreeSeeds));
+curSeedsSubset = ctl.getOptimizeState("currentSeeds");
+assert(numel(curSeedsSubset) == 2, "Expected 2 seeds (merged A and untouched C).");
+assert(curSeedsSubset(1).Tag == "A" && curSeedsSubset(2).Tag == "C", "Unmerged seed C must be preserved.");
+bmSubset = ctl.getOptimizeState("basinMap");
+assert(ismember(1, bmSubset.basinIds) && ismember(3, bmSubset.basinIds), "Basins 1 and 3 must remain.");
+assert(~ismember(2, bmSubset.basinIds), "Basin 2 must be removed.");
+fprintf("  ✓ MergeBasins correctly merged subset and preserved untouched seeds.\n");
 
 %% 8. Test ExportResults to MAT (only optima list, not whole DB)
 matPath = fullfile(testDir, "exported_optima.mat");

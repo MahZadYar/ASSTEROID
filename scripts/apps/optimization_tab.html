@@ -963,13 +963,14 @@ function buildSeedRow(s, idx) {
     return tr;
 }
 
-// Collect seeds from editable table
-function collectSeeds() {
+// Collect seeds from editable table (onlyChecked default true)
+function collectSeeds(onlyChecked) {
+    if (onlyChecked === undefined) onlyChecked = true;
     var rows = Array.from(document.querySelectorAll("#seedsTable tbody tr"));
     var seeds = [];
     rows.forEach(row => {
         var cb = row.querySelector(".seed-checkbox");
-        if (cb && cb.checked) {
+        if (!onlyChecked || (cb && cb.checked)) {
             var pVal = parseFloat(row.querySelector(".p-input").value);
             var rVal = parseFloat(row.querySelector(".r-input").value);
             var valDisplay = row.querySelector(".val-display");
@@ -1160,34 +1161,65 @@ function toggleAllSeeds(source) {
 
 function removeSelectedSeeds() {
     var tbody = document.querySelector("#seedsTable tbody");
-    var checked = tbody.querySelectorAll('.seed-checkbox:checked');
+    var allRows = Array.from(tbody.querySelectorAll("tr"));
+    var checked = Array.from(tbody.querySelectorAll('.seed-checkbox:checked'));
+    if (checked.length === 0) {
+        alert("Please check at least one seed to remove.");
+        return;
+    }
+    if (checked.length === allRows.length && allRows.length > 1) {
+        if (!confirm("Remove all " + allRows.length + " seeds from the table?")) {
+            return;
+        }
+    }
     checked.forEach(cb => cb.closest("tr").remove());
-    // Re-number tags
-    var rows = tbody.querySelectorAll("tr");
-    rows.forEach((row, idx) => {
+    // Re-check all remaining rows
+    var remainingRows = tbody.querySelectorAll("tr");
+    remainingRows.forEach((row, idx) => {
+        var cb = row.querySelector(".seed-checkbox");
+        if (cb) cb.checked = true;
         var tagInput = row.querySelector(".tag-input");
-        if (tagInput.value.startsWith("Seed ") || tagInput.value.startsWith("Optimum ")) {
+        if (tagInput && (tagInput.value.startsWith("Seed ") || tagInput.value.startsWith("Optimum "))) {
             tagInput.value = "Seed " + (idx + 1);
         }
     });
+    var topCb = document.querySelector('#seedsTable thead input[type="checkbox"]');
+    if (topCb) topCb.checked = true;
+
+    if (window.hasPreview) {
+        updateSeeds();
+    }
 }
 
 function mergeSelectedSeeds() {
     var tbody = document.querySelector("#seedsTable tbody");
-    var checkedBoxes = Array.from(tbody.querySelectorAll('.seed-checkbox:checked'));
-    if (checkedBoxes.length < 2) {
-        alert("Please select at least two seeds/basins to merge.");
+    var allRows = Array.from(tbody.querySelectorAll("tr"));
+    if (allRows.length < 2) {
+        alert("Not enough seeds to merge.");
         return;
     }
-    
-    var rows = checkedBoxes.map(cb => cb.closest("tr"));
-    
+
+    var checkedBoxes = Array.from(tbody.querySelectorAll('.seed-checkbox:checked'));
+
+    // If all rows are checked and there are more than 2 rows total, prompt the user
+    if (checkedBoxes.length === allRows.length && allRows.length > 2) {
+        alert("Please uncheck the seeds you want to keep separate, leaving only the 2 (or more) seeds checked that you wish to merge.");
+        return;
+    }
+
+    if (checkedBoxes.length < 2) {
+        alert("Please select at least two seeds/basins to merge (check their checkboxes).");
+        return;
+    }
+
+    var rowsToMerge = checkedBoxes.map(cb => cb.closest("tr"));
+
     // Find the row with the highest metric value among checked
     var bestRow = null;
     var bestVal = -Infinity;
     var mergedBasinIds = [];
-    
-    rows.forEach(row => {
+
+    rowsToMerge.forEach(row => {
         var valText = row.querySelector(".val-display").textContent.trim();
         var val = parseFloat(valText);
         if (!isFinite(val)) val = -Infinity;
@@ -1200,36 +1232,45 @@ function mergeSelectedSeeds() {
             mergedBasinIds.push(bId);
         }
     });
-    
+
     if (!bestRow) {
-        bestRow = rows[0];
+        bestRow = rowsToMerge[0];
     }
-    
+
     var targetBasinId = parseFloat(bestRow.dataset.basinId);
     var targetTag = bestRow.querySelector(".tag-input").value;
-    
-    // Remove the other selected rows from the table
-    rows.forEach(row => {
+
+    // Remove ONLY the non-winner rows that were selected for merging
+    rowsToMerge.forEach(row => {
         if (row !== bestRow) {
             row.remove();
         }
     });
-    
+
+    // Re-check ALL remaining rows in the table so that unselected rows are preserved and active
+    var remainingRows = tbody.querySelectorAll("tr");
+    remainingRows.forEach(row => {
+        var cb = row.querySelector(".seed-checkbox");
+        if (cb) cb.checked = true;
+    });
+    var topCb = document.querySelector('#seedsTable thead input[type="checkbox"]');
+    if (topCb) topCb.checked = true;
+
     // Re-number generic tags if applicable
-    var allRows = tbody.querySelectorAll("tr");
-    allRows.forEach((row, idx) => {
+    remainingRows.forEach((row, idx) => {
         var tagInput = row.querySelector(".tag-input");
-        if (tagInput.value.startsWith("Seed ") || tagInput.value.startsWith("Optimum ")) {
+        if (tagInput && (tagInput.value.startsWith("Seed ") || tagInput.value.startsWith("Optimum "))) {
             tagInput.value = "Seed " + (idx + 1);
         }
     });
-    
+
     var valDisplayStr = bestVal > -Infinity ? bestVal.toFixed(3) : "N/A";
     appendLog("Merging basins [" + mergedBasinIds.join(", ") + "] into " + targetTag + " (Basin #" + targetBasinId + ", value: " + valDisplayStr + ")");
-    
-    var updatedSeeds = collectSeeds();
-    
-    // Send event to MATLAB to update basinMap and redraw heatmap
+
+    // Collect ALL remaining seeds (pass false so unmerged rows are fully preserved)
+    var updatedSeeds = collectSeeds(false);
+
+    // Send event to MATLAB to update basinMap and redraw heatmap with ALL remaining seeds
     window.htmlComponent.sendEventToMATLAB("MergeBasins", {
         targetBasinId: targetBasinId,
         mergedBasinIds: mergedBasinIds,
