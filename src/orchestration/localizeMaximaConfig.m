@@ -58,7 +58,8 @@ function cfg = localizeMaximaConfig(options)
     %       BasinSensitivity       (1,1) double — H-maxima merge threshold as a fraction
     %                              of the metric range (default 0.005)
     %       BasinMinArea           (1,1) double — Minimum basin size in grid cells (default 4)
-    %       InBasinStarts          (1,1) double — Starts per basin incl. the seed (default 4)
+    %       InBasinStarts          (1,1) double — Starts per basin incl. the seed (default 5)
+    %       BasinValueThreshold    (1,1) double — Value threshold (% of basin range) for starts (default 50)
     %       BasinMap               struct — Pre-computed basin map (refine mode)
     %
     %   Output:
@@ -130,7 +131,8 @@ function cfg = localizeMaximaConfig(options)
         options.UseWatershedBasins (1,1) logical = true
         options.BasinSensitivity (1,1) double {mustBeNonnegative} = 0.005
         options.BasinMinArea (1,1) double {mustBePositive} = 4
-        options.InBasinStarts (1,1) double {mustBePositive, mustBeInteger} = 4
+        options.InBasinStarts (1,1) double {mustBePositive, mustBeInteger} = 5
+        options.BasinValueThreshold (1,1) double {mustBeInRange(options.BasinValueThreshold, 0, 100)} = 50
         options.BasinMap struct = struct([])
     end
 
@@ -243,5 +245,6 @@ function cfg = localizeMaximaConfig(options)
     cfg.basinSensitivity = options.BasinSensitivity;
     cfg.basinMinArea = options.BasinMinArea;
     cfg.inBasinStarts = options.InBasinStarts;
+    cfg.basinValueThreshold = options.BasinValueThreshold;
     cfg.basinMap = options.BasinMap;
 end

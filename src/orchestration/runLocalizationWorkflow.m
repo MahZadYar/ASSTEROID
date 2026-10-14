@@ -1190,7 +1190,7 @@ function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runBasinM
 
     msSolutions = [];
     msOutput = [];
-    nStarts = 4;
+    nStarts = 5;
     if isfield(cfg, "inBasinStarts") && isfinite(cfg.inBasinStarts) && cfg.inBasinStarts >= 1
         nStarts = round(cfg.inBasinStarts);
     end
@@ -1257,17 +1257,23 @@ function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runBasinM
             pIn = pMesh(terr);  rIn = rMesh(terr);  vIn = vals(terr);
             pBox = [max(pBounds(1), min(pIn) - 2*dpCell), min(pBounds(2), max(pIn) + 2*dpCell)];
             rBox = [max(rBounds(1), min(rIn) - 2*drCell), min(rBounds(2), max(rIn) + 2*drCell)];
-            row = find(basinMap.basinIds == bid, 1);
-            if ~isempty(row) && isfinite(basinMap.saddle(row))
-                sad = basinMap.saddle(row);
-                pk = basinMap.peakValue(row);
-                core = vIn >= sad + 0.25 * (pk - sad);
+            vMin = min(vIn);
+            vMax = max(vIn);
+            vRange = vMax - vMin;
+            threshPct = 50;
+            if isfield(cfg, "basinValueThreshold") && isfinite(cfg.basinValueThreshold)
+                threshPct = max(0, min(100, double(cfg.basinValueThreshold)));
+            end
+            if vRange > 0
+                vCutoff = vMin + (threshPct / 100) * vRange;
+                core = vIn >= vCutoff;
             else
-                vSorted = sort(vIn);
-                core = vIn >= vSorted(max(1, ceil(0.75 * numel(vSorted))));
+                core = true(size(vIn));
             end
             if nnz(core) < nStarts
-                core = true(size(vIn));
+                [~, sortIdx] = sort(vIn, 'descend');
+                core = false(size(vIn));
+                core(sortIdx(1:min(numel(sortIdx), max(nStarts, 1)))) = true;
             end
             starts = localFarthestPointStarts([pSeed, rSeed], [pIn(core), rIn(core)], ...
                 nStarts, [dpCell, drCell]);

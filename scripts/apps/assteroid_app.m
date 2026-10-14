@@ -3149,6 +3149,11 @@ function handleOptimizeEvent(src, event, fig, ax)
                 previewOptimizeMetric(src, data, fig, ax);
             case "UpdateSeeds"
                 updateOptimizerSeeds(src, data, fig, ax);
+            case "MergeBasins"
+                if isfield(fig.UserData, 'handles') && isfield(fig.UserData.handles, 'optimizeController') ...
+                        && ~isempty(fig.UserData.handles.optimizeController)
+                    fig.UserData.handles.optimizeController.handleEvent("MergeBasins", data);
+                end
             case "ImportSeedsCsv"
                 importSeedsCsv(src, data, fig, ax);
             case "ExportResults"

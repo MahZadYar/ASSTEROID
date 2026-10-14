@@ -746,7 +746,8 @@ function collectConfig() {
         refinementRadius: num("refinementRadius"),
         useWatershedBasins: chk("useWatershedBasins"),
         basinSensitivity: num("basinSensitivity"),
-        inBasinStarts: num("inBasinStarts")
+        inBasinStarts: num("inBasinStarts"),
+        basinValueThreshold: num("basinValueThreshold")
     };
 }
 
@@ -1168,6 +1169,72 @@ function removeSelectedSeeds() {
         if (tagInput.value.startsWith("Seed ") || tagInput.value.startsWith("Optimum ")) {
             tagInput.value = "Seed " + (idx + 1);
         }
+    });
+}
+
+function mergeSelectedSeeds() {
+    var tbody = document.querySelector("#seedsTable tbody");
+    var checkedBoxes = Array.from(tbody.querySelectorAll('.seed-checkbox:checked'));
+    if (checkedBoxes.length < 2) {
+        alert("Please select at least two seeds/basins to merge.");
+        return;
+    }
+    
+    var rows = checkedBoxes.map(cb => cb.closest("tr"));
+    
+    // Find the row with the highest metric value among checked
+    var bestRow = null;
+    var bestVal = -Infinity;
+    var mergedBasinIds = [];
+    
+    rows.forEach(row => {
+        var valText = row.querySelector(".val-display").textContent.trim();
+        var val = parseFloat(valText);
+        if (!isFinite(val)) val = -Infinity;
+        if (val > bestVal) {
+            bestVal = val;
+            bestRow = row;
+        }
+        var bId = parseFloat(row.dataset.basinId);
+        if (isFinite(bId) && bId > 0 && mergedBasinIds.indexOf(bId) === -1) {
+            mergedBasinIds.push(bId);
+        }
+    });
+    
+    if (!bestRow) {
+        bestRow = rows[0];
+    }
+    
+    var targetBasinId = parseFloat(bestRow.dataset.basinId);
+    var targetTag = bestRow.querySelector(".tag-input").value;
+    
+    // Remove the other selected rows from the table
+    rows.forEach(row => {
+        if (row !== bestRow) {
+            row.remove();
+        }
+    });
+    
+    // Re-number generic tags if applicable
+    var allRows = tbody.querySelectorAll("tr");
+    allRows.forEach((row, idx) => {
+        var tagInput = row.querySelector(".tag-input");
+        if (tagInput.value.startsWith("Seed ") || tagInput.value.startsWith("Optimum ")) {
+            tagInput.value = "Seed " + (idx + 1);
+        }
+    });
+    
+    var valDisplayStr = bestVal > -Infinity ? bestVal.toFixed(3) : "N/A";
+    appendLog("Merging basins [" + mergedBasinIds.join(", ") + "] into " + targetTag + " (Basin #" + targetBasinId + ", value: " + valDisplayStr + ")");
+    
+    var updatedSeeds = collectSeeds();
+    
+    // Send event to MATLAB to update basinMap and redraw heatmap
+    window.htmlComponent.sendEventToMATLAB("MergeBasins", {
+        targetBasinId: targetBasinId,
+        mergedBasinIds: mergedBasinIds,
+        winnerTag: targetTag,
+        seeds: updatedSeeds
     });
 }
 
@@ -1783,9 +1850,8 @@ function toggleAllDbOptima(masterCb) {
                                 </div>
                             </div>
                             <div class="field watershed-only">
-                                <label>Basin Sensitivity: <span id="basinSensitivityLabel">0.5</span> % of range</label>
-                                <input type="range" id="basinSensitivity" class="basin-slider" min="0.1" max="5" step="0.1" value="0.5"
-                                    oninput="document.getElementById('basinSensitivityLabel').textContent = parseFloat(this.value).toFixed(1)">
+                                <label>Basin Sensitivity (% of range)</label>
+                                <input type="number" id="basinSensitivity" value="0.1" step="0.05" min="0">
                             </div>
                             <p class="hint">Each local maximum owns a watershed basin. Peaks whose height above the
                                 saddle to a higher neighbour is below the sensitivity are merged into that neighbour;
@@ -1813,7 +1879,11 @@ function toggleAllDbOptima(masterCb) {
                             <div class="field-row watershed-only">
                                 <div class="field">
                                     <label>Starts per Basin (incl. seed)</label>
-                                    <input type="number" id="inBasinStarts" value="4" step="1" min="1" max="20">
+                                    <input type="number" id="inBasinStarts" value="5" step="1" min="1" max="20">
+                                </div>
+                                <div class="field">
+                                    <label>Start Value Threshold (% of basin range)</label>
+                                    <input type="number" id="basinValueThreshold" value="50" step="5" min="0" max="100">
                                 </div>
                             </div>
                             <div class="field-row radius-mode-only">
@@ -1974,6 +2044,7 @@ function toggleAllDbOptima(masterCb) {
                         <h3>Detected Optima</h3>
                         <div class="bottom-controls">
                             <button class="btn-secondary" onclick="addSeed()">+ Add</button>
+                            <button class="btn-secondary" onclick="mergeSelectedSeeds()" title="Merge selected basins into one; highest value seed becomes representative seed">Merge</button>
                             <button class="btn-secondary" onclick="importSeedsCsv()">Import CSV</button>
                             <button class="btn-secondary" onclick="removeSelectedSeeds()">Remove</button>
                         </div>

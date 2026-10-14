@@ -43,6 +43,8 @@ classdef OptimizeController < handle
                         obj.previewMetric(eventData);
                     case "UpdateSeeds"
                         obj.updateSeeds(eventData);
+                    case "MergeBasins"
+                        obj.mergeBasins(eventData);
                     case "ImportSeedsCsv"
                         obj.importSeedsCsv(eventData);
                     case "ExportResults"
@@ -277,7 +279,8 @@ classdef OptimizeController < handle
                 TuningRadius     = tuningRadiusNm * 1e-3, ...
                 UseWatershedBasins = useBasins, ...
                 BasinSensitivity = basinSens, ...
-                InBasinStarts    = max(1, round(obj.safeNum(d, "inBasinStarts", 4))));
+                InBasinStarts    = max(1, round(obj.safeNum(d, "inBasinStarts", 5))), ...
+                BasinValueThreshold = max(0, min(100, obj.safeNum(d, "basinValueThreshold", 50))));
 
             cfg.metricVariant = metricVariant;
 
@@ -468,6 +471,132 @@ classdef OptimizeController < handle
                 end
             end
 
+            obj.sendToHTML("SeedsUpdated", struct("seeds", seedsNorm));
+        end
+
+        function mergeBasins(obj, d)
+        % MERGEBASINS Merge multiple selected basins into one, updating territories and seeds.
+            targetBasinId = obj.safeNum(d, "targetBasinId", NaN);
+            mergedBasinIds = [];
+            if isfield(d, "mergedBasinIds") && ~isempty(d.mergedBasinIds)
+                mergedBasinIds = double(d.mergedBasinIds(:)');
+            end
+            seeds = [];
+            if isfield(d, "seeds"), seeds = d.seeds; end
+            if isempty(seeds), return; end
+
+            seedsNorm = normalizeSeedInput(seeds);
+
+            basinMap = obj.getOptimizeState("basinMap");
+            if isempty(basinMap) || ~isstruct(basinMap) || ~isfield(basinMap, "labels")
+                % No basin map active; just update seeds
+                obj.updateSeeds(struct("seeds", seedsNorm));
+                return;
+            end
+
+            % Identify target basin ID if not specified
+            if isnan(targetBasinId) || targetBasinId <= 0
+                if ~isempty(mergedBasinIds)
+                    targetBasinId = mergedBasinIds(1);
+                elseif isfield(seedsNorm(1), "BasinId") && isfinite(seedsNorm(1).BasinId)
+                    targetBasinId = seedsNorm(1).BasinId;
+                end
+            end
+
+            if ~isempty(mergedBasinIds) && isfinite(targetBasinId) && targetBasinId > 0
+                % 1. Relabel cells in basinMap.labels
+                mask = ismember(basinMap.labels, mergedBasinIds);
+                basinMap.labels(mask) = uint32(targetBasinId);
+
+                % 2. Recompute boundary polygon for targetBasinId
+                otherIds = setdiff(mergedBasinIds, targetBasinId);
+                bw = basinMap.labels == targetBasinId;
+                B = bwboundaries(bw, 8, "noholes");
+                px = []; py = [];
+                if ~isempty(B)
+                    [~, longest] = max(cellfun(@(b) size(b, 1), B));
+                    b = B{longest};
+                    px = double(basinMap.pAxis_nm(b(:, 2))); px = px(:);
+                    py = double(basinMap.rAxis_nm(b(:, 1))); py = py(:);
+                end
+
+                % 3. Update basinMap.polygons
+                if isfield(basinMap, "polygons") && ~isempty(basinMap.polygons)
+                    kTarget = find([basinMap.polygons.BasinId] == targetBasinId, 1);
+                    if isempty(kTarget)
+                        basinMap.polygons(end + 1) = struct("BasinId", targetBasinId, "P_nm", px, "R_nm", py);
+                    else
+                        basinMap.polygons(kTarget).P_nm = px;
+                        basinMap.polygons(kTarget).R_nm = py;
+                    end
+                    keepPoly = ~ismember([basinMap.polygons.BasinId], otherIds);
+                    basinMap.polygons = basinMap.polygons(keepPoly);
+                end
+
+                % 4. Update basinMap.basinIds, peakValue, saddle
+                if isfield(basinMap, "basinIds") && ~isempty(basinMap.basinIds)
+                    keepB = ~ismember(basinMap.basinIds, otherIds);
+                    basinMap.basinIds = basinMap.basinIds(keepB);
+                    if isfield(basinMap, "peakValue") && numel(basinMap.peakValue) == numel(keepB)
+                        basinMap.peakValue = basinMap.peakValue(keepB);
+                    end
+                    if isfield(basinMap, "saddle") && numel(basinMap.saddle) == numel(keepB)
+                        basinMap.saddle = basinMap.saddle(keepB);
+                    end
+                end
+
+                % 5. Mark as user-merged in basinMapMeta
+                meta = obj.getOptimizeState("basinMapMeta");
+                if isstruct(meta)
+                    meta.isUserMerged = true;
+                    obj.updateOptimizeState("basinMapMeta", meta);
+                end
+
+                obj.updateOptimizeState("basinMap", basinMap);
+
+                % Update lastResults / previewResults if present
+                lastRes = obj.getOptimizeState("lastResults");
+                if ~isempty(lastRes) && isfield(lastRes, "metrics") && ~isempty(lastRes.metrics) && isstruct(lastRes.metrics{1})
+                    lastRes.metrics{1}.basinMap = basinMap;
+                    obj.updateOptimizeState("lastResults", lastRes);
+                end
+                prevRes = obj.getOptimizeState("previewResults");
+                if ~isempty(prevRes) && isfield(prevRes, "metrics") && ~isempty(prevRes.metrics) && isstruct(prevRes.metrics{1})
+                    prevRes.metrics{1}.basinMap = basinMap;
+                    obj.updateOptimizeState("previewResults", prevRes);
+                end
+            end
+
+            % 6. Ensure winner seed in seedsNorm has BasinId = targetBasinId
+            for i = 1:numel(seedsNorm)
+                if isfield(seedsNorm(i), "BasinId") && ismember(seedsNorm(i).BasinId, mergedBasinIds)
+                    seedsNorm(i).BasinId = targetBasinId;
+                end
+            end
+
+            obj.updateOptimizeState("currentSeeds", seedsNorm);
+
+            % 7. Re-draw heatmap
+            ax = obj.getAxes();
+            resToPlot = obj.getOptimizeState("lastResults");
+            if isempty(resToPlot)
+                resToPlot = obj.getOptimizeState("previewResults");
+            end
+
+            if ~isempty(resToPlot) && ~isempty(ax) && isvalid(ax)
+                baseMetric = obj.getOptimizeState("baseMetric");
+                if isempty(baseMetric), baseMetric = "EF_vol"; end
+                metricVariant = obj.getOptimizeState("metricVariant");
+                if isempty(metricVariant), metricVariant = "avg"; end
+                try
+                    delete(allchild(ax));
+                    plotOptimizeHeatmap(resToPlot, baseMetric, metricVariant, ax, [], seedsNorm, [], false, basinMap);
+                catch ME
+                    fprintf("[OptimizeController] MergeBasins plot warning: %s\n", ME.message);
+                end
+            end
+
+            % 8. Notify UI
             obj.sendToHTML("SeedsUpdated", struct("seeds", seedsNorm));
         end
 
@@ -961,7 +1090,7 @@ classdef OptimizeController < handle
                 return;
             end
             same = meta.metric == string(baseMetric) && meta.variant == string(metricVariant) ...
-                && abs(meta.sensitivity - sensitivity) < 1e-12 ...
+                && (abs(meta.sensitivity - sensitivity) < 1e-12 || (isfield(meta, "isUserMerged") && meta.isUserMerged)) ...
                 && isequal(meta.pLimits, pLimits) && isequal(meta.rLimits, rLimits);
             if same
                 bm = stored;

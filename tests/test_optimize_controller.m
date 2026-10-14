@@ -57,6 +57,34 @@ assert(curSeeds(1).Tag == "Custom_Optimum_1", "Expected updated tag Custom_Optim
 assert(curSeeds(2).P == 880.0, "Expected updated period 880.0.");
 fprintf("  ✓ UpdateSeeds preserved renamed tags and updated coordinates.\n");
 
+%% 7b. Test MergeBasins event
+dummyBasinMap = struct();
+dummyBasinMap.labels = uint32([1 1 2 2; 1 1 2 2]);
+dummyBasinMap.pAxis_nm = [400 600 800 1000];
+dummyBasinMap.rAxis_nm = [100 200];
+dummyBasinMap.basinIds = [1; 2];
+dummyBasinMap.peakValue = [145.2; 98.7];
+dummyBasinMap.saddle = [50; 50];
+dummyBasinMap.polygons = [
+    struct("BasinId", 1, "P_nm", [400 600 600 400], "R_nm", [100 100 200 200]), ...
+    struct("BasinId", 2, "P_nm", [800 1000 1000 800], "R_nm", [100 100 200 200])
+];
+ctl.updateOptimizeState("basinMap", dummyBasinMap);
+ctl.updateOptimizeState("basinMapMeta", struct("metric", "EF_vol", "variant", "avg", "sensitivity", 0.001, "pLimits", [400 1400], "rLimits", [50 700]));
+
+mergedSeed = struct("Tag", "Custom_Optimum_1", "P", 750.0, "R", 120.0, "Value", 145.2, "BasinId", 1);
+ctl.handleEvent("MergeBasins", struct("targetBasinId", 1, "mergedBasinIds", [1 2], "seeds", [mergedSeed]));
+bmAfter = ctl.getOptimizeState("basinMap");
+assert(all(bmAfter.labels(:) == 1), "All cells should now have BasinId 1.");
+assert(numel(bmAfter.basinIds) == 1 && bmAfter.basinIds == 1, "Only BasinId 1 should remain.");
+assert(numel(bmAfter.polygons) == 1 && bmAfter.polygons(1).BasinId == 1, "Only polygon for BasinId 1 should remain.");
+curSeedsAfter = ctl.getOptimizeState("currentSeeds");
+assert(numel(curSeedsAfter) == 1, "Expected 1 seed after merge.");
+assert(curSeedsAfter(1).Tag == "Custom_Optimum_1", "Winner tag should be preserved.");
+metaAfter = ctl.getOptimizeState("basinMapMeta");
+assert(isfield(metaAfter, "isUserMerged") && metaAfter.isUserMerged, "Meta should be marked isUserMerged.");
+fprintf("  ✓ MergeBasins correctly merged territories, polygons, and seeds.\n");
+
 %% 8. Test ExportResults to MAT (only optima list, not whole DB)
 matPath = fullfile(testDir, "exported_optima.mat");
 ctl.handleEvent("ExportResults", struct("exportFormat", "mat", "path", matPath, "seeds", updatedSeeds));
