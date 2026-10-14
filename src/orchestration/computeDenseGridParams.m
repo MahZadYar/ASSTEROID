@@ -43,7 +43,7 @@ function gridParams = computeDenseGridParams(options)
     arguments
         options.LambdaLaser (1,1) double {mustBePositive} = 785
         options.PLimits (1,2) double {mustBePositive} = [750, 950]
-        options.RLimits (1,2) double {mustBePositive} = [50, 450]
+        options.RLimits (1,2) double {mustBePositive} = [50, 700]
         options.StokesShiftLimits (1,2) double = [100, 3600]
         options.Resolution (1,1) double {mustBePositive} = 0.75
         options.StokesShiftResolution (1,1) double {mustBePositive} = 2

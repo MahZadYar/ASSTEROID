@@ -135,6 +135,15 @@ function results = runLocalizationWorkflow(cfg, reporter)
             allData.radius = cfg.rLimits(:) * 1;
             allData.lambda = gp.lambdaSamples * 1e3; % µm→nm, [1×Nl]
         end
+        if isfield(cfg, "cachedAllData") && isstruct(cfg.cachedAllData) ...
+                && isfield(cfg.cachedAllData, "period") && isfield(cfg.cachedAllData, "radius") && ~isempty(cfg.cachedAllData.period)
+            dataP = [min(cfg.cachedAllData.period), max(cfg.cachedAllData.period)];
+            dataR = [min(cfg.cachedAllData.radius), max(cfg.cachedAllData.radius)];
+            if dataSource == "predictions" || dataR(2) > cfg.rLimits(2)
+                cfg.pLimits = dataP;
+                cfg.rLimits = dataR;
+            end
+        end
         pSamples  = cfg.pLimits / 1e3;   % nm → µm
         rSamples  = cfg.rLimits / 1e3;
         lambdaSamples = gp.lambdaSamples; % already in µm
@@ -197,6 +206,17 @@ function results = runLocalizationWorkflow(cfg, reporter)
             modelPredArgs = [modelPredArgs, {"MetricsShiftLimits", cfg.metricsShiftLimits}];
         end
         allData = loadOrGeneratePredictions(modelPredArgs{:});
+    end
+
+    if isstruct(allData) && isfield(allData, "period") && isfield(allData, "radius") && ~isempty(allData.period)
+        dataP = [min(allData.period), max(allData.period)];
+        dataR = [min(allData.radius), max(allData.radius)];
+        if dataSource == "predictions" || (isfield(cfg, "cachedAllData") && ~isempty(cfg.cachedAllData)) || dataR(2) > cfg.rLimits(2)
+            cfg.pLimits = dataP;
+            cfg.rLimits = dataR;
+            reporter.info(sprintf("[runLocalizationWorkflow] Adopting data bounds: P=[%.0f, %.0f] nm, R=[%.0f, %.0f] nm.", ...
+                dataP(1), dataP(2), dataR(1), dataR(2)));
+        end
     end
 
     if ~skipGrid || ~hasCandidates
@@ -389,8 +409,12 @@ function results = runLocalizationWorkflow(cfg, reporter)
                     end
                     if ~isempty(basinGrid)
                         basinGrid = localMaskToLimits(basinGrid, pBasin, rBasin, cfg);
+                        wsRatio = [ratioLowerVal, ratioUpperVal];
+                        if dataSource == "predictions" || (ratioLowerVal <= 0 && (isinf(ratioUpperVal) || ratioUpperVal >= 1))
+                            wsRatio = [0, Inf];
+                        end
                         [~, basinMap] = detect_watershed_basins(basinGrid, pBasin, rBasin, ...
-                            Sensitivity=basinSens, RatioLimit=[ratioLowerVal, ratioUpperVal], ...
+                            Sensitivity=basinSens, RatioLimit=wsRatio, ...
                             MinArea=basinMinArea);
                         reporter.info(sprintf("  Rebuilt basin map from grid (%d basins, sensitivity %.2f %%).", ...
                             numel(basinMap.basinIds), 100 * basinSens));
@@ -401,10 +425,14 @@ function results = runLocalizationWorkflow(cfg, reporter)
                 end
             end
         elseif useBasins
+            wsRatio = [ratioLowerVal, ratioUpperVal];
+            if dataSource == "predictions" || (ratioLowerVal <= 0 && (isinf(ratioUpperVal) || ratioUpperVal >= 1))
+                wsRatio = [0, Inf];
+            end
             [candidateTable, basinMap] = detect_watershed_basins( ...
                 localMaskToLimits(avgMetricGrid, pSamplesLocal, rSamplesLocal, cfg), ...
                 pSamplesLocal, rSamplesLocal, ...
-                Sensitivity=basinSens, RatioLimit=[ratioLowerVal, ratioUpperVal], ...
+                Sensitivity=basinSens, RatioLimit=wsRatio, ...
                 MinArea=basinMinArea, MaxBasins=cfg.numLocalMaxima);
             basePeakMask = [];
             gradMagnitude = [];
@@ -1413,6 +1441,10 @@ function grid = localMaskToLimits(grid, pS, rS, cfg)
     % Set cells outside cfg.pLimits × cfg.rLimits (nm) to NaN so watershed
     % basins never extend beyond the refinement search domain.
     if isempty(grid) || ~isfield(cfg, 'pLimits') || ~isfield(cfg, 'rLimits')
+        return;
+    end
+    % When using precomputed predictions data, follow data without artificial limits
+    if isfield(cfg, 'dataSource') && cfg.dataSource == "predictions"
         return;
     end
     tol = 1e-9;

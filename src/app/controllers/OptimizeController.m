@@ -63,6 +63,8 @@ classdef OptimizeController < handle
                         obj.saveDatabaseRequest();
                     case "MetricChanged"
                         obj.updateMetricState(eventData);
+                    case "GetPredictionBounds"
+                        obj.sendPredictionBounds();
                     case {"StopProcess", "StopOptimize"}
                         obj.stopOptimization();
                     otherwise
@@ -101,7 +103,19 @@ classdef OptimizeController < handle
             pMin = obj.safeNum(d, "periodMin", 400);
             pMax = obj.safeNum(d, "periodMax", 1400);
             rMin = obj.safeNum(d, "radiusMin", 50);
-            rMax = obj.safeNum(d, "radiusMax", 450);
+            rMax = obj.safeNum(d, "radiusMax", 700);
+
+            if (dataSource == "predictions" || (isfield(obj.session.db, "Pred") && structRowCount(obj.session.db.Pred) > 0))
+                predSoA = extractBranchAsSoA(obj.session.db, "Pred");
+                if isstruct(predSoA) && isfield(predSoA, "period") && isfield(predSoA, "radius") && ~isempty(predSoA.period)
+                    pDataMin = min(predSoA.period); pDataMax = max(predSoA.period);
+                    rDataMin = min(predSoA.radius); rDataMax = max(predSoA.radius);
+                    if dataSource == "predictions"
+                        pMin = pDataMin; pMax = pDataMax;
+                        rMin = rDataMin; rMax = rDataMax;
+                    end
+                end
+            end
             sMin = obj.safeNum(d, "stokesShiftMin", 100);
             sMax = obj.safeNum(d, "stokesShiftMax", 3600);
             sRes = obj.safeNum(d, "fineTuneSpectralResolution", obj.safeNum(d, "stokesShiftResolution", 5));
@@ -188,7 +202,19 @@ classdef OptimizeController < handle
             pMin = obj.safeNum(d, "periodMin", 400);
             pMax = obj.safeNum(d, "periodMax", 1400);
             rMin = obj.safeNum(d, "radiusMin", 50);
-            rMax = obj.safeNum(d, "radiusMax", 450);
+            rMax = obj.safeNum(d, "radiusMax", 700);
+
+            if (obj.safeStr(d, "dataSource", "model") == "predictions" || (isfield(obj.session.db, "Pred") && structRowCount(obj.session.db.Pred) > 0))
+                predSoA = extractBranchAsSoA(obj.session.db, "Pred");
+                if isstruct(predSoA) && isfield(predSoA, "period") && isfield(predSoA, "radius") && ~isempty(predSoA.period)
+                    pDataMin = min(predSoA.period); pDataMax = max(predSoA.period);
+                    rDataMin = min(predSoA.radius); rDataMax = max(predSoA.radius);
+                    if obj.safeStr(d, "dataSource", "model") == "predictions"
+                        pMin = pDataMin; pMax = pDataMax;
+                        rMin = rDataMin; rMax = rDataMax;
+                    end
+                end
+            end
             sMin = obj.safeNum(d, "stokesShiftMin", 100);
             sMax = obj.safeNum(d, "stokesShiftMax", 3600);
             sRes = obj.safeNum(d, "fineTuneSpectralResolution", obj.safeNum(d, "stokesShiftResolution", 5));
@@ -829,7 +855,7 @@ classdef OptimizeController < handle
             pMin = obj.safeNum(d, "periodMin", 400);
             pMax = obj.safeNum(d, "periodMax", 1400);
             rMin = obj.safeNum(d, "radiusMin", 50);
-            rMax = obj.safeNum(d, "radiusMax", 450);
+            rMax = obj.safeNum(d, "radiusMax", 700);
             sMin = obj.safeNum(d, "stokesShiftMin", 100);
             sMax = obj.safeNum(d, "stokesShiftMax", 3600);
             sRes = obj.safeNum(d, "stokesShiftResolution", 5);
@@ -941,6 +967,32 @@ classdef OptimizeController < handle
                 bm = stored;
             end
         end
+
+        function sendPredictionBounds(obj)
+        % SENDPREDICTIONBOUNDS Send period and radius bounds from db.Pred to HTML.
+            predData = [];
+            if isfield(obj.session.db, "Pred") && isstruct(obj.session.db.Pred) && structRowCount(obj.session.db.Pred) > 0
+                predData = obj.session.db.Pred;
+            elseif ~isempty(obj.fig) && isvalid(obj.fig) && isfield(obj.fig.UserData, "db") ...
+                    && isfield(obj.fig.UserData.db, "Pred") && structRowCount(obj.fig.UserData.db.Pred) > 0
+                predData = obj.fig.UserData.db.Pred;
+            end
+            if isempty(predData)
+                [~, ~, ~, predFile] = obj.resolvePaths();
+                if strlength(predFile) > 0 && isfile(predFile)
+                    loaded = load(predFile);
+                    if isfield(loaded, "allData"), predData = loaded.allData;
+                    elseif isfield(loaded, "predictions"), predData = loaded.predictions;
+                    elseif isfield(loaded, "db") && isfield(loaded.db, "Pred"), predData = loaded.db.Pred;
+                    end
+                end
+            end
+            if isstruct(predData) && isfield(predData, "period") && isfield(predData, "radius") && ~isempty(predData.period)
+                obj.sendToHTML("DataBounds", struct( ...
+                    "periodMin", min(predData.period), "periodMax", max(predData.period), ...
+                    "radiusMin", min(predData.radius), "radiusMax", max(predData.radius)));
+            end
+        end
     end
 
     %% Internal Helpers
@@ -1041,6 +1093,12 @@ classdef OptimizeController < handle
                 catch ME_plot
                     fprintf("[OptimizeController] Visualization warning: %s\n", ME_plot.message);
                 end
+            end
+
+            if isfield(allData, "period") && isfield(allData, "radius") && ~isempty(allData.period)
+                obj.sendToHTML("DataBounds", struct( ...
+                    "periodMin", min(allData.period), "periodMax", max(allData.period), ...
+                    "radiusMin", min(allData.radius), "radiusMax", max(allData.radius)));
             end
 
             obj.sendToHTML("PreviewComplete", struct("metric", baseMetric, "variant", metricVariant));

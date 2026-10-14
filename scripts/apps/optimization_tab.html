@@ -577,6 +577,15 @@ function setup(htmlComponent) {
         }
     });
 
+    htmlComponent.addEventListener("DataBounds", function(event) {
+        var d = event.Data || {};
+        if (d.periodMin !== undefined) { document.getElementById("periodMin").value = d.periodMin; }
+        if (d.periodMax !== undefined) { document.getElementById("periodMax").value = d.periodMax; }
+        if (d.radiusMin !== undefined) { document.getElementById("radiusMin").value = d.radiusMin; }
+        if (d.radiusMax !== undefined) { document.getElementById("radiusMax").value = d.radiusMax; }
+        appendLog("Grid bounds synced with data: P=[" + d.periodMin + ", " + d.periodMax + "] nm, R=[" + d.radiusMin + ", " + d.radiusMax + "] nm.");
+    });
+
     // Listen to metric/variant changes and sync to MATLAB state
     var metricSelect = document.getElementById("metric");
     var variantSelect = document.getElementById("metricVariant");
@@ -805,6 +814,9 @@ function toggleDataSource() {
     var genPredBlock = document.getElementById("genPredBlock");
     if (genPredBlock) {
         genPredBlock.style.display = (source === "predictions") ? "none" : "";
+    }
+    if (source === "predictions" && window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("GetPredictionBounds", {});
     }
 }
 
@@ -1677,7 +1689,7 @@ function toggleAllDbOptima(masterCb) {
                                 </div>
                                 <div class="field">
                                     <label>Radius Max (nm)</label>
-                                    <input type="number" id="radiusMax" value="450" step="1">
+                                    <input type="number" id="radiusMax" value="700" step="1">
                                 </div>
                             </div>
                             <div class="field-row">

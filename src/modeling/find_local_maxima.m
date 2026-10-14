@@ -635,7 +635,7 @@ parser.addParameter('RBounds', [0.05, 0.5], @(v)isnumeric(v) && numel(v) == 2);
 parser.addParameter('PStartBounds', [], @(v)isnumeric(v) && (isempty(v) || numel(v) == 2));
 parser.addParameter('RStartBounds', [], @(v)isnumeric(v) && (isempty(v) || numel(v) == 2));
 parser.addParameter('RatioLower', 0, @(x)isnumeric(x) && isscalar(x));
-parser.addParameter('RatioUpper', 0.49, @(x)isnumeric(x) && isscalar(x));
+parser.addParameter('RatioUpper', inf, @(x)isnumeric(x) && isscalar(x));
 parser.addParameter('MiniBatchSize', 1024, @(x)isnumeric(x) && isscalar(x) && x > 0);
 parser.addParameter('UseParallel', true, @(b)islogical(b) || isnumeric(b));
 parser.addParameter('FunctionTolerance', 1e-8, @(x)isnumeric(x) && isscalar(x) && x > 0);

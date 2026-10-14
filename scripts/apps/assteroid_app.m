@@ -3210,7 +3210,7 @@ function generateDensePredictions(src, d, fig)
         periodMin   = safeNum(d, "periodMin", 400);
         periodMax   = safeNum(d, "periodMax", 1400);
         radiusMin   = safeNum(d, "radiusMin", 50);
-        radiusMax   = safeNum(d, "radiusMax", 450);
+        radiusMax   = safeNum(d, "radiusMax", 700);
         spatialRes  = safeNum(d, "spatialResolution", 2);
         stokesMin   = safeNum(d, "stokesShiftMin", 100);
         stokesMax   = safeNum(d, "stokesShiftMax", 3600);
@@ -3571,7 +3571,7 @@ function runOptimizePipeline(src, d, fig, ax)
     else
         gridLambdaLaser  = safeNum(d, "laserWavelength", 785);
         gridPLimits      = [safeNum(d, "periodMin", 400), safeNum(d, "periodMax", 1400)];
-        gridRLimits      = [safeNum(d, "radiusMin", 50),  safeNum(d, "radiusMax", 450)];
+        gridRLimits      = [safeNum(d, "radiusMin", 50),  safeNum(d, "radiusMax", 700)];
         gridRawStokesMin = safeNum(d, "stokesShiftMin", 100);
         gridRawStokesMax = safeNum(d, "stokesShiftMax", 3600);
         gridSpatialRes   = safeNum(d, "spatialResolution", 0.7);
@@ -3917,7 +3917,7 @@ function previewOptimizeMetric(src, d, fig, ax)
         dataSource = safeStr(d, "dataSource", "model");
         lambdaLaser = safeNum(d, "laserWavelength", 785);
         pLimits = [safeNum(d, "periodMin", 400), safeNum(d, "periodMax", 1400)];
-        rLimits = [safeNum(d, "radiusMin", 50), safeNum(d, "radiusMax", 450)];
+        rLimits = [safeNum(d, "radiusMin", 50), safeNum(d, "radiusMax", 700)];
         spatialRes = safeNum(d, "spatialResolution", 2);
         stokesRes = safeNum(d, "stokesShiftResolution", 5);
         
