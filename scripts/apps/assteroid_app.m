@@ -295,6 +295,7 @@ function figOut = assteroid_app(workFolder)
         "traces", emptyVisualizeTraces());
 
     h6.HTMLEventReceivedFcn = @(src, ev) handleVisualizeEvent(src, ev, fig);
+    visTabGroup6.SelectionChangedFcn = @(src, ev) handleVisSubTabSelection(src, ev, fig);
 
     %% Store all HTML handles -------------------------------------------------
     fig.UserData.handles.htmlPanels = [h0, h1, h2, h3, h4, h5, h5, h6, consoleHtml];
@@ -1189,6 +1190,32 @@ function handleMainTabSelection(~, ev, fig)
     if nargin >= 2 && ~isempty(ev) && isprop(ev, "NewValue") && ~isempty(ev.NewValue)
         tabTitle = string(ev.NewValue.Title);
         logToConsole(fig, sprintf("Switched to %s", tabTitle), "system");
+        if contains(tabTitle, "Visualize") || contains(tabTitle, "6")
+            if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "visController") ...
+                    && ~isempty(fig.UserData.handles.visController)
+                try fig.UserData.handles.visController.sendBranchInfo(); catch; end
+            end
+        end
+    end
+end
+
+function handleVisSubTabSelection(~, ev, fig)
+%handleVisSubTabSelection  Synchronize active sub-tab (1D/2D/3D) to HTML panel.
+    if isempty(fig) || ~isvalid(fig) || isempty(ev) || ~isprop(ev, "NewValue") || isempty(ev.NewValue)
+        return;
+    end
+    h = fig.UserData.handles;
+    if ~isfield(h, "visualizeHtml") || ~isvalid(h.visualizeHtml), return; end
+    subTab = ev.NewValue;
+    mode = "1d";
+    if isfield(h, "visualizeTab2D") && subTab == h.visualizeTab2D
+        mode = "2d";
+    elseif isfield(h, "visualizeTab3D") && subTab == h.visualizeTab3D
+        mode = "3d";
+    end
+    try
+        sendEventToHTMLSource(h.visualizeHtml, "SetVisMode", struct("mode", mode));
+    catch
     end
 end
 

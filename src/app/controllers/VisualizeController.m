@@ -45,7 +45,7 @@ classdef VisualizeController < handle
 
             try
                 switch eventName
-                    case "RequestBranchInfo"
+                    case {"RequestBranchInfo", "ClientReady"}
                         obj.sendBranchInfo();
                     case "Render"
                         obj.runRender(eventData);
@@ -57,6 +57,8 @@ classdef VisualizeController < handle
                         obj.saveDatabase();
                     case "StopProcess"
                         obj.stopProcess();
+                    case {"VisModeSelect", "SelectVisMode"}
+                        obj.selectMode(eventData);
                     otherwise
                         fprintf("[VisualizeController] Unknown event: %s\n", eventName);
                 end
@@ -66,6 +68,7 @@ classdef VisualizeController < handle
                 elseif obj.isStopRequested() || strcmp(ME.identifier, "Process:Terminated")
                     obj.notifyStopped("Visualization terminated by user.");
                 else
+                    fprintf("[VisualizeController] Error in %s: %s\n", eventName, getReport(ME, "basic"));
                     obj.sendToHTML("VisError", string(ME.message));
                 end
             end
@@ -166,6 +169,23 @@ classdef VisualizeController < handle
                 end
             end
             obj.session.requestStop();
+        end
+
+        function selectMode(obj, d)
+        % SELECTMODE Switch right-side tab group to match selected visualization mode.
+            mode = lower(obj.safeStr(d, "mode", "1d"));
+            tabGroup = obj.getHandle("visualizeTabGroup");
+            if ~isempty(tabGroup) && isvalid(tabGroup)
+                switch mode
+                    case "1d"
+                        tabGroup.SelectedTab = obj.getHandle("visualizeTab1D");
+                    case "2d"
+                        tabGroup.SelectedTab = obj.getHandle("visualizeTab2D");
+                    case "3d"
+                        tabGroup.SelectedTab = obj.getHandle("visualizeTab3D");
+                end
+                drawnow;
+            end
         end
     end
 
@@ -780,7 +800,19 @@ classdef VisualizeController < handle
                     lvl = "info";
                     if strcmp(eventName, "VisError"), lvl = "error";
                     elseif strcmp(eventName, "VisualizeComplete"), lvl = "success"; end
-                    try obj.fig.UserData.app.logMessage(string(payload), lvl, "Stage 6 — Visualize"); catch; end
+                    msgText = "";
+                    if isstruct(payload)
+                        if isfield(payload, "message") && ~isempty(payload.message)
+                            msgText = string(payload.message);
+                        elseif isfield(payload, "error") && ~isempty(payload.error)
+                            msgText = string(payload.error);
+                        end
+                    elseif isstring(payload) || ischar(payload)
+                        msgText = string(payload);
+                    end
+                    if msgText ~= ""
+                        try obj.fig.UserData.app.logMessage(msgText, lvl, "Stage 6 — Visualize"); catch; end
+                    end
                 end
             end
         end

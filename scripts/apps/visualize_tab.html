@@ -100,7 +100,7 @@
         padding: 10px 16px; background: var(--accent);
         color: #000 !important; font-weight: 700;
         border: none; border-radius: 6px; font-size: 12px;
-        cursor: pointer; transition: background 0.2s;
+        cursor: pointer; transition: background 0.2s, transform 0.1s;
     }
     .btn-primary:hover { background: var(--accent-hover); }
     .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -111,17 +111,9 @@
     }
     .btn-secondary:hover { background: var(--border); }
     .btn-secondary.small { padding: 4px 10px; }
-    .btn-stop {
-        background: #c62828 !important; color: #ffffff !important;
-        border: 1px solid #e53935 !important; border-radius: 6px;
-        padding: 6px 12px; font-size: 11px; font-weight: 700; cursor: pointer;
-        display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-        transition: all 0.2s ease; box-shadow: 0 2px 5px rgba(198, 40, 40, 0.4);
-    }
-    .btn-stop:hover { background: #e53935 !important; }
-    .btn-stop:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
     .btn-row { display: flex; gap: 8px; margin-top: 4px; }
-    .btn-row .btn-primary { flex: 1; }
+    .btn-row .btn-primary { flex: 2; }
+    .btn-row .btn-secondary { flex: 1; }
     button:focus-visible, input:focus-visible, select:focus-visible {
         outline: 2px solid var(--accent) !important; outline-offset: 2px !important;
     }
@@ -132,15 +124,53 @@
     .mode-block.show { display: block; }
 
     /* Bottom panel */
-    .bottom-panel { background: var(--bg-secondary); border-top: 1px solid var(--border); padding: 8px 12px; flex-shrink: 0; }
-    #progressArea {
-        background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 8px;
-        font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 11px; color: var(--text-secondary);
-        max-height: 120px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+    .bottom-panel {
+        background: var(--bg-secondary);
+        border-top: 1px solid var(--border);
+        padding: 8px 12px;
+        flex-shrink: 0;
     }
-    .progress-bar-container { width: 100%; height: 4px; background: var(--bg-tertiary); border-radius: 2px; margin-top: 6px; overflow: hidden; }
-    .progress-bar { height: 100%; background: var(--accent); border-radius: 2px; width: 0%; transition: width 0.3s ease; }
-    .status-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+    #progressArea {
+        background: var(--bg-primary);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 8px;
+        max-height: 110px;
+        overflow-y: auto;
+    }
+    #progressLog {
+        font-family: 'Cascadia Code', 'Consolas', monospace;
+        font-size: 11px;
+        color: var(--text-secondary);
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin: 0;
+        user-select: text;
+    }
+    .progress-bar-container {
+        width: 100%;
+        height: 5px;
+        background: var(--bg-tertiary);
+        border-radius: 3px;
+        margin-top: 6px;
+        overflow: hidden;
+    }
+    .progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, var(--accent), var(--accent-hover, #6bd1cb));
+        border-radius: 3px;
+        width: 0%;
+        transition: width 0.25s ease;
+    }
+    .status-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 10px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
     .status-idle { background: var(--bg-tertiary); color: var(--text-secondary); }
     .status-running { background: #1b5e20; color: #a5d6a7; }
     .status-done { background: #0d47a1; color: #90caf9; }
@@ -157,8 +187,28 @@ var VIS = {
     busy: false
 };
 
+function sendToMATLAB(name, data) {
+    data = data || {};
+    try {
+        if (window.htmlComponent && window.htmlComponent.sendEventToMATLAB) {
+            window.htmlComponent.sendEventToMATLAB(name, data);
+        } else if (window.AssteroidBridge && window.AssteroidBridge.send) {
+            window.AssteroidBridge.send(name, data);
+        } else {
+            console.warn("[Visualize] Bridge not ready; queuing " + name);
+            setTimeout(function() { sendToMATLAB(name, data); }, 60);
+        }
+    } catch (err) {
+        console.error("[Visualize] sendToMATLAB error for " + name + ":", err);
+    }
+}
+
 function setup(htmlComponent) {
     window.htmlComponent = htmlComponent;
+
+    if (window.AssteroidBridge && window.AssteroidBridge.init) {
+        try { window.AssteroidBridge.init("Stage6_Visualize"); } catch(e) {}
+    }
 
     htmlComponent.addEventListener("Progress", function(event) { handleProgress(event.Data); });
     htmlComponent.addEventListener("VisualizeBranchInfo", function(event) {
@@ -167,22 +217,34 @@ function setup(htmlComponent) {
     });
     htmlComponent.addEventListener("VisualizeComplete", function(event) {
         var d = event.Data || {};
+        var msg = typeof d === "string" ? d : (d.message || "Render complete.");
         setStatus("done", "Rendered");
-        appendLog(typeof d === "string" ? d : (d.message || "Render complete."));
-        if (d.warnings) { normalizeArray(d.warnings).forEach(function(w) { appendLog("Note: " + w); }); }
+        appendLog(msg);
+        if (d.warnings) {
+            normalizeArray(d.warnings).forEach(function(w) { appendLog("Note: " + w); });
+        }
         setBusy(false);
     });
     htmlComponent.addEventListener("VisualizeSnapped", function(event) {
         var d = event.Data || {};
         if (isFinite(d.p)) document.getElementById("p1d").value = round2(d.p);
         if (isFinite(d.r)) document.getElementById("r1d").value = round2(d.r);
-        document.getElementById("snapInfo").textContent =
-            "Snapped to simulated geometry #" + d.index + " (Δ = " + round2(d.distance) + " nm)";
+        var snapEl = document.getElementById("snapInfo");
+        if (snapEl) {
+            snapEl.textContent = "Snapped to simulated geometry #" + d.index + " (Δ = " + round2(d.distance) + " nm)";
+        }
     });
     htmlComponent.addEventListener("VisError", function(event) {
         setStatus("error", "Error");
-        appendLog("ERROR: " + (event.Data || "Unknown error"));
+        var errMsg = typeof event.Data === "string" ? event.Data : (event.Data ? (event.Data.message || JSON.stringify(event.Data)) : "Unknown error");
+        appendLog("ERROR: " + errMsg, "error");
         setBusy(false);
+        var area = document.getElementById("progressArea");
+        var btnLog = document.getElementById("btnToggleLog");
+        if (area) {
+            area.style.display = "block";
+            if (btnLog) btnLog.textContent = "✖ Hide Log";
+        }
     });
     htmlComponent.addEventListener("PreselectBranch", function(event) {
         var d = event.Data || {};
@@ -191,12 +253,24 @@ function setup(htmlComponent) {
         refreshAll();
         appendLog("Preselected branch db." + (d.branch || "?") + " from Stage 4.");
     });
+    htmlComponent.addEventListener("SetVisMode", function(event) {
+        var d = event.Data || {};
+        if (d.mode) {
+            setRadio("visMode", d.mode);
+            updateModeBlocks();
+            updateMetricLists();
+            updateRenderAvailability();
+        }
+    });
     htmlComponent.addEventListener("DbStatus", function(event) {
         VIS.db = event.Data || {};
         updateDbBanner(VIS.db);
-        window.htmlComponent.sendEventToMATLAB("RequestBranchInfo", {});
+        sendToMATLAB("RequestBranchInfo", {});
     });
-    htmlComponent.addEventListener("SaveComplete", function(event) { appendLog(event.Data || "Database saved."); });
+    htmlComponent.addEventListener("SaveComplete", function(event) {
+        var msg = typeof event.Data === "string" ? event.Data : (event.Data ? (event.Data.message || "Database saved.") : "Database saved.");
+        appendLog(msg);
+    });
     htmlComponent.addEventListener("ProcessStopAck", function(event) {
         var msg = (event.Data && event.Data.message) ? event.Data.message : "Stopping...";
         setStatus("running", "Stopping...");
@@ -207,10 +281,9 @@ function setup(htmlComponent) {
         setStatus("idle", "Terminated");
         appendLog(msg);
         setBusy(false);
-        resetStopButtons();
     });
 
-    htmlComponent.sendEventToMATLAB("RequestBranchInfo", {});
+    sendToMATLAB("RequestBranchInfo", {});
 }
 
 /* ---------- helpers ---------- */
@@ -229,7 +302,9 @@ function getRadio(name, fallback) {
 }
 function setRadio(name, value) {
     var els = document.getElementsByName(name);
-    for (var i = 0; i < els.length; i++) if (els[i].value === value && !els[i].disabled) els[i].checked = true;
+    for (var i = 0; i < els.length; i++) {
+        if (els[i].value === value && !els[i].disabled) els[i].checked = true;
+    }
 }
 function branchInfo(name) {
     if (!VIS.info || !VIS.info.branches) return null;
@@ -237,7 +312,7 @@ function branchInfo(name) {
 }
 function fmtRange(r, unit) {
     r = normalizeArray(r);
-    if (r.length < 2 || r[0] === null) return "–";
+    if (r.length < 2 || r[0] === null || !isFinite(r[0])) return "–";
     return Math.round(r[0]) + "–" + Math.round(r[1]) + (unit ? " " + unit : "");
 }
 
@@ -254,10 +329,30 @@ function refreshAll() {
 function updateModeBlocks() {
     var mode = getRadio("visMode", "1d");
     ["1d", "2d", "3d"].forEach(function(m) {
-        document.getElementById("block" + m).classList.toggle("show", m === mode);
+        var el = document.getElementById("block" + m);
+        if (el) el.classList.toggle("show", m === mode);
     });
-    document.getElementById("branchSection").style.display = (mode === "1d") ? "none" : "";
-    document.getElementById("btnClear").style.display = (mode === "1d") ? "" : "none";
+    var bSec = document.getElementById("branchSection");
+    if (bSec) bSec.style.display = (mode === "1d") ? "none" : "";
+    var cBtn = document.getElementById("btnClear");
+    if (cBtn) cBtn.style.display = (mode === "1d") ? "" : "none";
+
+    // Auto-select gridded branch in 3D if current branch is scattered
+    if (mode === "3d") {
+        var curBranch = getRadio("branch", "");
+        var curBi = branchInfo(curBranch);
+        if (!curBi || !curBi.isGridded) {
+            var griddedBranch = ["Interp", "Pred"].filter(function(b) {
+                var bi = branchInfo(b);
+                return bi && bi.n > 0 && bi.isGridded;
+            })[0];
+            if (griddedBranch) {
+                setRadio("branch", griddedBranch);
+                updateBranchInfo();
+                updateMetricLists();
+            }
+        }
+    }
 }
 
 function updateBranchRadios() {
@@ -265,13 +360,17 @@ function updateBranchRadios() {
         var bi = branchInfo(b);
         var n = bi ? (bi.n || 0) : 0;
         var el = document.getElementById("branch" + b);
-        el.disabled = n === 0;
-        document.getElementById("count" + b).textContent = n ? "(" + n.toLocaleString() + ")" : "(empty)";
+        if (el) el.disabled = n === 0;
+        var countEl = document.getElementById("count" + b);
+        if (countEl) countEl.textContent = n ? "(" + n.toLocaleString() + ")" : "(empty)";
     });
     var cur = getRadio("branch", "");
     var curEl = document.getElementById("branch" + cur);
     if (!cur || (curEl && curEl.disabled)) {
-        var pick = ["Interp", "Pred", "Sim"].filter(function(b) { return !document.getElementById("branch" + b).disabled; })[0];
+        var pick = ["Interp", "Pred", "Sim"].filter(function(b) {
+            var r = document.getElementById("branch" + b);
+            return r && !r.disabled;
+        })[0];
         if (pick) setRadio("branch", pick);
     }
 }
@@ -280,6 +379,7 @@ function updateBranchInfo() {
     var b = getRadio("branch", "");
     var bi = branchInfo(b);
     var el = document.getElementById("branchInfo");
+    if (!el) return;
     if (!bi || !bi.n) { el.textContent = "No data in this branch."; return; }
     var layout = bi.isGridded
         ? "regular grid " + normalizeArray(bi.gridSize).join(" × ") + " (r × p)"
@@ -287,10 +387,12 @@ function updateBranchInfo() {
     el.innerHTML = bi.n.toLocaleString() + " rows · " + layout +
         "<br>p " + fmtRange(bi.pRange, "nm") + " · r " + fmtRange(bi.rRange, "nm") +
         " · λ " + fmtRange(bi.lambdaRange, "nm");
-    document.getElementById("interp2dRow").style.display = bi.isGridded ? "none" : "";
+    var row2d = document.getElementById("interp2dRow");
+    if (row2d) row2d.style.display = bi.isGridded ? "none" : "";
 }
 
 function fillSelect(sel, groups, keep) {
+    if (!sel) return;
     var prev = sel.value;
     sel.innerHTML = "";
     groups.forEach(function(g) {
@@ -307,7 +409,9 @@ function fillSelect(sel, groups, keep) {
         sel.appendChild(og);
     });
     if (keep && prev) {
-        for (var i = 0; i < sel.options.length; i++) if (sel.options[i].value === prev) { sel.value = prev; break; }
+        for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === prev) { sel.value = prev; break; }
+        }
     }
 }
 
@@ -333,6 +437,7 @@ function updateMetricLists() {
         fields = si ? normalizeArray(si.spectralFields) : [];
     }
     var box = document.getElementById("metrics1dList");
+    if (!box) return;
     var prevChecked = {};
     box.querySelectorAll("input:checked").forEach(function(cb) { prevChecked[cb.value] = true; });
     var hadAny = Object.keys(prevChecked).length > 0;
@@ -347,35 +452,70 @@ function updateMetricLists() {
         var cb = document.createElement("input");
         cb.type = "checkbox"; cb.value = f; cb.id = "m1d_" + f;
         cb.checked = hadAny ? !!prevChecked[f] : (i === 0);
+        cb.addEventListener("change", updateRenderAvailability);
         lab.appendChild(cb);
         lab.appendChild(document.createTextNode(f));
         box.appendChild(lab);
     });
 }
 
+function selectAll1DMetrics(doSelect) {
+    document.querySelectorAll("#metrics1dList input[type='checkbox']").forEach(function(cb) {
+        cb.checked = doSelect;
+    });
+    updateRenderAvailability();
+}
+
 function updateSourceAvailability() {
     var hasSim = !!(branchInfo("Sim") && branchInfo("Sim").n);
     var hasModel = !!(VIS.info && VIS.info.hasModel);
-    document.getElementById("srcSim").disabled = !hasSim;
-    document.getElementById("srcInterp").disabled = !hasSim;
-    document.getElementById("srcModel").disabled = !hasModel;
+    var sSim = document.getElementById("srcSim");
+    var sInterp = document.getElementById("srcInterp");
+    var sModel = document.getElementById("srcModel");
+    if (sSim) sSim.disabled = !hasSim;
+    if (sInterp) sInterp.disabled = !hasSim;
+    if (sModel) sModel.disabled = !hasModel;
+
     var src = getRadio("source1d", "");
-    var srcEl = document.getElementById({ sim: "srcSim", interp: "srcInterp", model: "srcModel" }[src] || "srcSim");
-    if (srcEl.disabled) {
-        if (hasSim) setRadio("source1d", "sim"); else if (hasModel) setRadio("source1d", "model");
+    var srcMap = { sim: "srcSim", interp: "srcInterp", model: "srcModel" };
+    var srcEl = document.getElementById(srcMap[src] || "srcSim");
+    if (srcEl && srcEl.disabled) {
+        if (hasSim) setRadio("source1d", "sim");
+        else if (hasModel) setRadio("source1d", "model");
     }
     src = getRadio("source1d", "sim");
-    document.getElementById("modelSpecRow").style.display = (src === "model") ? "" : "none";
-    document.getElementById("interpMethodRow").style.display = (src === "interp") ? "" : "none";
+
+    var mRow = document.getElementById("modelSpecRow");
+    if (mRow) mRow.style.display = (src === "model") ? "" : "none";
+    var iRow = document.getElementById("interpMethodRow");
+    if (iRow) iRow.style.display = (src === "interp") ? "" : "none";
+
     var hints = {
         sim: "Finds the nearest simulated (p, r) and plots its raw samples (dots) with a smoothed line. Input fields are updated to the snapped geometry.",
         interp: "Interpolates each native simulation wavelength node spatially at the exact (p, r); nodes are shown as dots joined by a smoothed line.",
         model: "Feeds the exact (p, r) to the trained surrogate and evaluates it on a dense wavelength grid."
     };
-    document.getElementById("sourceHint").textContent = hints[src] || "";
-    if (VIS.info && VIS.info.laserWl && !document.getElementById("laser1d").dataset.touched) {
-        document.getElementById("laser1d").value = round2(VIS.info.laserWl);
-        document.getElementById("laser2d").value = round2(VIS.info.laserWl);
+    var hintEl = document.getElementById("sourceHint");
+    if (hintEl) hintEl.textContent = hints[src] || "";
+
+    if (VIS.info && VIS.info.laserWl) {
+        var l1 = document.getElementById("laser1d");
+        var l2 = document.getElementById("laser2d");
+        if (l1 && !l1.dataset.touched) l1.value = round2(VIS.info.laserWl);
+        if (l2 && !l2.dataset.touched) l2.value = round2(VIS.info.laserWl);
+    }
+
+    // Auto-populate P and R with range midpoints if not touched
+    if (VIS.info && VIS.info.branches && VIS.info.branches.Sim) {
+        var sb = VIS.info.branches.Sim;
+        var pEl = document.getElementById("p1d");
+        var rEl = document.getElementById("r1d");
+        if (pEl && !pEl.dataset.touched && sb.pRange && isFinite(sb.pRange[0])) {
+            pEl.value = Math.round((sb.pRange[0] + sb.pRange[1]) / 2);
+        }
+        if (rEl && !rEl.dataset.touched && sb.rRange && isFinite(sb.rRange[0])) {
+            rEl.value = Math.round((sb.rRange[0] + sb.rRange[1]) / 2);
+        }
     }
 }
 
@@ -383,37 +523,79 @@ function updateRenderAvailability() {
     var mode = getRadio("visMode", "1d");
     var notice = document.getElementById("notice3d");
     var ok = true;
-    notice.classList.remove("show");
+    var reason = "";
+    if (notice) notice.classList.remove("show");
+
     if (mode === "3d") {
         var b = getRadio("branch", "");
         var bi = branchInfo(b);
-        if (!bi || !bi.n) ok = false;
-        else if (!bi.isGridded) {
+        if (!bi || !bi.n) {
             ok = false;
-            notice.innerHTML = "<strong>3D volumes need gridded data.</strong> db." + b +
-                " holds scattered samples. Populate <code>db.Interp</code> via <em>4 Predict → Raw Data (Interpolation)</em> " +
-                "and visualise that branch instead. This avoids recomputing a temporary dense grid for every render.";
-            notice.classList.add("show");
+            reason = "Selected branch db." + (b || "?") + " is empty.";
+        } else if (!bi.isGridded) {
+            ok = false;
+            if (notice) {
+                notice.innerHTML = "<strong>3D volumes require regular gridded data.</strong> db." + b +
+                    " holds scattered samples.<br>Switch to <code>db.Interp</code> or <code>db.Pred</code> if populated, " +
+                    "or run <em>Stage 4 Predict</em> to generate a regular grid.";
+                notice.classList.add("show");
+            }
+            reason = "3D volume requires regular grid (switch to db.Interp or db.Pred).";
         } else if (!normalizeArray(bi.spectralFields).length) {
             ok = false;
-            notice.textContent = "This branch has no spectral [N × L] metrics to render as a volume.";
-            notice.classList.add("show");
+            if (notice) {
+                notice.textContent = "db." + b + " has no spectral [N × L] metrics to render as a volume.";
+                notice.classList.add("show");
+            }
+            reason = "No spectral metrics in db." + b + ".";
         }
     } else if (mode === "2d") {
-        var bi2 = branchInfo(getRadio("branch", ""));
-        ok = !!(bi2 && bi2.n) && document.getElementById("metric2d").options.length > 0;
+        var b2 = getRadio("branch", "");
+        var bi2 = branchInfo(b2);
+        var m2dEl = document.getElementById("metric2d");
+        if (!bi2 || !bi2.n) {
+            ok = false;
+            reason = "Selected branch db." + (b2 || "?") + " is empty.";
+        } else if (!m2dEl || m2dEl.options.length === 0) {
+            ok = false;
+            reason = "No metrics found in db." + b2 + ".";
+        }
     } else {
-        ok = document.querySelectorAll("#metrics1dList input").length > 0;
+        var checkedCount = document.querySelectorAll("#metrics1dList input:checked").length;
+        var totalCount = document.querySelectorAll("#metrics1dList input").length;
+        if (totalCount === 0) {
+            ok = false;
+            reason = "No spectral metrics available for 1D plotting.";
+        } else if (checkedCount === 0) {
+            ok = false;
+            reason = "Check at least one metric to plot.";
+        }
     }
-    document.getElementById("btnRender").disabled = !ok || VIS.busy;
+
+    var btn = document.getElementById("btnRender");
+    if (btn) {
+        btn.disabled = VIS.busy;
+        if (VIS.busy) {
+            btn.title = "Rendering in progress...";
+        } else if (!ok) {
+            btn.title = reason;
+        } else {
+            btn.title = "Click to render " + mode.toUpperCase() + " visualization";
+        }
+    }
 }
 
 function onMetric2dChange() {
     var v = val("metric2d");
-    document.getElementById("sliceRow").style.display = (v.indexOf("slice:") === 0) ? "" : "none";
+    var row = document.getElementById("sliceRow");
+    if (row) row.style.display = (v.indexOf("slice:") === 0) ? "" : "none";
 }
 
-function onControlChange() { refreshAll(); }
+function onControlChange() {
+    refreshAll();
+    var mode = getRadio("visMode", "1d");
+    sendToMATLAB("VisModeSelect", { mode: mode });
+}
 
 /* ---------- actions ---------- */
 function collectConfig() {
@@ -456,56 +638,94 @@ function collectConfig() {
 }
 
 function render() {
-    var cfg = collectConfig();
-    if (cfg.mode === "1d") {
-        if (!cfg.metrics.length) { appendLog("Select at least one metric."); return; }
-        if (!isFinite(cfg.p) || !isFinite(cfg.r)) { appendLog("Enter valid period and radius values."); return; }
-        document.getElementById("snapInfo").textContent = "";
+    try {
+        var cfg = collectConfig();
+        if (cfg.mode === "1d") {
+            if (!cfg.metrics || !cfg.metrics.length) {
+                appendLog("Select at least one metric to plot.", "warning");
+                setStatus("error", "No Metric");
+                return;
+            }
+            if (!isFinite(cfg.p) || !isFinite(cfg.r)) {
+                appendLog("Enter valid numeric period and radius values.", "warning");
+                setStatus("error", "Bad P/R");
+                return;
+            }
+            var snapEl = document.getElementById("snapInfo");
+            if (snapEl) snapEl.textContent = "";
+        } else if (cfg.mode === "2d") {
+            if (!cfg.metric) {
+                appendLog("Please select a 2D metric to render.", "warning");
+                setStatus("error", "No Metric");
+                return;
+            }
+        } else if (cfg.mode === "3d") {
+            if (!cfg.metric) {
+                appendLog("Please select a 3D spectral metric to render.", "warning");
+                setStatus("error", "No Metric");
+                return;
+            }
+        }
+
+        setBusy(true);
+        setStatus("running", "Rendering...");
+        var bar = document.getElementById("progressBar");
+        if (bar) bar.style.width = "0%";
+
+        var desc = "Render " + cfg.mode.toUpperCase() + (cfg.mode === "1d" ? " (" + cfg.source + ")" : " from db." + cfg.branch) + "...";
+        appendLog(desc);
+
+        sendToMATLAB("Render", cfg);
+    } catch (err) {
+        console.error("[Visualize] Render exception:", err);
+        setStatus("error", "Error");
+        appendLog("Render exception: " + (err.message || String(err)), "error");
+        setBusy(false);
     }
-    setBusy(true);
-    setStatus("running", "Rendering...");
-    document.getElementById("progressBar").style.width = "0%";
-    appendLog("Render " + cfg.mode.toUpperCase() + (cfg.mode === "1d" ? " (" + cfg.source + ")" : " from db." + cfg.branch) + "...");
-    window.htmlComponent.sendEventToMATLAB("Render", cfg);
 }
 
 function clearTraces() {
-    window.htmlComponent.sendEventToMATLAB("ClearTraces", {});
+    sendToMATLAB("ClearTraces", {});
     appendLog("Held traces cleared.");
+    setStatus("idle", "Cleared");
+}
+
+function requestSavePlotFig() {
+    sendToMATLAB("SavePlotFigRequest", {});
+    appendLog("Exporting current plot as MATLAB figure (.fig)...");
 }
 
 function stopProcess() {
-    document.querySelectorAll(".btn-stop").forEach(function(b) { b.innerHTML = "&#9632; Stopping..."; b.disabled = true; });
     appendLog("Stop requested by user.");
-    window.htmlComponent.sendEventToMATLAB("StopProcess", {});
-}
-function resetStopButtons() {
-    document.querySelectorAll(".btn-stop").forEach(function(b) { b.innerHTML = "&#9632; Stop"; b.disabled = false; });
+    sendToMATLAB("StopProcess", {});
 }
 
 function setBusy(state) {
     VIS.busy = state;
     updateRenderAvailability();
-    if (!state) resetStopButtons();
 }
 
 function handleProgress(data) {
     if (!data) return;
     if (data.message) appendLog(data.message);
-    var pct = (data.fraction !== undefined && data.fraction !== null) ? Math.round(data.fraction * 100) : 0;
+    var pct = (data.fraction !== undefined && data.fraction !== null) ? Math.round(data.fraction * 100) :
+              (data.percent !== undefined ? data.percent : 0);
     var bar = document.getElementById("progressBar");
     if (bar) bar.style.width = pct + "%";
-    if (window.htmlComponent) {
-        window.htmlComponent.sendEventToMATLAB("ProgressUpdate", {
-            percent: pct,
-            message: data.message || "",
-            stage: "Stage 6 — Visualize"
-        });
-    }
+    sendToMATLAB("ProgressUpdate", {
+        percent: pct,
+        message: data.message || "",
+        stage: "Stage 6 — Visualize"
+    });
 }
+
 function updateDbBanner(d) {
     var banner = document.getElementById("dbStatusBanner");
-    if (!d || (!d.hasSimData && !d.hasPredictions && !d.hasInterp)) { banner.style.display = "none"; return; }
+    if (!banner) return;
+    if (!d || (!d.hasSimData && !d.hasPredictions && !d.hasInterp)) {
+        banner.style.display = "none";
+        return;
+    }
     var parts = [];
     if (d.hasSimData) parts.push(d.simEntries + " sim");
     if (d.hasInterp) parts.push(d.interpEntries + " interp");
@@ -515,22 +735,48 @@ function updateDbBanner(d) {
     banner.textContent = "DB: " + parts.join(" | ");
     banner.style.display = "block";
 }
+
 function setStatus(cls, text) {
     var el = document.getElementById("statusBadge");
     if (el) {
         el.className = "status-badge status-" + cls;
         el.textContent = text;
     }
+    var st = document.getElementById("statusText");
+    if (st && (cls === "idle" || cls === "done")) {
+        st.textContent = text;
+    }
 }
+
 function appendLog(msg, level) {
-    if (window.htmlComponent) {
-        window.htmlComponent.sendEventToMATLAB("LogMessage", { message: msg, stage: "Stage 6 — Visualize", level: level || "info" });
+    if (!msg) return;
+    sendToMATLAB("LogMessage", { message: msg, stage: "Stage 6 — Visualize", level: level || "info" });
+    var st = document.getElementById("statusText");
+    if (st) {
+        st.textContent = msg.length > 55 ? msg.substring(0, 52) + "..." : msg;
+        st.title = msg;
     }
     var el = document.getElementById("progressLog");
     if (el) {
         el.textContent += msg + "\n";
         var area = document.getElementById("progressArea");
-        if (area) area.scrollTop = area.scrollHeight;
+        if (area && area.style.display !== "none") {
+            area.scrollTop = area.scrollHeight;
+        }
+    }
+}
+
+function toggleLogArea() {
+    var area = document.getElementById("progressArea");
+    var btn = document.getElementById("btnToggleLog");
+    if (!area) return;
+    if (area.style.display === "none") {
+        area.style.display = "block";
+        if (btn) btn.textContent = "✖ Hide Log";
+        area.scrollTop = area.scrollHeight;
+    } else {
+        area.style.display = "none";
+        if (btn) btn.textContent = "📋 Show Log";
     }
 }
 
@@ -538,9 +784,24 @@ document.addEventListener("DOMContentLoaded", function() {
     document.querySelectorAll('input[name="visMode"], input[name="branch"], input[name="source1d"]').forEach(function(el) {
         el.addEventListener("change", onControlChange);
     });
-    document.getElementById("metric2d").addEventListener("change", function() { onMetric2dChange(); updateRenderAvailability(); });
-    ["laser1d", "laser2d"].forEach(function(id) {
-        document.getElementById(id).addEventListener("input", function() { this.dataset.touched = "1"; });
+    var m2 = document.getElementById("metric2d");
+    if (m2) {
+        m2.addEventListener("change", function() {
+            onMetric2dChange();
+            updateRenderAvailability();
+        });
+    }
+    var m3 = document.getElementById("metric3d");
+    if (m3) {
+        m3.addEventListener("change", function() {
+            updateRenderAvailability();
+        });
+    }
+    ["p1d", "r1d", "laser1d", "laser2d"].forEach(function(id) {
+        var inputEl = document.getElementById(id);
+        if (inputEl) {
+            inputEl.addEventListener("input", function() { this.dataset.touched = "1"; });
+        }
     });
     refreshAll();
 });
@@ -550,8 +811,9 @@ document.addEventListener("DOMContentLoaded", function() {
     <header class="header">
         <h1>🌌 Stage 6 — Visualize</h1>
         <div class="header-actions">
-            <button class="btn-secondary small" id="btnRefresh" onclick="window.htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
-            <button class="btn-secondary small" id="btnSaveDb" onclick="window.htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
+            <button class="btn-secondary small" id="btnRefresh" onclick="sendToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
+            <button class="btn-secondary small" id="btnSaveDb" onclick="sendToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
+            <button class="btn-secondary small" id="btnExportPlot" onclick="requestSavePlotFig()" title="Export current plot as MATLAB .fig file">&#128202; Export Plot</button>
         </div>
     </header>
     <div id="dbStatusBanner"></div>
@@ -561,7 +823,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
             <!-- Mode -->
             <section class="section" aria-labelledby="modeTitle">
-                <h2 class="section-title" id="modeTitle">Visualization</h2>
+                <h2 class="section-title" id="modeTitle">Visualization Mode</h2>
                 <div class="segmented" role="radiogroup" aria-label="Visualization mode">
                     <input type="radio" name="visMode" id="mode1d" value="1d" checked><label for="mode1d">1D Spectra</label>
                     <input type="radio" name="visMode" id="mode2d" value="2d"><label for="mode2d">2D Map</label>
@@ -630,7 +892,14 @@ document.addEventListener("DOMContentLoaded", function() {
                 </section>
 
                 <section class="section" aria-labelledby="m1dTitle">
-                    <h2 class="section-title" id="m1dTitle">Metrics</h2>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <h2 class="section-title" id="m1dTitle" style="margin-bottom:0;">Metrics</h2>
+                        <div style="font-size:11px; display:flex; gap:8px;">
+                            <a href="javascript:void(0)" onclick="selectAll1DMetrics(true)" style="color:var(--accent); text-decoration:none; font-weight:600;">All</a>
+                            <span style="color:var(--border);">|</span>
+                            <a href="javascript:void(0)" onclick="selectAll1DMetrics(false)" style="color:var(--text-secondary); text-decoration:none;">None</a>
+                        </div>
+                    </div>
                     <div class="check-grid" id="metrics1dList"></div>
                 </section>
 
@@ -724,8 +993,28 @@ document.addEventListener("DOMContentLoaded", function() {
             <div class="btn-row">
                 <button id="btnRender" class="btn-primary" onclick="render()">Render</button>
                 <button id="btnClear" class="btn-secondary" onclick="clearTraces()">Clear traces</button>
+                <button id="btnExportFig" class="btn-secondary" onclick="requestSavePlotFig()" title="Export current plot as MATLAB .fig file">&#128202; Export .fig</button>
             </div>
         </div>
     </main>
+
+    <!-- Bottom Status & Progress Panel -->
+    <footer class="bottom-panel" id="visBottomPanel">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span id="statusBadge" class="status-badge status-idle">Idle</span>
+                <span id="statusText" style="font-size:11px; color:var(--text-secondary); font-weight:500;">Ready</span>
+            </div>
+            <div style="display:flex; gap:6px; align-items:center;">
+                <button type="button" class="btn-secondary small" id="btnToggleLog" onclick="toggleLogArea()" style="padding:2px 8px; font-size:10px;">📋 Show Log</button>
+            </div>
+        </div>
+        <div class="progress-bar-container">
+            <div id="progressBar" class="progress-bar"></div>
+        </div>
+        <div id="progressArea" style="display:none; margin-top:6px;">
+            <pre id="progressLog"></pre>
+        </div>
+    </footer>
 </body>
 </html>
