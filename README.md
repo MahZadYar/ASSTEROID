@@ -3,7 +3,7 @@
 **Adaptive Sampling, Surrogate Training, Exploration and Refinement for Optimal Inverse Design**
 
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2023b%2B%20%7C%20R2026a-blue.svg)](https://www.mathworks.com/products/matlab.html)
-[![Version](https://img.shields.io/badge/Version-5.2-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
+[![Version](https://img.shields.io/badge/Version-5.3-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.1021%2Facsnano.XXXXXXX-orange.svg)](#citation)
 [![Zenodo](https://img.shields.io/badge/Data-10.5281%2Fzenodo.XXXXXXX-blue.svg)](#dataset--trained-models)
@@ -15,12 +15,12 @@
 **☄️ ASSTEROID** is a closed-loop computational framework engineered for simulation-driven inverse design, high-dimensional surrogate modeling, and multimodal optimization. It couples deep neural network surrogates with automated finite-element method (FEM) parametric sweeps, replacing computationally prohibitive numerical simulations with high-throughput inference ($> 100{,}000$ spectra/s, $> 1.5 \times 10^5 \times$ speedup over full-wave FEM).
 
 While ASSTEROID is demonstrated on the rational geometric design of Nanoparticle-on-Mirror (NPoM) plasmonic gas sensors using rigorous Optical Reciprocity Theorem (ORT) electrodynamics, its modular operational architecture generalizes to any parametric engineering workflow requiring:
-1. 💾 **Master Database Management**: Programmatic state tracking, interactive data tree inspection, and metadata archiving.
+1. 💾 **Master Database Management**: Programmatic state tracking, interactive data tree inspection, metadata archiving, and persistent modal basin repository (`db.Basins`) alongside optimal design solutions (`db.Optima`).
 2. 📥 **Automated Data Ingestion & QA**: Parsing multi-parameter solver outputs into high-performance Structure-of-Arrays (SoA) datasets with electromagnetic passivity verification.
 3. 🎯 **Curvature- & Density-Aware Adaptive Sampling**: Directing subsequent simulation batches toward informative, high-enhancement modal regions using 9-point discrete Laplacian curvature operators and dual-tier minimum-distance rejection sampling.
 4. 🧠 **Physics-Informed Deep Residual Surrogates**: Training multi-task ResNets featuring explicit material dispersion ($n, k$), geometric scale invariance, target-specific scaling (linear for $A_L$, decadic $\log_{10}(1+y)$ for near-field Raman proxies), Layer Normalization, and a three-tier performance evaluation suite (Empirical, Inverse Density Weighted, and Modal Optima RoI).
 5. 🔮 **Dense Landscape Exploration & Spectral Integration**: Ultra-dense sub-nanometer grid inference coupled with Modified Akima piecewise cubic Hermite interpolation (`makima`) for continuous figures of merit.
-6. 🔍 **Topology-Aware Multimodal Optimization**: Partitioning the multi-objective optical landscape into discrete topological catchment basins via marker-controlled watershed segmentation (`imextendedmax`, `imimposemin`, `watershed`), interactive basin curation/tagging with 25% transparent basin color overlays, in-basin stratified MultiStart gradient ascent (`fmincon` with SQP/Interior-Point) driven by analytical neural graph gradients (`dlgradient`), and trajectory coalescence diagnostics.
+6. 🔍 **Topology-Aware Multimodal Optimization**: Partitioning the multi-objective optical landscape into discrete topological catchment basins via marker-controlled watershed segmentation (`imextendedmax`, `imimposemin`, `watershed`), persistent territorial archiving (`db.Basins`) for cross-metric multimodal comparison, interactive basin merging and curation with 25% alpha fills, and in-basin MultiStart gradient ascent (`fmincon` with SQP/Interior-Point) featuring 50% dynamic range filtering and summit-contracted jump-retry boundaries driven by analytical neural graph gradients (`dlgradient`).
 7. 🌌 **Multi-Dimensional 3D Visualization & Export**: Rendering 1D spectra, 2D scattered/contour maps, 3D volume slices, and exporting to HDF5, ONNX, and relational MAT tables.
 
 > **Associated Publication:**  
@@ -143,7 +143,7 @@ flowchart TD
 #### 💾 Stage 0: Master Database Management
 * **GUI Component:** Stage 0 Tab (`scripts/apps/database_tab.html`)
 * **Core Utilities:** [`src/data/createDatabaseStruct.m`](src/data/createDatabaseStruct.m), [`src/data/exportDatabaseToHDF5.m`](src/data/exportDatabaseToHDF5.m)
-* **Function:** Maintains project metadata, provides interactive tree browsing of hierarchical database branches (`db.Sim`, `db.Interp`, `db.Pred`, `db.Optima`, `db.Model`), tracks dirty/unsaved states, and handles robust saving/loading.
+* **Function:** Maintains project metadata, provides interactive tree browsing of hierarchical database branches (`db.Sim`, `db.Interp`, `db.Pred`, `db.Optima`, `db.Basins`, `db.Model`, `db.RI`, `db.Schema`), tracks dirty/unsaved states, and handles robust transactional saving/loading.
 
 #### 📥 Stage 1: Data Ingestion & Quality Control
 * **CLI Entry Point:** [`scripts/pipeline/run_import_prl_sweep.m`](scripts/pipeline/run_import_prl_sweep.m)
@@ -168,7 +168,7 @@ flowchart TD
 #### 🔍 Stage 5: Topology-Aware Multimodal Optimization & Basin Curation
 * **CLI Entry Point:** [`scripts/pipeline/run_locate_maxima.m`](scripts/pipeline/run_locate_maxima.m)
 * **Core Orchestrator:** [`src/orchestration/runLocalizationWorkflow.m`](src/orchestration/runLocalizationWorkflow.m)
-* **Function:** Partitions complex multimodal optical landscapes into discrete catchment basins via marker-controlled topological watershed segmentation (`imextendedmax`, `imimposemin`, `watershed`). Characterizes each basin by summit coordinates, catchment area, boundary saddle elevation, and topological depth/prominence. Enables interactive basin inspection with 25% transparent color-coded basin boundary overlays, seed curation, and modal tagging. Refines parameters using in-basin stratified MultiStart gradient ascent (`fmincon` with SQP/Interior-Point) powered by exact analytical automatic differentiation (`dlgradient`), enforcing physical packing ($r/P \leq 0.49$) and classifying trajectory coalescence (`peak`, `ridge`, `multi`, `single`, `duplicate of X`, `fallback`).
+* **Function:** Partitions complex multimodal optical landscapes into discrete catchment basins via marker-controlled topological watershed segmentation (`imextendedmax`, `imimposemin`, `watershed`). Characterizes each basin by summit coordinates, catchment area, boundary saddle elevation, and topological depth/prominence. Enables interactive basin merging, polygon boundary visualization with 25% transparent color fills, custom sensitivity input, and persistent cross-metric territory archiving (`db.Basins`). Refines parameters using in-basin stratified MultiStart gradient ascent (`fmincon` with SQP/Interior-Point) featuring 50% dynamic range starting point filtering, summit-contracted jump retry handling, and exact analytical automatic differentiation (`dlgradient`), enforcing physical packing ($r/P \leq 0.49$) and classifying trajectory coalescence (`peak`, `ridge`, `multi`, `single`, `duplicate of X`, `fallback`).
 
 #### 🌌 Stage 6: Multi-Dimensional 3D Visualization & Export
 * **GUI Component:** Stage 6 Tab (`scripts/apps/visualize_tab.html`)
@@ -317,6 +317,16 @@ Comprehensive architectural specifications, mathematical formalisms, and user ma
 * [Paper to Code Reference](docs/paper_to_code_reference.md): Detailed cross-reference linking formulas in the publication to source functions.
 * [Physical & Mathematical Notation](docs/notation_table.md): Parameter symbol glossary and dimensional units.
 * [Surrogate Checkpoint Guide](docs/checkpoint_guide.md): Checkpointing, training interruption handling, and fine-tuning procedures.
+
+---
+
+## What's New in Version 5.3
+
+* 💾 **Persistent Basin Architecture (`db.Basins`)**: Master database branch storing segmented modal catchment territories (label rasters, boundary polygons, summit coordinates) decoupled from specific metric values, enabling seamless cross-metric multi-objective exploration.
+* 🔗 **Topological Basin Merging**: Interactive merging of adjacent watershed partitions into single composite modal basins, automatically electing overall summits and consolidating territorial boundaries.
+* 🎯 **Dynamic Range Start Filtering & Contraction**: MultiStart gradient ascent start points are filtered to $> 50\%$ of local basin elevation range ($F \ge F_{\min} + 0.5(F_{\text{peak}} - F_{\min})$), with an automatic 50% bounding-box contraction retry if a trajectory escapes its owning basin.
+* 🎛️ **High-Precision Sensitivity Input**: Replaced rigid slider with direct numerical precision input for $H$-maxima depth threshold (supporting sensitivity down to $0.0001\%$).
+* 🏷️ **Streamlined UI & Auto-Tagging**: Default sequential `"Seed #"` labeling, clean tag-only 2D plot overlays, dedicated `Detect Basins` button, and bottom global console stream with unified emergency process abort.
 
 ---
 

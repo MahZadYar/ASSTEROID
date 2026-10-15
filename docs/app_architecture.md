@@ -1,4 +1,4 @@
-# ☄️ ASSTEROID App Architecture & Integration (Version 5.0)
+# ☄️ ASSTEROID App Architecture & Integration (Version 5.3)
 
 **Scope:** Decoupled MVC controller architecture, session state management, shared HTML5 design token system, and MATLAB backend coupling  
 **Audience:** Developers maintaining or extending the computational platform  
@@ -32,9 +32,12 @@ flowchart TD
         TG --> S4["🔮 Stage 4: Dense Landscape Prediction<br/><code>visualization_export_tab.html</code><br/><i>PredictionController.m</i>"]
         TG --> S5["🔍 Stage 5: Multimodal Optimization<br/><code>optimization_tab.html</code><br/><i>OptimizeController.m</i>"]
         TG --> S6["🌌 Stage 6: Multi-Dimensional Visualization<br/><code>visualize_tab.html</code><br/><i>VisualizeController.m</i>"]
+
+        Console["🖥️ Global Console & Process Monitor<br/><i>Live stdout/stderr stream + Unified emergency stop button</i>"]
     end
     Session <--> DBEngine
     Session <--> TG
+    TG <--> Console
 ```
 
 Each stage integrates:
@@ -135,7 +138,7 @@ The continuous colormap used in 2D/3D surface plots ([`src/vis/AuroraAustralis.t
 ### Stage 0: Master Database Manager
 - **HTML View:** [`scripts/apps/database_tab.html`](../scripts/apps/database_tab.html)
 - **Controller:** [`src/app/controllers/DatabaseController.m`](../src/app/controllers/DatabaseController.m)
-- **Features:** Hierarchical dataset browser, schema compliance check, dirty status indicator, in-place reload, backup creation, and database statistics inspector.
+- **Features:** Hierarchical dataset browser across all branches (`db.Sim`, `db.Interp`, `db.Pred`, `db.Optima`, `db.Basins`, `db.Model`, `db.RI`, `db.Schema`), schema compliance checking, dirty status tracking, transactional atomic file writes, and project metadata curation.
 - **Key Events:** `RequestDbStatus`, `LoadDatabase`, `SaveDatabase`, `BackupDatabase`.
 
 ### Stage 1: Ingestion & Sweep QA
@@ -165,8 +168,8 @@ The continuous colormap used in 2D/3D surface plots ([`src/vis/AuroraAustralis.t
 ### Stage 5: Topology-Aware Multimodal Optimization
 - **HTML View:** [`scripts/apps/optimization_tab.html`](../scripts/apps/optimization_tab.html)
 - **Controller:** [`src/app/controllers/OptimizeController.m`](../src/app/controllers/OptimizeController.m)
-- **Features:** 8-connected discrete stationary point detection, interactive seed curation canvas, modal semantic tagging, localized `fmincon` SQP refinement, and trajectory logging.
-- **Key Events:** `DetectSeeds`, `CurateSeeds`, `RunFineTune`, `ExportMaximaResults`.
+- **Features:** Marker-controlled topological watershed segmentation, 25% transparent alpha basin polygons, interactive basin merging, direct numerical sensitivity input, persistent modal territory management (`db.Basins`), top 50% dynamic range core starting point selection, jump-retry bound contraction, and in-basin `fmincon` gradient ascent powered by analytical neural graph automatic differentiation (`dlgradient`).
+- **Key Events:** `DetectBasins`, `MergeBasins`, `SaveBasinsToDb`, `LoadBasinsFromDb`, `SaveOptimaToDb`, `GetDbOptima`, `DeleteDbOptima`, `SetSeedsFromDbOptima`, `UpdateSeeds`, `RunFineTune`, `ExportResults`.
 
 ### Stage 6: Multi-Dimensional Scientific Visualization
 - **HTML View:** [`scripts/apps/visualize_tab.html`](../scripts/apps/visualize_tab.html)

@@ -18,7 +18,7 @@ function db = createDatabaseStruct(options)
 %       Description  - string (default: "")
 %
 %   Output:
-%       db - struct with empty branches: Global, Sim, Interp, Pred, Optima, Model, RI
+%       db - struct with empty branches: Global, Sim, Interp, Pred, Optima, Basins, Model, RI
 %
 %   See also: populateBranch, exportDatabaseToHDF5
 
