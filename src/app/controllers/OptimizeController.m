@@ -53,6 +53,10 @@ classdef OptimizeController < handle
                         obj.generateDensePredictions(eventData);
                     case "SaveOptimaToDb"
                         obj.saveOptimaToDb(eventData);
+                    case "SaveBasinsToDb"
+                        obj.saveBasinsToDb(eventData);
+                    case "LoadBasinsFromDb"
+                        obj.loadBasinsFromDb(eventData);
                     case "GetDbOptima"
                         obj.sendDbOptimaToPanel();
                     case "DeleteDbOptima"
@@ -661,6 +665,274 @@ classdef OptimizeController < handle
             obj.sendDbOptimaToPanel();
         end
 
+        function saveBasinsToDb(obj, d)
+        % SAVEBASINSTODB Save currently detected/curated basin territories to session.db.Basins.
+            basinMap = obj.getOptimizeState("basinMap");
+            if isempty(basinMap) || ~isstruct(basinMap) || ~isfield(basinMap, "basinIds") || isempty(basinMap.basinIds)
+                obj.sendError("No basins to save. Run Detect Basins first.");
+                return;
+            end
+
+            seeds = [];
+            if isstruct(d) && isfield(d, "seeds") && ~isempty(d.seeds)
+                seeds = normalizeSeedInput(d.seeds);
+            else
+                currentSeeds = obj.getOptimizeState("currentSeeds");
+                if ~isempty(currentSeeds)
+                    seeds = currentSeeds;
+                end
+            end
+
+            bIds = double(basinMap.basinIds(:));
+            nB = numel(bIds);
+            
+            baseMetric = obj.getOptimizeState("baseMetric");
+            if isempty(baseMetric), baseMetric = "EF_vol"; end
+            metricVariant = obj.getOptimizeState("metricVariant");
+            if isempty(metricVariant), metricVariant = "avg"; end
+            masterMetric = canonicalMetricName(baseMetric, metricVariant);
+
+            % Pre-allocate SoA columns matching createDatabaseStruct
+            bIdCol    = zeros(nB, 1, 'uint32');
+            tagCol    = strings(nB, 1);
+            pCol      = zeros(nB, 1);
+            rCol      = zeros(nB, 1);
+            gridValCol= zeros(nB, 1);
+            areaCol   = zeros(nB, 1);
+            saddleCol = zeros(nB, 1);
+            depthCol  = zeros(nB, 1);
+            pMinCol   = zeros(nB, 1);
+            pMaxCol   = zeros(nB, 1);
+            rMinCol   = zeros(nB, 1);
+            rMaxCol   = zeros(nB, 1);
+            metricCol = repmat(masterMetric, nB, 1);
+
+            pAx_nm = double(basinMap.pAxis_nm(:)');
+            rAx_nm = double(basinMap.rAxis_nm(:)');
+            labels = double(basinMap.labels);
+
+            for i = 1:nB
+                thisId = bIds(i);
+                bIdCol(i) = uint32(thisId);
+
+                % Match seed by BasinId or by index
+                matchedSeed = [];
+                for sIdx = 1:numel(seeds)
+                    if isfield(seeds(sIdx), "BasinId") && seeds(sIdx).BasinId == thisId
+                        matchedSeed = seeds(sIdx);
+                        break;
+                    end
+                end
+                if isempty(matchedSeed) && i <= numel(seeds)
+                    matchedSeed = seeds(i);
+                end
+
+                if ~isempty(matchedSeed)
+                    if isfield(matchedSeed, "Tag") && strlength(string(matchedSeed.Tag)) > 0
+                        tagCol(i) = string(matchedSeed.Tag);
+                    else
+                        tagCol(i) = sprintf("Seed #%d", i);
+                    end
+                    pCol(i)       = double(matchedSeed.P);
+                    rCol(i)       = double(matchedSeed.R);
+                    gridValCol(i) = double(matchedSeed.Value);
+                    if isfield(matchedSeed, "Area"),  areaCol(i)  = double(matchedSeed.Area); end
+                    if isfield(matchedSeed, "Saddle"),saddleCol(i)= double(matchedSeed.Saddle); end
+                    if isfield(matchedSeed, "Depth"), depthCol(i) = double(matchedSeed.Depth); end
+                else
+                    tagCol(i) = sprintf("Seed #%d", i);
+                end
+
+                % Compute territorial bounds from labels mask
+                mask = labels == thisId;
+                if any(mask, 'all')
+                    [rIdxs, pIdxs] = find(mask);
+                    pMinCol(i) = min(pAx_nm(pIdxs));
+                    pMaxCol(i) = max(pAx_nm(pIdxs));
+                    rMinCol(i) = min(rAx_nm(rIdxs));
+                    rMaxCol(i) = max(rAx_nm(rIdxs));
+                    if areaCol(i) == 0
+                        areaCol(i) = numel(rIdxs);
+                    end
+                end
+            end
+
+            % Ensure polygons struct matches expected schema
+            polygons = struct('BasinId', {}, 'P_nm', {}, 'R_nm', {});
+            if isfield(basinMap, "polygons") && ~isempty(basinMap.polygons)
+                polygons = basinMap.polygons;
+            end
+
+            basinsStruct = struct( ...
+                'basinId',      bIdCol, ...
+                'tag',          tagCol, ...
+                'period',       pCol, ...
+                'radius',       rCol, ...
+                'gridValue',    gridValCol, ...
+                'area',         areaCol, ...
+                'saddle',       saddleCol, ...
+                'depth',        depthCol, ...
+                'pMin',         pMinCol, ...
+                'pMax',         pMaxCol, ...
+                'rMin',         rMinCol, ...
+                'rMax',         rMaxCol, ...
+                'masterMetric', metricCol, ...
+                'polygons',     polygons, ...
+                'labels',       uint32(labels), ...
+                'pAxis_nm',     pAx_nm, ...
+                'rAxis_nm',     rAx_nm ...
+            );
+
+            obj.session.db.Basins = basinsStruct;
+            obj.session.dbDirty = true;
+            if ~isempty(obj.fig) && isvalid(obj.fig)
+                obj.fig.UserData.db = obj.session.db;
+                obj.fig.UserData.dbDirty = true;
+                if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "markDbDirty")
+                    obj.fig.UserData.app.markDbDirty();
+                end
+            end
+
+            obj.sendToHTML("BasinsSaved", struct( ...
+                "count", nB, ...
+                "masterMetric", masterMetric, ...
+                "message", sprintf("%d basins saved to database (master metric: %s).", nB, masterMetric)));
+            obj.refreshDbState();
+        end
+
+        function loadBasinsFromDb(obj, ~)
+        % LOADBASINSFROMDB Load saved modal basins from session.db.Basins into controller and UI.
+            db_ = obj.session.db;
+            if (~isfield(db_, "Basins") || ~isstruct(db_.Basins) || ~isfield(db_.Basins, "basinId") || isempty(db_.Basins.basinId)) && ...
+               (~isempty(obj.fig) && isvalid(obj.fig) && isfield(obj.fig.UserData, "db") && ...
+                isfield(obj.fig.UserData.db, "Basins") && isfield(obj.fig.UserData.db.Basins, "basinId") && ...
+                ~isempty(obj.fig.UserData.db.Basins.basinId))
+                obj.session.db.Basins = obj.fig.UserData.db.Basins;
+                db_ = obj.session.db;
+            end
+
+            % Check disk candidate files if still empty
+            if ~isfield(db_, "Basins") || ~isstruct(db_.Basins) || ~isfield(db_.Basins, "basinId") || isempty(db_.Basins.basinId)
+                candidates = [
+                    string(obj.session.dbFile), ...
+                    string(fullfile(obj.session.workDir, "database.mat")), ...
+                    string(fullfile(obj.session.workDir, "Data", "Data Analysis", "database.mat")), ...
+                    string(fullfile(obj.session.workDir, "..", "Data", "Data Analysis", "database.mat")), ...
+                    string(fullfile(fileparts(obj.session.workDir), "Data", "Data Analysis", "database.mat"))
+                ];
+                for k = 1:numel(candidates)
+                    cf = candidates(k);
+                    if strlength(cf) > 0 && isfile(cf)
+                        try
+                            loaded = load(cf, "db");
+                            if isfield(loaded, "db") && isfield(loaded.db, "Basins") && ...
+                               isfield(loaded.db.Basins, "basinId") && ~isempty(loaded.db.Basins.basinId)
+                                obj.session.db.Basins = loaded.db.Basins;
+                                db_ = obj.session.db;
+                                break;
+                            end
+                        catch
+                        end
+                    end
+                end
+            end
+
+            if ~isfield(db_, "Basins") || ~isstruct(db_.Basins) || ~isfield(db_.Basins, "basinId") || isempty(db_.Basins.basinId)
+                obj.sendError("No saved basins found in database. Detect and Save Basins first.");
+                return;
+            end
+
+            bStruct = db_.Basins;
+            bIds = double(bStruct.basinId(:));
+            nB = numel(bIds);
+
+            % Rebuild basinMap struct
+            basinMap = struct();
+            basinMap.basinIds = bIds;
+            basinMap.labels = double(bStruct.labels);
+            basinMap.pAxis_nm = double(bStruct.pAxis_nm(:)');
+            basinMap.rAxis_nm = double(bStruct.rAxis_nm(:)');
+            basinMap.pAxis = basinMap.pAxis_nm * 1e-3; % um
+            basinMap.rAxis = basinMap.rAxis_nm * 1e-3; % um
+            basinMap.polygons = bStruct.polygons;
+            if isfield(bStruct, "gridValue"), basinMap.peakValue = double(bStruct.gridValue); end
+            if isfield(bStruct, "saddle"),    basinMap.saddle = double(bStruct.saddle); end
+            if isfield(bStruct, "depth"),     basinMap.depth = double(bStruct.depth); end
+
+            % Build seed objects for the HTML table
+            seeds = cell(nB, 1);
+            for i = 1:nB
+                tStr = "Seed #" + i;
+                if isfield(bStruct, "tag") && numel(bStruct.tag) >= i && strlength(string(bStruct.tag(i))) > 0
+                    tStr = string(bStruct.tag(i));
+                end
+                s = struct( ...
+                    "Index", i, ...
+                    "Tag", tStr, ...
+                    "P", double(bStruct.period(i)), ...
+                    "R", double(bStruct.radius(i)), ...
+                    "Value", double(bStruct.gridValue(i)), ...
+                    "Area", double(bStruct.area(i)), ...
+                    "Depth", double(bStruct.depth(i)), ...
+                    "Saddle", double(bStruct.saddle(i)), ...
+                    "BasinId", double(bIds(i)), ...
+                    "Status", "saved");
+                seeds{i} = s;
+            end
+            seedsVec = [seeds{:}];
+
+            baseMetric = obj.getOptimizeState("baseMetric");
+            if isempty(baseMetric), baseMetric = "EF_vol"; end
+            metricVariant = obj.getOptimizeState("metricVariant");
+            if isempty(metricVariant), metricVariant = "avg"; end
+
+            lastRes = obj.getOptimizeState("lastResults");
+            if isempty(lastRes)
+                lastRes = obj.getOptimizeState("previewResults");
+            end
+            if ~isempty(lastRes) && isfield(lastRes, "metrics") && ~isempty(lastRes.metrics) && isstruct(lastRes.metrics{1})
+                try
+                    lastRes.metrics{1}.basinMap = basinMap;
+                    obj.updateOptimizeState("lastResults", lastRes);
+                catch
+                end
+            end
+
+            masterMetric = "unknown";
+            if isfield(bStruct, "masterMetric") && ~isempty(bStruct.masterMetric)
+                masterMetric = string(bStruct.masterMetric(1));
+            end
+
+            % Update controller state with persistent flag so storedBasinMap allows metric decoupling
+            obj.updateOptimizeState("basinMap", basinMap);
+            obj.updateOptimizeState("basinMapMeta", struct( ...
+                "metric", masterMetric, ...
+                "variant", "avg", ...
+                "sensitivity", NaN, ...
+                "pLimits", [min(basinMap.pAxis_nm) max(basinMap.pAxis_nm)], ...
+                "rLimits", [min(basinMap.rAxis_nm) max(basinMap.rAxis_nm)], ...
+                "isFromDbBasins", true, ...
+                "isUserMerged", true));
+            obj.updateOptimizeState("currentSeeds", seedsVec);
+
+            % Re-plot heatmap if axes and results are present
+            ax = obj.getAxes();
+            if ~isempty(lastRes) && ~isempty(ax) && isvalid(ax)
+                try
+                    delete(allchild(ax));
+                    plotOptimizeHeatmap(lastRes, baseMetric, metricVariant, ax, [], seedsVec, [], false, basinMap);
+                catch ME_plot
+                    fprintf("[OptimizeController] Re-plot loaded basins warning: %s\n", ME_plot.message);
+                end
+            end
+
+            obj.sendToHTML("SeedsFound", seedsVec);
+            obj.sendToHTML("BasinsLoaded", struct( ...
+                "count", nB, ...
+                "masterMetric", masterMetric, ...
+                "message", sprintf("Loaded %d basins from database (defined under metric: %s).", nB, masterMetric)));
+        end
+
         function sendDbOptimaToPanel(obj)
         % SENDDBOPTIMATOPANEL Stream DB optima list to HTML table.
             db_ = obj.session.db;
@@ -1087,6 +1359,11 @@ classdef OptimizeController < handle
             stored = obj.getOptimizeState("basinMap");
             meta = obj.getOptimizeState("basinMapMeta");
             if isempty(stored) || ~isstruct(stored) || isempty(meta) || ~isstruct(meta)
+                return;
+            end
+            % If basin map was loaded from db.Basins, allow cross-metric optimization reuse
+            if isfield(meta, "isFromDbBasins") && meta.isFromDbBasins
+                bm = stored;
                 return;
             end
             same = meta.metric == string(baseMetric) && meta.variant == string(metricVariant) ...

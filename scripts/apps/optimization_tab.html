@@ -525,6 +525,20 @@ function setup(htmlComponent) {
     htmlComponent.addEventListener("SeedsRefined", function(event) {
         handleSeedsRefined(event.Data);
     });
+    htmlComponent.addEventListener("BasinsSaved", function(event) {
+        var d = event.Data || {};
+        appendLog(d.message || ("Saved " + (d.count || 0) + " basins to database."));
+        setStatus("done", "Basins Saved");
+        enableButtons(true);
+    });
+    htmlComponent.addEventListener("BasinsLoaded", function(event) {
+        var d = event.Data || {};
+        appendLog(d.message || ("Loaded " + (d.count || 0) + " basins from database."));
+        setStatus("done", "Basins Loaded");
+        var titleEl = document.getElementById("currentResultsTitle");
+        if (titleEl) titleEl.textContent = "Detected Basins (Loaded from DB)";
+        enableButtons(true);
+    });
     htmlComponent.addEventListener("ExportComplete", function(event) {
         var d = event.Data || {};
         setStatus("done", "Exported");
@@ -884,11 +898,13 @@ function previewMetric() {
     window.htmlComponent.sendEventToMATLAB("PreviewMetric", cfg);
 }
 
-// Step 2: Initialize Seeds
-function initializeSeeds() {
+// Step 2: Detect Basins
+function detectBasins() {
     enableButtons(false);
     clearLog();
-    setStatus("running", "Detecting Seeds...");
+    setStatus("running", "Detecting Basins...");
+    var titleEl = document.getElementById("currentResultsTitle");
+    if (titleEl) titleEl.textContent = "Detected Basins";
     
     // Clear previous seeds
     document.getElementById("seedsTableSection").classList.add("hidden");
@@ -897,6 +913,32 @@ function initializeSeeds() {
     var cfg = collectConfig();
     cfg.mode = "detect";
     window.htmlComponent.sendEventToMATLAB("RunOptimize", cfg);
+}
+
+function initializeSeeds() {
+    detectBasins();
+}
+
+function saveBasinsToDb() {
+    var seeds = collectSeeds(false);
+    if (!seeds || seeds.length === 0) {
+        alert("No detected basins in table to save. Run Detect Basins first.");
+        return;
+    }
+    enableButtons(false);
+    setStatus("running", "Saving Basins...");
+    appendLog("Saving " + seeds.length + " basins to project database...");
+    var cfg = collectConfig();
+    cfg.seeds = seeds;
+    window.htmlComponent.sendEventToMATLAB("SaveBasinsToDb", cfg);
+}
+
+function loadBasinsFromDb() {
+    enableButtons(false);
+    clearLog();
+    setStatus("running", "Loading Basins from DB...");
+    appendLog("Loading saved modal basins from project database...");
+    window.htmlComponent.sendEventToMATLAB("LoadBasinsFromDb", {});
 }
 
 // Handle seeds found from detection
@@ -916,13 +958,16 @@ function handleSeedsFound(candidates) {
         return;
     }
 
+    var titleEl = document.getElementById("currentResultsTitle");
+    if (titleEl) titleEl.textContent = "Detected Basins";
+
     renderSeedsTable(candidates);
     
     document.getElementById("seedsTableSection").classList.remove("hidden");
-    appendLog("Found " + candidates.length + " candidate seeds. Edit coordinates if needed, then Fine Tune.");
-    setStatus("done", "Seeds Found");
+    appendLog("Found " + candidates.length + " detected basins with discrete maxima. You can Save Basins or proceed to Fine Tune.");
+    setStatus("done", "Basins Detected");
     enableButtons(true);
-    }
+}
     function renderSeedsTable(seeds) {
         // Normalize to array (MATLAB single-element structs may arrive as objects)
         if (!Array.isArray(seeds)) {
@@ -1076,6 +1121,9 @@ function handleSeedsRefined(refinedData) {
     
     renderSeedsTable(seeds);
     document.getElementById("seedsTableSection").classList.remove("hidden");
+
+    var titleEl = document.getElementById("currentResultsTitle");
+    if (titleEl) titleEl.textContent = "Refined Optima";
 
     appendLog("Refined " + seeds.length + " optima. Results updated in table.");
     setStatus("done", "Refined");
@@ -1332,6 +1380,12 @@ function enableButtons(state) {
     if (btnPrev) btnPrev.disabled = !state;
     var btnInit = document.getElementById("btnInitSeeds");
     if (btnInit) btnInit.disabled = !state;
+    var btnDetect = document.getElementById("btnDetectBasins");
+    if (btnDetect) btnDetect.disabled = !state;
+    var btnSb2 = document.getElementById("btnSaveBasinsStep2");
+    if (btnSb2) btnSb2.disabled = !state;
+    var btnLb2 = document.getElementById("btnLoadBasinsStep2");
+    if (btnLb2) btnLb2.disabled = !state;
     var btnFine = document.getElementById("btnFineTune");
     if (btnFine) btnFine.disabled = !state;
     var btnUpd = document.getElementById("btnUpdate");
@@ -1869,11 +1923,11 @@ function toggleAllDbOptima(masterCb) {
                 </div>
             </div>
 
-            <!-- ===== STEP 2: Seed Detection ===== -->
+            <!-- ===== STEP 2: Basin Detection ===== -->
             <div class="step">
                 <div class="step-header" id="step2Header" onclick="toggleStep(2)">
                     <span class="step-number">2</span>
-                    <span class="step-title">Seed Detection</span>
+                    <span class="step-title">Basin Detection</span>
                     <span class="step-toggle"></span>
                 </div>
                 <div class="step-content">
@@ -1900,8 +1954,10 @@ function toggleAllDbOptima(masterCb) {
                         </div>
                     </div>
 
-                    <div class="btn-row">
-                        <button id="btnInitSeeds" class="btn-primary" onclick="initializeSeeds()">Initialize Seeds</button>
+                    <div class="btn-row" style="display:flex;gap:8px;">
+                        <button id="btnDetectBasins" class="btn-primary" style="flex:2;" onclick="detectBasins()">Detect Basins</button>
+                        <button id="btnSaveBasinsStep2" class="btn-secondary" style="flex:1;" onclick="saveBasinsToDb()" title="Save detected basins to project database">Save Basins</button>
+                        <button id="btnLoadBasinsStep2" class="btn-secondary" style="flex:1;" onclick="loadBasinsFromDb()" title="Load saved basins from project database">Load Basins</button>
                     </div>
                 </div>
             </div>
@@ -2082,10 +2138,12 @@ function toggleAllDbOptima(masterCb) {
                 <!-- TAB 1: Current Results -->
                 <div id="panelCurrentResults">
                     <div class="bottom-header">
-                        <h3>Detected Optima</h3>
+                        <h3 id="currentResultsTitle">Detected Basins</h3>
                         <div class="bottom-controls">
                             <button class="btn-secondary" onclick="addSeed()">+ Add</button>
                             <button class="btn-secondary" onclick="mergeSelectedSeeds()" title="Merge selected basins into one; highest value seed becomes representative seed">Merge</button>
+                            <button class="btn-secondary" onclick="saveBasinsToDb()" title="Save detected basin territories and tags to project database">Save Basins</button>
+                            <button class="btn-secondary" onclick="loadBasinsFromDb()" title="Load saved basin territories from project database">Load Basins</button>
                             <button class="btn-secondary" onclick="importSeedsCsv()">Import CSV</button>
                             <button class="btn-secondary" onclick="removeSelectedSeeds()">Remove</button>
                         </div>

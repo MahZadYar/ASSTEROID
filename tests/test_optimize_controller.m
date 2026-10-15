@@ -138,6 +138,37 @@ assert(loadedCsv.Radius_nm(1) == 120.0, "Radius_nm mismatch in CSV.");
 assert(loadedCsv.MetricValue(1) == 145.2, "MetricValue mismatch in CSV.");
 fprintf("  ✓ ExportResults (CSV) successfully saved only the optima table and values.\n");
 
+%% 9b. Test SaveBasinsToDb and LoadBasinsFromDb
+ctl.updateOptimizeState("basinMap", dummyBasinMap3);
+ctl.updateOptimizeState("currentSeeds", allThreeSeeds);
+ctl.handleEvent("SaveBasinsToDb", struct("seeds", allThreeSeeds));
+assert(isfield(session.db, "Basins"), "session.db.Basins must exist.");
+assert(numel(session.db.Basins.basinId) == 3, "Expected 3 basins saved in db.Basins.");
+assert(session.db.Basins.tag(1) == "A", "First saved basin tag mismatch.");
+assert(session.db.Basins.period(1) == 450.0, "First saved basin period mismatch.");
+assert(session.db.Basins.radius(1) == 150.0, "First saved basin radius mismatch.");
+assert(isfield(session.db.Basins, "labels") && ~isempty(session.db.Basins.labels), "labels mask must be stored.");
+assert(isfield(session.db.Basins, "polygons") && numel(session.db.Basins.polygons) == 3, "3 polygons must be stored.");
+fprintf("  ✓ SaveBasinsToDb successfully populated db.Basins with territories and tags.\n");
+
+% Clear controller RAM state and load from db.Basins
+ctl.updateOptimizeState("basinMap", []);
+ctl.updateOptimizeState("currentSeeds", []);
+ctl.handleEvent("LoadBasinsFromDb", struct());
+loadedBm = ctl.getOptimizeState("basinMap");
+loadedSeeds = ctl.getOptimizeState("currentSeeds");
+assert(~isempty(loadedBm) && isstruct(loadedBm), "basinMap must be reconstructed from db.Basins.");
+assert(numel(loadedBm.basinIds) == 3, "Expected 3 reconstructed basin IDs.");
+assert(numel(loadedSeeds) == 3, "Expected 3 reconstructed seeds.");
+assert(loadedSeeds(1).Tag == "A", "Reconstructed seed tag mismatch.");
+
+% Verify storedBasinMap allows cross-metric reuse when isFromDbBasins = true
+meta = ctl.getOptimizeState("basinMapMeta");
+assert(isfield(meta, "isFromDbBasins") && meta.isFromDbBasins, "basinMapMeta must have isFromDbBasins = true.");
+reusedBm = ctl.storedBasinMap("Absorptance", "laser", 0.05, [400 1400], [50 700]);
+assert(~isempty(reusedBm), "storedBasinMap must return persistent basinMap across different metrics.");
+fprintf("  ✓ LoadBasinsFromDb successfully restored basins and allowed cross-metric reuse.\n");
+
 %% 10. Clean up
 try
     rmdir(testDir, "s");

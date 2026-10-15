@@ -3386,6 +3386,16 @@ function handleOptimizeEvent(src, event, fig, ax)
                 generateDensePredictions(src, data, fig);
             case "SaveOptimaToDb"
                 saveOptimaToDb(src, data, fig);
+            case "SaveBasinsToDb"
+                if isfield(fig.UserData, 'handles') && isfield(fig.UserData.handles, 'optimizeController') ...
+                        && ~isempty(fig.UserData.handles.optimizeController)
+                    fig.UserData.handles.optimizeController.handleEvent("SaveBasinsToDb", data);
+                end
+            case "LoadBasinsFromDb"
+                if isfield(fig.UserData, 'handles') && isfield(fig.UserData.handles, 'optimizeController') ...
+                        && ~isempty(fig.UserData.handles.optimizeController)
+                    fig.UserData.handles.optimizeController.handleEvent("LoadBasinsFromDb", data);
+                end
             case "GetDbOptima"
                 sendDbOptimaToPanel(src, fig);
             case "DeleteDbOptima"
