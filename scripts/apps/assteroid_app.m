@@ -99,6 +99,7 @@ function figOut = assteroid_app(workFolder)
         "setProcessRunning", @(r, s) setProcessRunning(fig, r, s), ...
         "requestProcessStop", @() requestProcessStop(fig), ...
         "notifyProcessStopped", @(s, m) notifyProcessStopped(fig, s, m), ...
+        "savePlotFig", @(varargin) saveCurrentTabPlotFig(fig, varargin{:}), ...
         "saveDbFile", @() saveDbFile(fig), ...
         "markDbDirty", @() markDbDirty(fig), ...
         "resolveDbPaths", @() resolveDbPaths(fig), ...
@@ -178,6 +179,7 @@ function figOut = assteroid_app(workFolder)
     samplingController = SamplingController(session, fig, h2, ax2);
     fig.UserData.handles.samplingController = samplingController;
     fig.UserData.handles.samplingAx = ax2;
+    fig.UserData.handles.samplingVisPanel = visPanel2;
     fig.UserData.handles.samplingHtml = h2;
     fig.UserData.sampling = struct( ...
         "config", [], "samples", [], "density", [], ...
@@ -240,6 +242,7 @@ function figOut = assteroid_app(workFolder)
     optController = OptimizeController(session, fig, h5, ax5opt);
     fig.UserData.handles.optimizeController = optController;
     fig.UserData.handles.optimizeAx = ax5opt;
+    fig.UserData.handles.optimizeVisPanel = visPanel5;
     fig.UserData.handles.optimizeHtml = h5;
     fig.UserData.handles.optimizeLeft = h5;
     fig.UserData.handles.optimizeRight = h5;
@@ -1393,6 +1396,8 @@ function handleConsoleEvent(~, ev, fig)
     switch eventName
         case "StopProcessRequest"
             requestProcessStop(fig);
+        case {"SavePlotFigRequest", "SavePlotFig", "ExportPlotFig"}
+            saveCurrentTabPlotFig(fig);
         case "ToggleConsoleHeight"
             if isfield(data, "height") && isfield(fig.UserData, "handles") && ...
                isfield(fig.UserData.handles, "mainGrid") && isvalid(fig.UserData.handles.mainGrid)
@@ -1488,6 +1493,222 @@ function cleanupConsole(fig)
     end
 end
 
+%% ========================================================================
+%   SAVE CURRENT TAB PLOT AS .FIG HELPER
+%  ========================================================================
+function savedFile = saveCurrentTabPlotFig(fig, targetFile)
+%saveCurrentTabPlotFig Export the current plot on the right panel as a MATLAB .fig file.
+%
+%   savedFile = saveCurrentTabPlotFig(fig) prompts the user via uiputfile
+%   and saves the active tab's visualization to a .fig file.
+%
+%   savedFile = saveCurrentTabPlotFig(fig, targetFile) saves directly to
+%   the specified targetFile without prompting (useful for tests/automation).
+
+    savedFile = "";
+    if isempty(fig) || ~isvalid(fig), return; end
+
+    h = fig.UserData.handles;
+    if ~isfield(h, "mainTabGroup") || isempty(h.mainTabGroup) || ~isvalid(h.mainTabGroup)
+        logToConsole(fig, "Cannot export figure: Main tab group is unavailable.", "warning");
+        return;
+    end
+
+    activeTab = h.mainTabGroup.SelectedTab;
+    if isempty(activeTab) || ~isvalid(activeTab)
+        logToConsole(fig, "Cannot export figure: No tab is currently selected.", "warning");
+        return;
+    end
+
+    tabTitle = string(activeTab.Title);
+    defaultName = "assteroid_plot.fig";
+    targetPanelOrAx = [];
+
+    % Determine target visualization based on active tab
+    if isfield(h, "visualizeTab") && isvalid(h.visualizeTab) && activeTab == h.visualizeTab
+        % Stage 6: Visualize Tab
+        if isfield(h, "visualizeTabGroup") && isvalid(h.visualizeTabGroup)
+            subTab = h.visualizeTabGroup.SelectedTab;
+            if isfield(h, "visualizeTab1D") && isvalid(h.visualizeTab1D) && subTab == h.visualizeTab1D
+                targetPanelOrAx = h.visualizeAx1D;
+                defaultName = "assteroid_visualize_1D_spectra.fig";
+            elseif isfield(h, "visualizeTab2D") && isvalid(h.visualizeTab2D) && subTab == h.visualizeTab2D
+                targetPanelOrAx = h.visualizeAx2D;
+                defaultName = "assteroid_visualize_2D_map.fig";
+            elseif isfield(h, "visualizeTab3D") && isvalid(h.visualizeTab3D) && subTab == h.visualizeTab3D
+                targetPanelOrAx = h.visualizeViewer;
+                defaultName = "assteroid_visualize_3D_volume.fig";
+            elseif ~isempty(subTab) && isvalid(subTab)
+                targetPanelOrAx = subTab;
+                defaultName = "assteroid_visualize_plot.fig";
+            end
+        elseif isfield(h, "visualizePanel") && isvalid(h.visualizePanel)
+            targetPanelOrAx = h.visualizePanel;
+            defaultName = "assteroid_visualize_plot.fig";
+        end
+
+    elseif contains(tabTitle, "Optimize") || contains(tabTitle, "5")
+        % Stage 5: Optimize Tab
+        if isfield(h, "optimizeAx") && isvalid(h.optimizeAx)
+            targetPanelOrAx = h.optimizeAx;
+        elseif isfield(h, "optimizeVisPanel") && isvalid(h.optimizeVisPanel)
+            targetPanelOrAx = h.optimizeVisPanel;
+        end
+        defaultName = "assteroid_optimization_landscape.fig";
+
+    elseif contains(tabTitle, "Training") || contains(tabTitle, "3")
+        % Stage 3: Training Tab
+        if isfield(h, "trainingVisPanel") && isvalid(h.trainingVisPanel)
+            targetPanelOrAx = h.trainingVisPanel;
+        end
+        defaultName = "assteroid_training_results.fig";
+
+    elseif contains(tabTitle, "Sampling") || contains(tabTitle, "2")
+        % Stage 2: Adaptive Sampling Tab
+        if isfield(h, "samplingAx") && isvalid(h.samplingAx)
+            targetPanelOrAx = h.samplingAx;
+        elseif isfield(h, "samplingVisPanel") && isvalid(h.samplingVisPanel)
+            targetPanelOrAx = h.samplingVisPanel;
+        end
+        defaultName = "assteroid_sampling_density.fig";
+
+    elseif contains(tabTitle, "Import") || contains(tabTitle, "1")
+        % Stage 1: Import Tab
+        if isfield(h, "importVisPanel") && isvalid(h.importVisPanel)
+            targetPanelOrAx = h.importVisPanel;
+        end
+        defaultName = "assteroid_import_summary.fig";
+
+    else
+        % Fallback for other tabs (Database, Predict, or future extensions)
+        panels = findall(activeTab, "Type", "uipanel");
+        if ~isempty(panels)
+            targetPanelOrAx = panels(end);
+        else
+            axCandidates = findall(activeTab, "-isa", "matlab.graphics.axis.AbstractAxes");
+            if ~isempty(axCandidates)
+                targetPanelOrAx = axCandidates(1);
+            end
+        end
+        cleanTitle = regexprep(tabTitle, "[^\w]", "_");
+        cleanTitle = regexprep(cleanTitle, "_+", "_");
+        defaultName = sprintf("assteroid_%s_plot.fig", cleanTitle);
+    end
+
+    if isempty(targetPanelOrAx) || ~isvalid(targetPanelOrAx)
+        logToConsole(fig, sprintf("No plot available to export on %s.", tabTitle), "warning");
+        return;
+    end
+
+    % Collect child graphic objects to export
+    childObjects = [];
+    if isa(targetPanelOrAx, "matlab.ui.container.Panel") || isa(targetPanelOrAx, "matlab.ui.container.Tab")
+        % Container: check for tiledlayout, axes, viewer3d
+        tLayouts = findall(targetPanelOrAx, "Type", "tiledlayout");
+        axesList = findall(targetPanelOrAx, "-isa", "matlab.graphics.axis.AbstractAxes");
+        viewers = findall(targetPanelOrAx, "-isa", "matlab.graphics.shape.Viewer3D");
+        allCh = targetPanelOrAx.Children;
+        if isempty(tLayouts) && isempty(axesList) && isempty(viewers) && isempty(allCh)
+            logToConsole(fig, sprintf("No rendered plot found on %s to export.", tabTitle), "warning");
+            return;
+        end
+        validKids = [];
+        for idx = 1:numel(allCh)
+            ch = allCh(idx);
+            if isa(ch, "matlab.graphics.axis.AbstractAxes") || ...
+               isa(ch, "matlab.graphics.illustration.ColorBar") || ...
+               isa(ch, "matlab.graphics.illustration.Legend") || ...
+               isa(ch, "matlab.graphics.layout.TiledChartLayout") || ...
+               isa(ch, "matlab.graphics.shape.Viewer3D") || ...
+               isa(ch, "matlab.ui.control.UIAxes")
+                validKids = [validKids; ch]; %#ok<AGROW>
+            end
+        end
+        if isempty(validKids)
+            validKids = allCh;
+        end
+        childObjects = validKids;
+    elseif isa(targetPanelOrAx, "matlab.graphics.axis.AbstractAxes") || isa(targetPanelOrAx, "matlab.ui.control.UIAxes")
+        childObjects = targetPanelOrAx;
+        if isprop(targetPanelOrAx, "Parent") && ~isempty(targetPanelOrAx.Parent) && isvalid(targetPanelOrAx.Parent)
+            siblings = targetPanelOrAx.Parent.Children;
+            for idx = 1:numel(siblings)
+                sib = siblings(idx);
+                if isa(sib, "matlab.graphics.illustration.ColorBar") && isprop(sib, "Axes") && sib.Axes == targetPanelOrAx
+                    childObjects = [childObjects; sib]; %#ok<AGROW>
+                elseif isa(sib, "matlab.graphics.illustration.Legend") && isprop(sib, "Axes") && sib.Axes == targetPanelOrAx
+                    childObjects = [childObjects; sib]; %#ok<AGROW>
+                end
+            end
+        end
+    else
+        childObjects = targetPanelOrAx;
+    end
+
+    if isempty(childObjects)
+        logToConsole(fig, sprintf("No plottable objects found on %s to export.", tabTitle), "warning");
+        return;
+    end
+
+    % Determine destination file
+    if nargin < 2 || isempty(targetFile) || targetFile == ""
+        filter = {"*.fig", "MATLAB Figure (*.fig)"};
+        dialogTitle = sprintf("Save %s As MATLAB Figure (.fig)", tabTitle);
+        [file, path] = uiputfile(filter, dialogTitle, defaultName);
+        if isequal(file, 0) || isequal(path, 0)
+            logToConsole(fig, "Figure export canceled by user.", "info");
+            return;
+        end
+        targetFile = fullfile(path, file);
+    end
+
+    % Ensure destination folder exists
+    [outDir, ~, ~] = fileparts(targetFile);
+    if ~isempty(outDir) && ~isfolder(outDir)
+        try mkdir(outDir); catch; end
+    end
+
+    % Create target figure, match background and colormap, and copy graphics
+    newFig = figure("Visible", "off", "Color", [12, 16, 32]/255);
+    try
+        if isprop(targetPanelOrAx, "BackgroundColor")
+            bg = targetPanelOrAx.BackgroundColor;
+            if isnumeric(bg) && numel(bg) == 3
+                newFig.Color = bg;
+            end
+        end
+    catch
+    end
+
+    try
+        newFig.ToolBar = "figure";
+        newFig.MenuBar = "figure";
+    catch
+    end
+
+    try
+        copyobj(childObjects, newFig);
+        try
+            if isprop(targetPanelOrAx, "Colormap")
+                colormap(newFig, targetPanelOrAx.Colormap);
+            elseif isa(targetPanelOrAx, "matlab.graphics.axis.AbstractAxes")
+                colormap(newFig, colormap(targetPanelOrAx));
+            end
+        catch
+        end
+
+        savefig(newFig, char(targetFile));
+        savedFile = string(targetFile);
+        logToConsole(fig, sprintf("Current plot saved as .fig: %s", targetFile), "success");
+    catch ME
+        logToConsole(fig, sprintf("Failed to save figure: %s", ME.message), "error");
+    end
+
+    if isvalid(newFig)
+        delete(newFig);
+    end
+end
+
 function intercepted = interceptCommonEvents(fig, event)
     intercepted = false;
     if isempty(event), return; end
@@ -1508,6 +1729,9 @@ function intercepted = interceptCommonEvents(fig, event)
             intercepted = true;
         case {"StopProcess", "StopProcessRequest"}
             requestProcessStop(fig);
+            intercepted = true;
+        case {"SavePlotFig", "SavePlotFigRequest", "ExportPlotFig"}
+            saveCurrentTabPlotFig(fig);
             intercepted = true;
     end
 end

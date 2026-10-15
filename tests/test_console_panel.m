@@ -107,9 +107,57 @@ for k = 1:numel(htmlFiles)
     assert(~contains(txt, 'id="btnStopRender"'), sprintf("%s still contains btnStopRender", htmlFiles(k)));
 end
 
-% 11. Verify console_panel.html has the global stop button and no stageBadge
+% 11. Verify console_panel.html has the global stop button, save plot button, and no stageBadge
 consoleTxt = fileread(fullfile(scriptsDir, "console_panel.html"));
 assert(contains(consoleTxt, 'id="btnStopGlobal"'), "console_panel.html must contain btnStopGlobal");
+assert(contains(consoleTxt, 'id="btnSavePlotFig"'), "console_panel.html must contain btnSavePlotFig");
+assert(contains(consoleTxt, 'requestSavePlotFig()'), "console_panel.html must contain requestSavePlotFig()");
 assert(~contains(consoleTxt, 'id="stageBadge"'), "console_panel.html must NOT contain stageBadge");
+
+% 12. Test Save Plot As .fig across active tabs
+assert(isfield(app, "savePlotFig") && isa(app.savePlotFig, "function_handle"), ...
+    "app.savePlotFig function handle missing.");
+
+testExportDir = fullfile(tempdir, "test_assteroid_fig_export");
+if ~isfolder(testExportDir), mkdir(testExportDir); end
+
+% Test Tab 2: Sampling
+tg.SelectedTab = tg.Children(3); % Tab 2: Sampling
+drawnow;
+fig2Path = fullfile(testExportDir, "test_sampling.fig");
+if isfile(fig2Path), delete(fig2Path); end
+app.savePlotFig(fig2Path);
+assert(isfile(fig2Path), "Sampling tab plot was not exported to .fig.");
+fCheck2 = openfig(fig2Path, "invisible");
+assert(~isempty(fCheck2.Children), "Exported Sampling figure must contain children.");
+delete(fCheck2); delete(fig2Path);
+fprintf("  ✓ Tab 2 (Sampling) plot saved to .fig and verified.\n");
+
+% Test Tab 5: Optimize
+tg.SelectedTab = tg.Children(6); % Tab 5: Optimize
+drawnow;
+fig5Path = fullfile(testExportDir, "test_optimize.fig");
+if isfile(fig5Path), delete(fig5Path); end
+app.savePlotFig(fig5Path);
+assert(isfile(fig5Path), "Optimize tab plot was not exported to .fig.");
+fCheck5 = openfig(fig5Path, "invisible");
+assert(~isempty(fCheck5.Children), "Exported Optimize figure must contain children.");
+delete(fCheck5); delete(fig5Path);
+fprintf("  ✓ Tab 5 (Optimize) plot saved to .fig and verified.\n");
+
+% Test Tab 6: Visualize (1D Spectra sub-tab)
+tg.SelectedTab = tg.Children(7); % Tab 6: Visualize
+drawnow;
+fig6Path = fullfile(testExportDir, "test_visualize.fig");
+if isfile(fig6Path), delete(fig6Path); end
+app.savePlotFig(fig6Path);
+assert(isfile(fig6Path), "Visualize tab plot was not exported to .fig.");
+fCheck6 = openfig(fig6Path, "invisible");
+assert(~isempty(fCheck6.Children), "Exported Visualize figure must contain children.");
+delete(fCheck6); delete(fig6Path);
+fprintf("  ✓ Tab 6 (Visualize) plot saved to .fig and verified.\n");
+
+% Clean up export test directory
+try rmdir(testExportDir, "s"); catch; end
 
 fprintf("=== test_console_panel PASSED ===\n");

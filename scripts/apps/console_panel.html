@@ -198,6 +198,22 @@
         color: var(--text-primary, #ffffff);
         border-color: rgba(255, 255, 255, 0.25);
     }
+    .c-btn.save-fig {
+        background: rgba(56, 189, 248, 0.12);
+        border-color: rgba(56, 189, 248, 0.35);
+        color: #7dd3fc;
+        font-weight: 600;
+    }
+    .c-btn.save-fig:hover {
+        background: #0284c7;
+        color: #ffffff;
+        border-color: #38bdf8;
+        box-shadow: 0 0 8px rgba(56, 189, 248, 0.45);
+    }
+    .c-btn.save-fig:active {
+        background: #0369a1;
+        transform: scale(0.97);
+    }
     .c-btn.stop {
         background: rgba(229, 57, 53, 0.15);
         border-color: rgba(229, 57, 53, 0.4);
@@ -306,6 +322,9 @@
         </div>
 
         <div class="header-right">
+            <button id="btnSavePlotFig" class="c-btn save-fig" onclick="requestSavePlotFig()" title="Save current plot on right panel as MATLAB .fig file">
+                💾 Save .fig
+            </button>
             <button id="btnStopGlobal" class="c-btn stop" onclick="requestStop()" title="Halt current computational job immediately">
                 ⏹ Stop
             </button>
@@ -498,6 +517,12 @@
         var newH = heightModes[heightIndex];
         if (window.htmlComponent) {
             window.htmlComponent.sendEventToMATLAB("ToggleConsoleHeight", { height: newH });
+        }
+    }
+
+    function requestSavePlotFig() {
+        if (window.htmlComponent) {
+            window.htmlComponent.sendEventToMATLAB("SavePlotFigRequest", {});
         }
     }
 
