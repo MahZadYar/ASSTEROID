@@ -855,6 +855,7 @@ classdef OptimizeController < handle
             basinMap.pAxis = basinMap.pAxis_nm * 1e-3; % um
             basinMap.rAxis = basinMap.rAxis_nm * 1e-3; % um
             basinMap.polygons = bStruct.polygons;
+            basinMap.values = [];
             if isfield(bStruct, "gridValue"), basinMap.peakValue = double(bStruct.gridValue); end
             if isfield(bStruct, "saddle"),    basinMap.saddle = double(bStruct.saddle); end
             if isfield(bStruct, "depth"),     basinMap.depth = double(bStruct.depth); end

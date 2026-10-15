@@ -158,6 +158,7 @@ ctl.handleEvent("LoadBasinsFromDb", struct());
 loadedBm = ctl.getOptimizeState("basinMap");
 loadedSeeds = ctl.getOptimizeState("currentSeeds");
 assert(~isempty(loadedBm) && isstruct(loadedBm), "basinMap must be reconstructed from db.Basins.");
+assert(isfield(loadedBm, "values"), "loadedBm must have values field.");
 assert(numel(loadedBm.basinIds) == 3, "Expected 3 reconstructed basin IDs.");
 assert(numel(loadedSeeds) == 3, "Expected 3 reconstructed seeds.");
 assert(loadedSeeds(1).Tag == "A", "Reconstructed seed tag mismatch.");

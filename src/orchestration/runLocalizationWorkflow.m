@@ -492,10 +492,19 @@ function results = runLocalizationWorkflow(cfg, reporter)
                 ratioLowerVal, ratioUpperVal, predictor, analyteWeights);
             attemptTrajectories = table();
         elseif useBasins && ~isempty(basinMap)
+            if isempty(avgMetricGrid) && isfield(allData, candidateField) && numel(allData.period) > 4
+                try
+                    [bMap, ~, ~, ~] = reshapeSoAToVolume(allData, candidateField, 'UnitConversion', 'none');
+                    if isequal(size(bMap), size(basinMap.labels))
+                        avgMetricGrid = double(bMap);
+                    end
+                catch
+                end
+            end
             [maximaResults, msSolutions, msOutput, attemptTrajectories] = runBasinMultiStart( ...
                 model, ri, lambdaSamples, primaryMetric, primaryMetricAvgField, ...
                 cfg, candidateTable, basinMap, pBounds, rBounds, ...
-                ratioLowerVal, ratioUpperVal, reporter, predictor, analyteWeights);
+                ratioLowerVal, ratioUpperVal, reporter, predictor, analyteWeights, avgMetricGrid);
         else
             [maximaResults, msSolutions, msOutput, attemptTrajectories] = runLocalMultiStart( ...
                 model, ri, lambdaSamples, primaryMetric, primaryMetricAvgField, ...
@@ -1171,7 +1180,7 @@ end
 function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runBasinMultiStart( ...
         model, ri, lambdaSamples, primaryMetric, primaryMetricAvgField, ...
         cfg, candidateTable, basinMap, pBounds, rBounds, ...
-        ratioLowerVal, ratioUpperVal, reporter, predictor, analyteWeights)
+        ratioLowerVal, ratioUpperVal, reporter, predictor, analyteWeights, avgMetricGrid)
     % runBasinMultiStart  Refine each seed inside its watershed basin.
     %
     %   For every seed the owning basin is looked up in basinMap. Starts are
@@ -1207,7 +1216,13 @@ function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runBasinM
     pAx = double(basinMap.pAxis(:)');      % µm
     rAx = double(basinMap.rAxis(:)');
     labels = double(basinMap.labels);
-    vals = double(basinMap.values);
+    if nargin >= 16 && ~isempty(avgMetricGrid) && isequal(size(avgMetricGrid), size(labels))
+        vals = double(avgMetricGrid);
+    elseif isfield(basinMap, "values") && ~isempty(basinMap.values) && isequal(size(basinMap.values), size(labels))
+        vals = double(basinMap.values);
+    else
+        vals = zeros(size(labels));
+    end
     dpCell = median(abs(diff(pAx)));
     drCell = median(abs(diff(rAx)));
     [pMesh, rMesh] = meshgrid(pAx, rAx);
