@@ -324,8 +324,12 @@ classdef VisualizeController < handle
             end
             rep.checkStop("Map2D");
 
-            method = lower(obj.safeStr(d, "renderMethod", "triangulated"));
-            if ~ismember(method, ["triangulated", "nearest"]), method = "triangulated"; end
+            method = lower(obj.safeStr(d, "renderMethod", "natural"));
+            validMethods = ["triangulated", "nearest", "natural", "linear", "grid"];
+            if ~ismember(method, validMethods), method = "natural"; end
+            spatialRes = obj.safeNum(d, "spatialResolution", NaN);
+            rasterSize = round(obj.safeNum(d, "rasterSize", 300));
+            if rasterSize <= 0, rasterSize = 300; end
             cmap = obj.loadColormapSafe(256, ~obj.safeBool(d, "invertColormap", false));
 
             sp = []; sr = [];
@@ -348,13 +352,21 @@ classdef VisualizeController < handle
 
             ax = obj.getAx2D();
             info = plotScatteredMap2D(ax, P, R, v, Method=method, Colormap=cmap, ...
+                SpatialResolution=spatialRes, RasterSize=rasterSize, ...
                 LogScale=obj.safeBool(d, "logScale", false), Title=titleStr, ColorbarLabel=metric, ...
                 ShowPoints=showSim, PointsP=sp, PointsR=sr, OptimaP=op, OptimaR=orr);
             rep.complete("Map2D", "2D map rendered.");
             if info.isGridded
                 layout = sprintf("grid %d×%d (r × p)", info.gridSize(1), info.gridSize(2));
+            elseif info.method == "triangulated"
+                layout = "triangulated Delaunay mesh";
             else
-                layout = info.method + " rendering of scattered samples";
+                resStr = "";
+                if isfield(info, "resolution") && all(isfinite(info.resolution))
+                    resStr = sprintf(", ~%.2g nm res", mean(info.resolution));
+                end
+                layout = sprintf("%s rendering on %d×%d grid%s", ...
+                    info.method, info.gridSize(1), info.gridSize(2), resStr);
             end
             msg = sprintf("2D: %s from db.%s, %d finite samples, %s.", metric, branch, info.nValid, layout);
         end

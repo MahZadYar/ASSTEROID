@@ -20,18 +20,19 @@ function info = plotScatteredMap2D(ax, p, r, v, options)
 %       v  - [N x 1] metric values
 %
 %   Name-Value Arguments:
-%       Method         - "triangulated" (default) | "nearest"  (scattered data only)
-%       Colormap       - [M x 3] colormap (default parula(256))
-%       LogScale       - plot log10(v); non-positive values become NaN (false)
-%       Title          - axes title ("")
-%       ColorbarLabel  - colorbar label ("")
-%       ShowPoints     - overlay sample locations (false)
+%       Method           - "triangulated" (default) | "nearest" | "natural" | "linear" | "grid"
+%       Colormap         - [M x 3] colormap (default parula(256))
+%       LogScale         - plot log10(v); non-positive values become NaN (false)
+%       Title            - axes title ("")
+%       ColorbarLabel    - colorbar label ("")
+%       ShowPoints       - overlay sample locations (false)
 %       PointsP, PointsR - explicit overlay coordinates (default: p, r)
 %       OptimaP, OptimaR - optional optima markers ([])
-%       RasterSize     - display raster size for "nearest" (300)
+%       RasterSize       - display raster size when SpatialResolution is unset (300)
+%       SpatialResolution - spatial resolution in nm (e.g. 2 nm) for gridded raster
 %
 %   Output:
-%       info - struct: isGridded, method, nValid, gridSize, valueRange
+%       info - struct: isGridded, method, nValid, gridSize, resolution, valueRange
 %
 %   See also: patch, delaunay, scatteredInterpolant, renderAnnotatedVolume
 
@@ -40,7 +41,7 @@ function info = plotScatteredMap2D(ax, p, r, v, options)
         p (:,1) double
         r (:,1) double
         v (:,1) double
-        options.Method (1,1) string {mustBeMember(options.Method, ["triangulated", "nearest"])} = "triangulated"
+        options.Method (1,1) string {mustBeMember(options.Method, ["triangulated", "nearest", "natural", "linear", "grid"])} = "triangulated"
         options.Colormap double = parula(256)
         options.LogScale (1,1) logical = false
         options.Title (1,1) string = ""
@@ -51,6 +52,7 @@ function info = plotScatteredMap2D(ax, p, r, v, options)
         options.OptimaP (:,1) double = []
         options.OptimaR (:,1) double = []
         options.RasterSize (1,1) double {mustBePositive, mustBeInteger} = 300
+        options.SpatialResolution double = NaN
     end
 
     if numel(p) ~= numel(r) || numel(p) ~= numel(v)
@@ -65,7 +67,7 @@ function info = plotScatteredMap2D(ax, p, r, v, options)
     pV = p(valid); rV = r(valid); vV = v(valid);
 
     info = struct("isGridded", false, "method", "", "nValid", nnz(valid), ...
-        "gridSize", [0 0], "valueRange", [NaN NaN]);
+        "gridSize", [0 0], "resolution", [NaN NaN], "valueRange", [NaN NaN]);
 
     cla(ax, "reset");
     localStyleAxes(ax);
@@ -81,12 +83,16 @@ function info = plotScatteredMap2D(ax, p, r, v, options)
 
     validPR = isfinite(p) & isfinite(r);
     [isGrid, pU, rU, linIdx] = detectPRGrid(p(validPR), r(validPR));
-    if isGrid
+    useNativeGrid = isGrid && (options.Method == "grid" || options.Method == "triangulated");
+    if useNativeGrid
         Z = NaN(numel(rU), numel(pU));
         Z(linIdx) = v(validPR);
         info.isGridded = true;
         info.method = "grid";
         info.gridSize = [numel(rU), numel(pU)];
+        if numel(pU) > 1 && numel(rU) > 1
+            info.resolution = [(max(pU)-min(pU))/(numel(pU)-1), (max(rU)-min(rU))/(numel(rU)-1)];
+        end
         hS = pcolor(ax, pU, rU, Z);
         hS.EdgeColor = "none";
         hS.FaceColor = "interp";
@@ -96,18 +102,39 @@ function info = plotScatteredMap2D(ax, p, r, v, options)
         patch(ax, "Faces", tri, "Vertices", [pV, rV], ...
             "FaceVertexCData", vV, "FaceColor", "interp", "EdgeColor", "none");
     else
-        info.method = "nearest";
-        n = options.RasterSize;
-        pq = linspace(min(pV), max(pV), n);
-        rq = linspace(min(rV), max(rV), n);
+        interpType = options.Method;
+        if ~ismember(interpType, ["nearest", "linear", "natural"])
+            interpType = "natural";
+        end
+        info.method = interpType;
+
+        pMin = min(pV); pMax = max(pV);
+        rMin = min(rV); rMax = max(rV);
+        sRes = options.SpatialResolution;
+        if isfinite(sRes) && sRes > 0
+            nP = max(2, round((pMax - pMin) / sRes) + 1);
+            nR = max(2, round((rMax - rMin) / sRes) + 1);
+        else
+            nP = options.RasterSize;
+            nR = options.RasterSize;
+        end
+        pq = linspace(pMin, pMax, nP);
+        rq = linspace(rMin, rMax, nR);
+        dp = (pMax - pMin) / max(1, nP - 1);
+        dr = (rMax - rMin) / max(1, nR - 1);
+        info.gridSize = [nR nP];
+        info.resolution = [dp dr];
+
         [Pq, Rq] = meshgrid(pq, rq);
         warnState = warning("off", "MATLAB:scatteredInterpolant:DupPtsAvValuesWarnId");
         restoreWarn = onCleanup(@() warning(warnState));
-        F = scatteredInterpolant(pV, rV, vV, "nearest", "none");
+        F = scatteredInterpolant(pV, rV, vV, interpType, "none");
         Zq = F(Pq, Rq);
-        k = convhull(pV, rV);
-        Zq(~inpolygon(Pq, Rq, pV(k), rV(k))) = NaN;
-        info.gridSize = [n n];
+        try
+            k = convhull(pV, rV);
+            Zq(~inpolygon(Pq, Rq, pV(k), rV(k))) = NaN;
+        catch
+        end
         imagesc(ax, pq, rq, Zq, "AlphaData", isfinite(Zq));
         ax.YDir = "normal";
     end

@@ -62,6 +62,9 @@ i2 = plotScatteredMap2D(ax, pI, rI, Interp.EF_vol_laser);
 assert(i2.isGridded && isequal(i2.gridSize, [17 21]), "Gridded branch should render via pcolor.");
 i3 = plotScatteredMap2D(ax, pS, rS, Sim.EF_vol_laser, Method="nearest");
 assert(~i3.isGridded && i3.method == "nearest", "Scattered branch should use the nearest renderer.");
+i4 = plotScatteredMap2D(ax, pS, rS, Sim.EF_vol_laser, Method="natural", SpatialResolution=10);
+assert(~i4.isGridded && i4.method == "natural", "Natural neighbor should be used.");
+assert(abs(mean(i4.resolution) - 10) < 0.5, "Resolution should match requested SpatialResolution.");
 close(f);
 
 uf = uifigure("Visible", "off");
@@ -122,6 +125,10 @@ send("Render", struct("mode", "2d", "branch", "Interp", "invertColormap", true, 
     "metric", "EF_vol", "sliceShift", 1000, "laserWavelength", 785, "renderMethod", "triangulated", ...
     "logScale", false, "showSimPoints", false, "showOptima", false));
 assert(~isempty(findobj(ax2, 'Type', 'surface')), "Gridded slice should render as pcolor surface.");
+send("Render", struct("mode", "2d", "branch", "Sim", "invertColormap", false, "metricKind", "scalar", ...
+    "metric", "EF_vol_laser", "sliceShift", 1000, "laserWavelength", 785, "renderMethod", "natural", ...
+    "spatialResolution", 5, "logScale", false, "showSimPoints", false, "showOptima", false));
+assert(~isempty(findobj(ax2, 'Type', 'image')), "Natural gridded 2D map should render as an image.");
 fprintf("[4b] 2D renders OK\n");
 
 % 3D: gridded Interp renders; scattered Sim is refused

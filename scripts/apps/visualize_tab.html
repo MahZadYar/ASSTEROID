@@ -388,7 +388,64 @@ function updateBranchInfo() {
         "<br>p " + fmtRange(bi.pRange, "nm") + " · r " + fmtRange(bi.rRange, "nm") +
         " · λ " + fmtRange(bi.lambdaRange, "nm");
     var row2d = document.getElementById("interp2dRow");
-    if (row2d) row2d.style.display = bi.isGridded ? "none" : "";
+    if (row2d) {
+        var sel = document.getElementById("interp2d");
+        var optGrid = sel ? sel.querySelector('option[value="grid"]') : null;
+        if (bi.isGridded) {
+            if (!optGrid && sel) {
+                var o = document.createElement("option");
+                o.value = "grid";
+                o.textContent = "Native regular grid (pcolor)";
+                sel.insertBefore(o, sel.firstChild);
+            }
+            if (sel && (!sel.dataset.userSelected || sel.dataset.userSelected === "grid")) {
+                sel.value = "grid";
+            }
+        } else {
+            if (optGrid) optGrid.remove();
+            if (sel && sel.value === "grid") {
+                sel.value = "natural";
+            }
+        }
+    }
+    onInterp2dChange();
+}
+
+function onInterp2dChange() {
+    var m = val("interp2d");
+    var resRow = document.getElementById("gridRes2dRow");
+    var hint = document.getElementById("res2dHint");
+    var isGridOnly = (m === "triangulated" || m === "grid");
+    if (resRow) resRow.style.display = isGridOnly ? "none" : "";
+    if (hint) hint.style.display = isGridOnly ? "none" : "";
+    updateRes2dHint();
+}
+
+function updateRes2dHint() {
+    var hint = document.getElementById("res2dHint");
+    if (!hint) return;
+    var m = val("interp2d");
+    if (m === "triangulated" || m === "grid") {
+        hint.textContent = "";
+        return;
+    }
+    var b = getRadio("branch", "");
+    var bi = branchInfo(b);
+    var pSpan = (bi && bi.pRange && isFinite(bi.pRange[0])) ? (bi.pRange[1] - bi.pRange[0]) : 800;
+    var rSpan = (bi && bi.rRange && isFinite(bi.rRange[0])) ? (bi.rRange[1] - bi.rRange[0]) : 400;
+    var rasterPts = numOr("rasterSize2d", NaN);
+    var sRes = numOr("spatialRes2d", 2);
+    if (isFinite(rasterPts) && rasterPts > 0) {
+        var dp = Math.round((pSpan / (rasterPts - 1)) * 10) / 10;
+        var dr = Math.round((rSpan / (rasterPts - 1)) * 10) / 10;
+        hint.textContent = "Raster: " + rasterPts + " × " + rasterPts + " points (~" + dp + " × " + dr + " nm spacing).";
+    } else if (isFinite(sRes) && sRes > 0) {
+        var nP = Math.max(2, Math.round(pSpan / sRes) + 1);
+        var nR = Math.max(2, Math.round(rSpan / sRes) + 1);
+        hint.textContent = sRes + " nm resolution yields ~" + nP + " × " + nR + " grid (" + (nP * nR).toLocaleString() + " points).";
+    } else {
+        hint.textContent = "";
+    }
 }
 
 function fillSelect(sel, groups, keep) {
@@ -625,6 +682,11 @@ function collectConfig() {
         cfg.sliceShift = numOr("sliceShift", 1000);
         cfg.laserWavelength = numOr("laser2d", 785);
         cfg.renderMethod = val("interp2d");
+        cfg.spatialResolution = numOr("spatialRes2d", 2);
+        var rSize = numOr("rasterSize2d", NaN);
+        if (isFinite(rSize) && rSize > 0) {
+            cfg.rasterSize = rSize;
+        }
         cfg.logScale = chk("log2d");
         cfg.showSimPoints = chk("showSim2d");
         cfg.showOptima = chk("showOptima2d");
@@ -797,12 +859,33 @@ document.addEventListener("DOMContentLoaded", function() {
             updateRenderAvailability();
         });
     }
-    ["p1d", "r1d", "laser1d", "laser2d"].forEach(function(id) {
+    ["p1d", "r1d", "laser1d", "laser2d", "spatialRes2d"].forEach(function(id) {
         var inputEl = document.getElementById(id);
         if (inputEl) {
             inputEl.addEventListener("input", function() { this.dataset.touched = "1"; });
         }
     });
+    var sResEl = document.getElementById("spatialRes2d");
+    if (sResEl) {
+        sResEl.addEventListener("input", function() {
+            var rEl = document.getElementById("rasterSize2d");
+            if (rEl) rEl.value = "";
+            updateRes2dHint();
+        });
+    }
+    var rSizeEl = document.getElementById("rasterSize2d");
+    if (rSizeEl) {
+        rSizeEl.addEventListener("input", function() {
+            updateRes2dHint();
+        });
+    }
+    var i2dEl = document.getElementById("interp2d");
+    if (i2dEl) {
+        i2dEl.addEventListener("change", function() {
+            this.dataset.userSelected = this.value;
+            onInterp2dChange();
+        });
+    }
     refreshAll();
 });
 </script>
@@ -955,12 +1038,25 @@ document.addEventListener("DOMContentLoaded", function() {
                         </div>
                     </div>
                     <div class="field" id="interp2dRow">
-                        <label class="lbl" for="interp2d">Rendering of scattered samples</label>
+                        <label class="lbl" for="interp2d">Rendering / Interpolation</label>
                         <select id="interp2d">
-                            <option value="triangulated" selected>Triangulated (linear shading)</option>
-                            <option value="nearest">Nearest sample (staircase)</option>
+                            <option value="natural" selected>Natural neighbor (smooth grid)</option>
+                            <option value="linear">Linear interpolation (grid)</option>
+                            <option value="nearest">Nearest sample (staircase grid)</option>
+                            <option value="triangulated">Triangulated mesh (Delaunay)</option>
                         </select>
                     </div>
+                    <div class="field-row" id="gridRes2dRow">
+                        <div class="field">
+                            <label class="lbl" for="spatialRes2d">Spatial resolution (nm)</label>
+                            <input type="number" id="spatialRes2d" value="2" step="0.5" min="0.1" max="100">
+                        </div>
+                        <div class="field">
+                            <label class="lbl" for="rasterSize2d">Raster points (p × r)</label>
+                            <input type="number" id="rasterSize2d" placeholder="auto" step="50" min="50" max="2000">
+                        </div>
+                    </div>
+                    <p class="hint" id="res2dHint" style="margin-top:-2px; margin-bottom:8px;"></p>
                     <div class="check-grid">
                         <label class="check"><input type="checkbox" id="log2d">Log colour scale</label>
                         <label class="check"><input type="checkbox" id="showSim2d">Show Sim points</label>

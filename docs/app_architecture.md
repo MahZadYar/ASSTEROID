@@ -174,8 +174,8 @@ The continuous colormap used in 2D/3D surface plots ([`src/vis/AuroraAustralis.t
 ### Stage 6: Multi-Dimensional Scientific Visualization
 - **HTML View:** [`scripts/apps/visualize_tab.html`](../scripts/apps/visualize_tab.html)
 - **Controller:** [`src/app/controllers/VisualizeController.m`](../src/app/controllers/VisualizeController.m)
-- **Features:** Synchronized 1D spectra plots, 2D response heatmaps, and interactive 3D volumetric slicing via MATLAB `viewer3d` with the `AuroraAustralis` colormap.
-- **Key Events:** `SelectGeometry`, `ChangeMetric`, `SliceVolume3D`.
+- **Features:** Synchronized 1D spectra plots, 2D response heatmaps (with natural neighbor, linear, nearest-sample raster, or triangulated Delaunay rendering, and configurable spatial resolution in nm / raster size), and interactive 3D volumetric slicing via MATLAB `viewer3d` with the `AuroraAustralis` colormap.
+- **Key Events:** `Render`, `ClearTraces`, `VisModeSelect`, `RequestBranchInfo`, `RefreshDbState`.
 
 ---
 
