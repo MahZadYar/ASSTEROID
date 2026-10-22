@@ -437,12 +437,72 @@
     function appendRawStream(text) {
         if (!text) return;
         var lines = text.split(/\r?\n/);
+        var body = document.getElementById("consoleBody");
+        if (!body) return;
+
+        // Cap huge backlogs to the last 250 lines to prevent CEF event queue lockup
+        if (lines.length > 250) {
+            lines = lines.slice(lines.length - 250);
+        }
+
+        var fragment = document.createDocumentFragment();
+        var t = getTimeString();
+        var addedCount = 0;
+
         for (var i = 0; i < lines.length; i++) {
             var line = lines[i];
             if (i === lines.length - 1 && line === "") continue;
-            if (line.trim() === "") continue;
-            appendLog(line);
+            line = line.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "").trim();
+            if (!line) continue;
+
+            var level = "info";
+            if (/error|exception|fail|failed|fault/i.test(line)) {
+                level = "error";
+            } else if (/warn|warning/i.test(line)) {
+                level = "warning";
+            } else if (/complete|completed|passed|success|saved/i.test(line)) {
+                level = "success";
+            }
+
+            var entry = document.createElement("div");
+            entry.className = "log-entry";
+
+            var timeSpan = document.createElement("span");
+            timeSpan.className = "log-time";
+            timeSpan.textContent = "[" + t + "]";
+
+            var textSpan = document.createElement("span");
+            textSpan.className = "log-text " + level;
+            textSpan.textContent = line;
+
+            entry.appendChild(timeSpan);
+            entry.appendChild(textSpan);
+            fragment.appendChild(entry);
+
+            rawLogs.push("[" + t + "] " + line);
+            addedCount++;
         }
+
+        if (addedCount === 0) return;
+
+        var initLog = document.getElementById("initialLog");
+        if (initLog && initLog.parentNode) {
+            initLog.parentNode.removeChild(initLog);
+        }
+
+        body.appendChild(fragment);
+
+        // Cap buffer efficiently in a single pass
+        var excess = body.children.length - maxLogEntries;
+        if (excess > 0) {
+            for (var k = 0; k < excess; k++) {
+                body.removeChild(body.firstChild);
+            }
+            rawLogs.splice(0, excess);
+        }
+
+        // Auto-scroll to bottom ONCE per batch to avoid forcing layout reflows per line
+        body.scrollTop = body.scrollHeight;
     }
 
     function setStatus(statusClass, label) {

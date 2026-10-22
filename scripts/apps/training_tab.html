@@ -293,6 +293,17 @@ function setup(htmlComponent) {
         enableRun(true);
         resetStopButtons();
     });
+    htmlComponent.addEventListener("ProcessStatusChanged", function(event) {
+        var d = event.Data || {};
+        if (d.status === "idle" || d.status === "complete") {
+            enableRun(true);
+            resetStopButtons();
+            var btn = document.getElementById("btnEvalModel");
+            var btnHead = document.getElementById("btnHeaderEvalModel");
+            if (btn) btn.disabled = false;
+            if (btnHead) btnHead.disabled = false;
+        }
+    });
 
     htmlComponent.addEventListener("CheckpointFileSelected", function(event) {
         var d = event.Data || {};
@@ -558,7 +569,6 @@ function runTraining() {
 
 function handleProgress(data) {
     if (!data) return;
-    if (data.message) appendLog(data.message);
 
     // Update epoch-based progress bar and labels
     if (data.epoch !== undefined && data.maxEpochs !== undefined && data.maxEpochs > 0) {
@@ -592,25 +602,6 @@ function handleProgress(data) {
     if (data.valLoss !== undefined && data.valLoss !== null && !isNaN(Number(data.valLoss))) {
         var vlEl = document.getElementById("valValLoss");
         if (vlEl) vlEl.textContent = Number(data.valLoss).toExponential(3);
-    }
-
-    if (window.htmlComponent) {
-        var pctProg = 0;
-        if (data.epoch !== undefined && data.maxEpochs !== undefined && data.maxEpochs > 0) {
-            pctProg = Math.min(100, Math.max(0, (Number(data.epoch) / Number(data.maxEpochs)) * 100));
-        } else if (data.fraction !== undefined && data.fraction !== null) {
-            pctProg = Math.min(100, Math.max(0, Number(data.fraction) * 100));
-        }
-        var mObj = {};
-        if (data.iteration !== undefined && data.iteration !== null) mObj.Iter = data.iteration;
-        if (data.loss !== undefined && data.loss !== null && !isNaN(Number(data.loss))) mObj.Loss = Number(data.loss).toExponential(3);
-        if (data.valLoss !== undefined && data.valLoss !== null && !isNaN(Number(data.valLoss))) mObj.ValLoss = Number(data.valLoss).toExponential(3);
-        window.htmlComponent.sendEventToMATLAB("ProgressUpdate", {
-            percent: pctProg,
-            message: data.message || "",
-            stage: "Stage 3 — Training",
-            metrics: mObj
-        });
     }
 }
 

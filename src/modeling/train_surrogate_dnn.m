@@ -1032,12 +1032,13 @@ end
 
 % When MATLAB's training progress monitor is enabled, MATLAB handles rendering
 % internally. Do NOT call drawnow inside OutputFcn (MathWorks guideline to prevent
-% CEF re-entrant crashes). Only yield to GUI when headless or app-panel (plots='none').
-if ~isPlotMonitor
+% CEF re-entrant crashes). When iterCallback is provided, it handles throttled
+% UI refreshes. Only yield to GUI with drawnow when headless with no callback.
+if ~isPlotMonitor && isempty(iterCallback)
     if isempty(lastCheckTic)
         lastCheckTic = tic;
     end
-    if toc(lastCheckTic) > 0.1
+    if toc(lastCheckTic) > 0.5
         lastCheckTic = tic;
         drawnow limitrate;
     end

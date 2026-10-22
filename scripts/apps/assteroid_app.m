@@ -298,7 +298,7 @@ function figOut = assteroid_app(workFolder)
     visTabGroup6.SelectionChangedFcn = @(src, ev) handleVisSubTabSelection(src, ev, fig);
 
     %% Store all HTML handles -------------------------------------------------
-    fig.UserData.handles.htmlPanels = [h0, h1, h2, h3, h4, h5, h5, h6, consoleHtml];
+    fig.UserData.handles.htmlPanels = [h0, h1, h2, h3, h4, h5, h6, consoleHtml];
 
     %% Ensure Stage 0 Database tab is the initially selected tab --------------
     tabGroup.SelectedTab = tab0;
@@ -1410,7 +1410,7 @@ function updateConsoleProgress(fig, percent, message, ~, metrics)
         end
     end
     msgStr = string(message);
-    if strlength(msgStr) > 0 && msgStr ~= "Complete!"
+    if strlength(msgStr) > 0 && ~startsWith(msgStr, "Epoch", "IgnoreCase", true) && msgStr ~= "Complete!"
         logToConsole(fig, msgStr, "info");
     end
 end
@@ -1475,16 +1475,26 @@ function pollConsoleDiary(fig)
     if ~isfield(fig.UserData, "consoleClientReady") || ~fig.UserData.consoleClientReady
         return;
     end
+    % Yield during active computational workflows (training/optimization) to prevent
+    % file lock contention on diary log and CEF event queue congestion.
+    if isProcessRunning(fig)
+        return;
+    end
     try
         fInfo = dir(dFile);
         curBytes = fInfo.bytes;
         lastPos = fig.UserData.consoleDiary.lastPos;
         if curBytes > lastPos
+            % Cap huge backlogs accumulated during long processes (max 32 KB per poll)
+            maxChunk = 32768;
+            if (curBytes - lastPos) > maxChunk
+                lastPos = curBytes - maxChunk;
+            end
             fid = fopen(dFile, "r");
             if fid > 0
                 fseek(fid, lastPos, "bof");
                 newChars = fread(fid, curBytes - lastPos, "*char")';
-                fig.UserData.consoleDiary.lastPos = ftell(fid);
+                fig.UserData.consoleDiary.lastPos = curBytes;
                 fclose(fid);
                 if ~isempty(newChars)
                     sendEventToHTMLSource(cHtml, "RawConsoleStream", struct("text", string(newChars)));

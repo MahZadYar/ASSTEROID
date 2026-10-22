@@ -265,7 +265,10 @@ function setup(htmlComponent) {
     htmlComponent.addEventListener("DbStatus", function(event) {
         VIS.db = event.Data || {};
         updateDbBanner(VIS.db);
-        sendToMATLAB("RequestBranchInfo", {});
+        if (window._branchInfoDebounce) clearTimeout(window._branchInfoDebounce);
+        window._branchInfoDebounce = setTimeout(function() {
+            sendToMATLAB("RequestBranchInfo", {});
+        }, 300);
     });
     htmlComponent.addEventListener("SaveComplete", function(event) {
         var msg = typeof event.Data === "string" ? event.Data : (event.Data ? (event.Data.message || "Database saved.") : "Database saved.");

@@ -407,8 +407,8 @@ classdef TrainingController < handle
                     end
                 end
 
-                % Throttle UI / HTML updates to ~0.10s for buttery-smooth training performance
-                if toc(lastUiUpdateTic) >= 0.10 || curIter == 1
+                % Throttle UI / HTML updates to ~0.40s for smooth responsive performance without IPC queue congestion
+                if toc(lastUiUpdateTic) >= 0.40 || curIter == 1
                     lastUiUpdateTic = tic;
 
                     if ~isempty(trainAx) && isvalid(trainAx)
@@ -469,16 +469,9 @@ classdef TrainingController < handle
                 end
             end
 
-            obj.session.markDirty();
-            try
-                obj.session.saveDatabase();
-            catch
-            end
-
-            % Sync legacy figure state for backward compatibility
+            % Sync session and figure state, then persist database once
             if ~isempty(obj.fig) && isvalid(obj.fig)
                 obj.fig.UserData.db = obj.session.db;
-                obj.fig.UserData.dbDirty = true;
                 if isfield(obj.fig.UserData, "visExport")
                     ve = obj.fig.UserData.visExport;
                     ve.model = obj.session.model;
@@ -487,12 +480,11 @@ classdef TrainingController < handle
                 end
                 if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "saveDbFile")
                     try obj.fig.UserData.app.saveDbFile(); catch; end
-                end
-                if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "markDbDirty")
-                    try obj.fig.UserData.app.markDbDirty(); catch; end
                 else
-                    obj.fig.UserData.dbDirty = true;
+                    try obj.session.saveDatabase(); catch; end
                 end
+            else
+                try obj.session.saveDatabase(); catch; end
             end
 
             % Finalize diagnostic plots on right panel
@@ -511,7 +503,7 @@ classdef TrainingController < handle
                         subtitle(trainAx, "Model saved to disk and database. Click 'Evaluate DB Model' to compute and display full Three-Tier Generalization metrics", ...
                             "Color", [160, 178, 214]/255, "FontSize", 9);
                     end
-                    drawnow;
+                    drawnow limitrate;
                 catch
                 end
             end
