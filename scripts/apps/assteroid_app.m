@@ -1788,24 +1788,49 @@ end
 function onAppClose(fig, ~)
 %onAppClose Safely tear down active workflows, parallel pool, and close figure.
     if isvalid(fig)
-        try, requestProcessStop(fig); catch, end
+        try, requestProcessStop(fig, false); catch, end
         cleanupConsole(fig);
+        % A background training worker has just been asked to stop gracefully;
+        % keep its pool alive so it can still save the model + recovery file.
+        trainingWorkerActive = false;
         try
-            pool = gcp('nocreate');
-            if ~isempty(pool)
-                delete(pool);
-            end
+            tc = fig.UserData.handles.trainingController;
+            trainingWorkerActive = ~isempty(tc) && isvalid(tc) && tc.isWorkerActive();
         catch
+        end
+        if ~trainingWorkerActive
+            try
+                pool = gcp('nocreate');
+                if ~isempty(pool)
+                    delete(pool);
+                end
+            catch
+            end
         end
         delete(fig);
     end
 end
 
-function requestProcessStop(fig)
+function requestProcessStop(fig, allowForce)
 %requestProcessStop Signal immediate and indefinite termination to all stages.
+%   allowForce (default true): a repeated stop request force-cancels a
+%   background training worker; false only ever requests a graceful stop.
+    if nargin < 2, allowForce = true; end
     if isempty(fig) || ~isvalid(fig), return; end
     setProcessStopRequested(fig, true);
     setTrainingStopRequested(fig, true);
+    % Relay to a background (process-worker) training job, if any
+    try
+        tc = fig.UserData.handles.trainingController;
+        if ~isempty(tc) && isvalid(tc) && tc.isWorkerActive()
+            if allowForce
+                tc.requestWorkerStop();
+            else
+                tc.forwardStopIfRequested();
+            end
+        end
+    catch
+    end
     activeStage = getProcessActiveStage(fig);
     msg = "Stop requested. Terminating ongoing process...";
     if activeStage ~= ""

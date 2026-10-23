@@ -17,6 +17,10 @@
 
 ✅ Checkpoints are now automatically saved to: `{WorkDir}/DNNCheckpoints/{modelname}/`
 
+### Recovery After an App Crash (v6.1+)
+
+App-launched training runs in a background process worker. Before returning, the worker writes the finished (or gracefully stopped) model to `{CheckpointPath}/last_training_result.mat` (variables `model`, `dbModel`, `ri`, `summary`, ...). If MATLAB is killed before the database is saved, use **Find latest checkpoint** or load this file directly as the pretrained model; no extra fine-tuning epochs are required to recover it.
+
 ### Using the CLI
 
 ```matlab

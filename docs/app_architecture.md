@@ -1,4 +1,4 @@
-# ☄️ ASSTEROID App Architecture & Integration (Version 6.0)
+# ☄️ ASSTEROID App Architecture & Integration (Version 6.1)
 
 **Scope:** Decoupled MVC controller architecture, session state management, shared HTML5 design token system, and MATLAB backend coupling  
 **Audience:** Developers maintaining or extending the computational platform  
@@ -158,6 +158,32 @@ The continuous colormap used in 2D/3D surface plots ([`src/vis/AuroraAustralis.t
 - **Controller:** [`src/app/controllers/TrainingController.m`](../src/app/controllers/TrainingController.m)
 - **Features:** Physics-informed 9-input (or 8-input) surrogate configuration supporting both Standard Residual Network (`"resnet"`) and Low-Rank Tensor-Product ResNet (`"tensor_resnet"`, rank-$R$ Bilinear/Tucker Hadamard contraction core), uniform `"mse"` or resonance-focused Peak-Weighted MSE (`"peak_mse"`), Duan log-normal smearing bias calibration, learning rate schedules (piecewise/cosine), real-time epoch-throttled log-log loss curves on the right panel, LayerNorm monitoring, Three-Tier Generalization evaluation (`EvaluateModelPerformance`), and checkpoint persistence.
 - **Key Events:** `RunTraining`, `StopTraining`, `EvaluateModelPerformance`, `BrowseCheckpointFile`, `BrowseCheckpointDir`, `FindLatestCheckpoint`, `SaveDatabaseRequest`.
+- **Execution model (background worker):** In *App Right Panel* progress mode, `trainnet` never runs on the GUI thread. `TrainingController.startWorkerTraining` submits [`runTrainingWorker`](../src/orchestration/runTrainingWorker.m) to a 1-worker local process pool (`parfeval`) and returns immediately, so the app stays fully responsive.
+  - Progress streams back via `parallel.pool.DataQueue` (time-throttled to ~1 s); `afterEach` updates the loss curve without calling `drawnow`.
+  - **Stop:** the first click writes a flag file and `trainnet` stops at the next iteration (the partial model is still saved); a second click force-cancels the worker.
+  - **Persistence order:** the worker writes `OutputModelFile` and a recovery copy `DNNCheckpoints/last_training_result.mat` *before* returning. On completion the client merges `db.Model`/`db.RI` into the live database and saves it *before* any plot updates.
+  - Closing the app during training requests a graceful stop and keeps the pool alive so the model is still written.
+  - Set `executionMode = "in-process"` (or choose the MATLAB monitor) to use the legacy in-process path.
+
+```mermaid
+sequenceDiagram
+    participant UI as "training_tab.html"
+    participant TC as "TrainingController (GUI thread)"
+    participant W as "Process worker (runTrainingWorker)"
+    UI->>TC: RunTraining
+    TC->>W: parfeval(cfg, DataQueue, stopFile, resultFile)
+    TC-->>UI: returns immediately (app responsive)
+    loop every ~1 s
+        W-->>TC: DataQueue "iter" batch
+        TC-->>UI: Progress + loss curve
+    end
+    UI->>TC: StopProcess (optional)
+    TC->>W: create stop flag file
+    W->>W: save model + recovery file
+    W-->>TC: future finished (afterAll)
+    TC->>TC: merge db.Model and save DB, then update plots
+    TC-->>UI: TrainComplete
+```
 
 ### Stage 4: Dense Landscape Prediction
 - **HTML View:** [`scripts/apps/visualization_export_tab.html`](../scripts/apps/visualization_export_tab.html)

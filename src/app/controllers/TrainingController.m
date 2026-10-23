@@ -14,6 +14,14 @@ classdef TrainingController < handle
         visPanel      = []
     end
 
+    properties (SetAccess = private)
+        % Background (process-worker) training state
+        asyncActive (1,1) logical = false
+        trainFuture   = []
+        trainQueue    = []
+        trainState    = struct()
+    end
+
     methods
         function obj = TrainingController(session, fig, htmlComponent, visPanel)
         % TRAININGCONTROLLER Construct controller attached to session and UI.
@@ -124,7 +132,9 @@ classdef TrainingController < handle
             end
 
             obj.setRunning(true);
-            cObj = onCleanup(@() obj.setRunning(false));
+            % Released on exit unless training was handed to a background worker
+            % (the worker completion callback releases it in that case).
+            cObj = onCleanup(@() obj.releaseRunningUnlessAsync()); %#ok<NASGU>
 
             workDir = obj.session.workDir;
 
@@ -324,6 +334,21 @@ classdef TrainingController < handle
             maxEpochsVal = obj.safeNum(d, "maxEpochs", 200);
             totalItersLocked = NaN;
 
+            % Preferred path: run trainnet in a separate MATLAB process so the GUI
+            % thread is never blocked (and never sits inside drawnow) during training.
+            execMode = lower(obj.safeStr(d, "executionMode", "worker"));
+            if useAppProgressPanel && execMode ~= "in-process" && obj.canUseProcessWorker()
+                try
+                    obj.startWorkerTraining(cfg, cpPath, trainAx, hTrainLoss, hValLoss, maxEpochsVal);
+                    return;
+                catch ME_pool
+                    obj.asyncActive = false;
+                    obj.sendToHTML("Progress", struct("message", ...
+                        "Background worker unavailable (" + string(ME_pool.message) + ...
+                        "). Falling back to in-process training.", "fraction", 0));
+                end
+            end
+
             % Buffers for batching plot additions and UI updates once per epoch
             trainIterBuf = [];
             trainLossBuf = [];
@@ -469,107 +494,126 @@ classdef TrainingController < handle
 
             results = runTrainingWorkflow(cfg, rep);
 
-            % Flush any remaining buffered iterations to graph
-            if ~isempty(trainIterBuf) && ~isempty(trainAx) && isvalid(trainAx)
+            % Persist the trained model FIRST, before any graphics work, so that a
+            % stalled renderer can never cost the training result.
+            obj.applyTrainingResults(results, cfg);
+
+            % Flush remaining buffered points. No drawnow here: graphics are
+            % flushed automatically when this callback returns to the event loop.
+            if ~isempty(trainAx) && isvalid(trainAx)
                 try
-                    addpoints(hTrainLoss, trainIterBuf, trainLossBuf);
-                    trainIterBuf = [];
-                    trainLossBuf = [];
-                    if ~isempty(valIterBuf)
-                        addpoints(hValLoss, valIterBuf, valLossBuf);
-                        valIterBuf = [];
-                        valLossBuf = [];
-                    end
-                    drawnow limitrate;
+                    if ~isempty(trainIterBuf), addpoints(hTrainLoss, trainIterBuf, trainLossBuf); end
+                    if ~isempty(valIterBuf),   addpoints(hValLoss, valIterBuf, valLossBuf);       end
                 catch
                 end
             end
 
-            % Update session model and RI without touching any other database branches
-            if isfield(results, "dbModel") && isstruct(results.dbModel)
-                obj.session.db.Model = results.dbModel;
+            obj.finalizeTrainingUi(results, trainAx, lastIterLogged, lastLossLogged, obj.isStopRequested());
+        end
+
+        % ==================================================================
+        %  Shared post-training steps (in-process and worker paths)
+        % ==================================================================
+        function applyTrainingResults(obj, results, cfg)
+        % APPLYTRAININGRESULTS Merge trained model/RI into the live database and save.
+        %   Only db.Model and db.RI are mutated; every other branch is preserved.
+            db = obj.getDb();
+            if ~isstruct(db)
+                db = struct();
+            end
+
+            if isfield(results, "dbModel") && isstruct(results.dbModel) && ~isempty(fieldnames(results.dbModel))
+                db.Model = results.dbModel;
             elseif isfield(results, "model") && isstruct(results.model)
-                if ~isfield(obj.session.db, "Model") || ~isstruct(obj.session.db.Model)
-                    obj.session.db.Model = struct();
+                if ~isfield(db, "Model") || ~isstruct(db.Model)
+                    db.Model = struct();
                 end
-                obj.session.db.Model.Model = results.model;
                 if isfield(results.model, "net")
-                    obj.session.db.Model.Net = results.model.net;
+                    db.Model.Net = results.model.net;
                 end
                 if isfield(results.model, "targetNames")
-                    obj.session.db.Model.TargetNames = cellstr(results.model.targetNames);
+                    db.Model.TargetNames = cellstr(results.model.targetNames);
                 end
                 if isfield(cfg, "outputModelFile") && isfile(string(cfg.outputModelFile))
-                    obj.session.db.Model.NetFile = string(cfg.outputModelFile);
-                end
-            end
-            if isfield(results, "ri") && isstruct(results.ri) && isfield(results.ri, "nFunc")
-                obj.session.ri = results.ri;
-                obj.session.riLoaded = true;
-                if isstruct(obj.session.db)
-                    if ~isfield(obj.session.db, "RI") || ~isstruct(obj.session.db.RI)
-                        obj.session.db.RI = struct();
-                    end
-                    obj.session.db.RI.lambda = results.ri.lambda(:);
-                    obj.session.db.RI.n      = results.ri.n(:);
-                    obj.session.db.RI.k      = results.ri.k(:);
-                    obj.session.db.RI.nFunc  = results.ri.nFunc;
-                    obj.session.db.RI.kFunc  = results.ri.kFunc;
+                    db.Model.NetFile = string(cfg.outputModelFile);
                 end
             end
             if isfield(results, "model") && isstruct(results.model)
+                db.Model.Model = results.model;
                 obj.session.model = results.model;
                 obj.session.modelLoaded = true;
-                if isfield(obj.session.db, "Model") && isstruct(obj.session.db.Model)
-                    obj.session.db.Model.Model = results.model;
-                end
             end
 
-            % Sync session and figure state, then persist database
+            hasRi = isfield(results, "ri") && isstruct(results.ri) && isfield(results.ri, "nFunc");
+            if hasRi
+                obj.session.ri = results.ri;
+                obj.session.riLoaded = true;
+                if ~isfield(db, "RI") || ~isstruct(db.RI)
+                    db.RI = struct();
+                end
+                db.RI.lambda = results.ri.lambda(:);
+                db.RI.n      = results.ri.n(:);
+                db.RI.k      = results.ri.k(:);
+                db.RI.nFunc  = results.ri.nFunc;
+                db.RI.kFunc  = results.ri.kFunc;
+            end
+
+            obj.session.db = db;
+
             if ~isempty(obj.fig) && isvalid(obj.fig)
-                obj.fig.UserData.db = obj.session.db;
+                obj.fig.UserData.db = db;
                 if isfield(obj.fig.UserData, "visExport")
                     ve = obj.fig.UserData.visExport;
                     ve.model = obj.session.model;
                     ve.modelLoaded = true;
-                    if isfield(results, "ri") && isstruct(results.ri) && isfield(results.ri, "nFunc")
+                    if hasRi
                         ve.ri = results.ri;
                     end
                     obj.fig.UserData.visExport = ve;
                 end
-                if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "markDbDirty")
-                    try obj.fig.UserData.app.markDbDirty(); catch; end
+                app = struct();
+                if isfield(obj.fig.UserData, "app"), app = obj.fig.UserData.app; end
+                if isfield(app, "markDbDirty")
+                    try app.markDbDirty(); catch; end
                 else
                     obj.fig.UserData.dbDirty = true;
                 end
-                if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "saveDbFile")
-                    try obj.fig.UserData.app.saveDbFile(); catch; end
+                if isfield(app, "saveDbFile")
+                    try
+                        app.saveDbFile();
+                    catch ME_save
+                        fprintf("[TrainingController] Database save after training failed: %s\n", ME_save.message);
+                        obj.sendToHTML("Progress", struct("message", ...
+                            "Model is in memory but the database could not be saved automatically (" + ...
+                            string(ME_save.message) + "). Use Save DB.", "fraction", 1));
+                    end
                 end
-                if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "broadcastDbStatus")
-                    try obj.fig.UserData.app.broadcastDbStatus(); catch; end
+                if isfield(app, "broadcastDbStatus")
+                    try app.broadcastDbStatus(); catch; end
                 end
             else
                 obj.session.dbDirty = true;
                 try obj.session.saveDatabase(); catch; end
             end
+        end
 
-            % Finalize diagnostic plots on right panel
+        function finalizeTrainingUi(obj, results, trainAx, lastIter, lastLoss, stopped)
+        % FINALIZETRAININGUI Final plot annotations and completion notifications.
             if ~isempty(trainAx) && isvalid(trainAx)
                 try
-                    if obj.isStopRequested()
+                    if stopped
                         title(trainAx, sprintf("Training Stopped Early at Iteration %d (Loss: %.4e) — Model Saved", ...
-                            round(lastIterLogged), lastLossLogged), ...
+                            round(lastIter), lastLoss), ...
                             "Color", [230, 74, 111]/255, "FontSize", 11, "FontWeight", "bold");
                         subtitle(trainAx, "Model saved to disk and database. Click 'Evaluate DB Model' to inspect Three-Tier generalization.", ...
                             "Color", [160, 178, 214]/255, "FontSize", 9);
                     else
                         title(trainAx, sprintf("Training Complete — Final Loss: %.4e (%d Iterations)", ...
-                            lastLossLogged, round(lastIterLogged)), ...
+                            lastLoss, round(lastIter)), ...
                             "Color", [72, 178, 172]/255, "FontSize", 11, "FontWeight", "bold");
                         subtitle(trainAx, "Model saved to disk and database. Click 'Evaluate DB Model' to compute and display full Three-Tier Generalization metrics", ...
                             "Color", [160, 178, 214]/255, "FontSize", 9);
                     end
-                    drawnow limitrate;
                 catch
                 end
             end
@@ -583,12 +627,194 @@ classdef TrainingController < handle
                 obj.sendPerformanceReport(obj.session.db.Model.PerformanceReport);
             end
 
-            if obj.isStopRequested()
+            elapsedTotal = NaN;
+            if isfield(results, "elapsedTotal"), elapsedTotal = results.elapsedTotal; end
+            if stopped
                 obj.notifyStopped(sprintf("Training stopped early by user at iteration %d (loss: %.4e). Model saved to disk and database.", ...
-                    round(lastIterLogged), lastLossLogged));
+                    round(lastIter), lastLoss));
             else
-                obj.sendToHTML("TrainComplete", sprintf("Training complete in %.1f s. Model saved to disk and database.", results.elapsedTotal));
+                obj.sendToHTML("TrainComplete", sprintf("Training complete in %.1f s. Model saved to disk and database.", elapsedTotal));
             end
+        end
+
+        % ==================================================================
+        %  Background (process-worker) training
+        % ==================================================================
+        function tf = canUseProcessWorker(~)
+        % CANUSEPROCESSWORKER True when a local process pool can host training.
+            tf = false;
+            try
+                tf = license("test", "Distrib_Computing_Toolbox") == 1 ...
+                    && exist("parfeval", "file") > 0;
+                if tf
+                    p = gcp("nocreate");
+                    if ~isempty(p) && ~isa(p, "parallel.ProcessPool")
+                        tf = false;   % a thread/cluster pool is active; do not replace it
+                    end
+                end
+            catch
+                tf = false;
+            end
+        end
+
+        function startWorkerTraining(obj, cfg, cpPath, trainAx, hTrainLoss, hValLoss, maxEpochsVal)
+        % STARTWORKERTRAINING Submit runTrainingWorker to a process worker and return.
+            pool = gcp("nocreate");
+            if isempty(pool)
+                obj.sendToHTML("Progress", struct("message", ...
+                    "Starting background training worker (one-time, ~20-40 s)...", "fraction", 0));
+                pool = parpool("Processes", 1, "IdleTimeout", 120);
+            end
+
+            % Worker-safe config: strip closures that reference the GUI.
+            cfgW = cfg;
+            for fName = ["stopTrainingFcn", "iterationCallback"]
+                if isfield(cfgW, fName), cfgW = rmfield(cfgW, fName); end
+            end
+            cfgW.plots = "none";
+
+            stamp = string(datetime("now", "Format", "yyyyMMdd_HHmmssSSS"));
+            stopFile = string(fullfile(tempdir, "assteroid_train_stop_" + stamp + ".flag"));
+            if isfile(stopFile), delete(stopFile); end
+            if strlength(string(cpPath)) == 0
+                cpPath = fullfile(obj.session.workDir, "DNNCheckpoints");
+            end
+            resultFile = string(fullfile(cpPath, "last_training_result.mat"));
+
+            q = parallel.pool.DataQueue;
+            afterEach(q, @(m) obj.onWorkerMessage(m));
+
+            obj.trainState = struct( ...
+                "cfg", cfg, "stopFile", stopFile, "resultFile", resultFile, ...
+                "trainAx", trainAx, "hTrainLoss", hTrainLoss, "hValLoss", hValLoss, ...
+                "maxEpochs", maxEpochsVal, "totalIters", NaN, ...
+                "lastIter", 0, "lastLoss", NaN, "stopSignalled", false);
+            obj.trainQueue = q;
+            obj.trainFuture = parfeval(pool, @runTrainingWorker, 1, cfgW, q, stopFile, resultFile, 1.0);
+            afterAll(obj.trainFuture, @(f) obj.onWorkerFinished(f), 0, "PassFuture", true);
+            obj.asyncActive = true;
+
+            obj.sendToHTML("Progress", struct("message", ...
+                "Training is running in a background MATLAB worker — the app stays responsive.", ...
+                "fraction", 0));
+        end
+
+        function onWorkerMessage(obj, m)
+        % ONWORKERMESSAGE DataQueue callback (client main thread, event-loop idle).
+        %   Never calls drawnow; graphics flush when the callback returns.
+            if ~obj.asyncActive || ~isstruct(m) || ~isfield(m, "kind")
+                return;
+            end
+            try
+                obj.forwardStopIfRequested();
+                switch string(m.kind)
+                    case "report"
+                        obj.sendToHTML("Progress", m.data);
+                    case "start"
+                        obj.lockIterAxis(m.totalIterations);
+                    case "iter"
+                        obj.lockIterAxis(m.totalIterations);
+                        st = obj.trainState;
+                        ax = st.trainAx;
+                        if ~isempty(ax) && isvalid(ax)
+                            if ~isempty(m.iter),    addpoints(st.hTrainLoss, m.iter, m.loss);       end
+                            if ~isempty(m.valIter), addpoints(st.hValLoss, m.valIter, m.valLoss);   end
+                            subText = sprintf("Epoch %d / %d | Iteration %d | Train Loss: %.4e", ...
+                                m.epoch, st.maxEpochs, m.iteration, m.lastLoss);
+                            if isfinite(m.lastValLoss) && m.lastValLoss > 0
+                                subText = subText + sprintf(" | Val Loss: %.4e", m.lastValLoss);
+                            end
+                            if isfinite(m.lr)
+                                subText = subText + sprintf(" | LR: %.1e", m.lr);
+                            end
+                            subtitle(ax, subText, "Color", [160, 178, 214]/255, "FontSize", 9);
+                        end
+                        if isfinite(m.iteration), obj.trainState.lastIter = m.iteration; end
+                        if isfinite(m.lastLoss),  obj.trainState.lastLoss = m.lastLoss;  end
+
+                        progStruct = struct( ...
+                            "fraction", min(1.0, m.epoch / max(1, st.maxEpochs)), ...
+                            "epoch", m.epoch, ...
+                            "maxEpochs", st.maxEpochs, ...
+                            "iteration", m.iteration, ...
+                            "loss", m.lastLoss, ...
+                            "valLoss", m.lastValLoss, ...
+                            "message", sprintf("Epoch %d/%d (Iter %d) - Loss: %.4e", ...
+                                m.epoch, st.maxEpochs, m.iteration, m.lastLoss));
+                        if isfinite(m.lr), progStruct.lr = m.lr; end
+                        obj.sendToHTML("Progress", progStruct);
+                end
+            catch ME
+                fprintf("[TrainingController] UI update skipped: %s\n", ME.message);
+            end
+        end
+
+        function onWorkerFinished(obj, f)
+        % ONWORKERFINISHED afterAll callback: persist results, then update UI.
+            st = obj.trainState;
+            obj.asyncActive = false;
+            obj.trainFuture = [];
+            obj.trainQueue = [];
+            try
+                if isfield(st, "stopFile") && isfile(st.stopFile), delete(st.stopFile); end
+            catch
+            end
+
+            try
+                if ~isempty(f.Error)
+                    err = f.Error;
+                    if iscell(err), err = err{1}; end
+                    errId = ""; errMsg = "Unknown worker error";
+                    try errId = string(err.identifier); errMsg = string(err.message); catch; end
+                    if contains(errId, "Cancel", "IgnoreCase", true) || st.stopSignalled
+                        obj.notifyStopped("Training worker was cancelled. Use 'Find latest checkpoint' to resume from the last saved checkpoint.");
+                    else
+                        try fprintf("[TrainingController] Worker error:\n%s\n", getReport(err)); catch; end
+                        obj.sendToHTML("TrainError", "Training failed in background worker: " + errMsg);
+                    end
+                else
+                    out = fetchOutputs(f);
+                    obj.applyTrainingResults(out, st.cfg);
+                    stopped = isfield(out, "stopped") && logical(out.stopped);
+                    obj.finalizeTrainingUi(out, st.trainAx, st.lastIter, st.lastLoss, stopped);
+                end
+            catch ME
+                fprintf("[TrainingController] Post-training error: %s\n%s\n", ME.message, getReport(ME));
+                msg = "Post-training step failed: " + string(ME.message);
+                if isfield(st, "resultFile")
+                    msg = msg + " | Recovery copy: " + string(st.resultFile);
+                end
+                obj.sendToHTML("TrainError", msg);
+            end
+            obj.setRunning(false);
+        end
+
+        function requestWorkerStop(obj, force)
+        % REQUESTWORKERSTOP Ask the background worker to stop.
+        %   First request: graceful stop at the next iteration (model is saved).
+        %   force=true (or a repeated request): cancel the worker immediately.
+            if nargin < 2, force = false; end
+            if ~obj.asyncActive || isempty(obj.trainFuture)
+                return;
+            end
+            if force || obj.trainState.stopSignalled
+                try cancel(obj.trainFuture); catch; end
+                obj.sendToHTML("TrainStopAck", "Force-cancelling background training worker...");
+                return;
+            end
+            try
+                fid = fopen(obj.trainState.stopFile, "w");
+                if fid > 0, fclose(fid); end
+            catch
+            end
+            obj.trainState.stopSignalled = true;
+            obj.sendToHTML("TrainStopAck", ...
+                "Stopping at the next iteration; the model trained so far will be saved. Click Stop again to force-cancel.");
+        end
+
+        function tf = isWorkerActive(obj)
+        % ISWORKERACTIVE True while a background training job is running.
+            tf = obj.asyncActive && ~isempty(obj.trainFuture);
         end
 
         function browseCheckpointFile(obj, d)
@@ -802,9 +1028,12 @@ classdef TrainingController < handle
         end
 
         function stopTraining(obj)
+            relayedByApp = false;
             if ~isempty(obj.fig) && isvalid(obj.fig)
                 if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "requestProcessStop")
+                    % App-level stop also relays to the background worker
                     obj.fig.UserData.app.requestProcessStop();
+                    relayedByApp = true;
                 elseif isfield(obj.fig.UserData, "process")
                     obj.fig.UserData.process.stopRequested = true;
                 end
@@ -813,7 +1042,45 @@ classdef TrainingController < handle
                 end
             end
             obj.session.requestStop();
-            obj.sendToHTML("TrainStopAck", "Stopping training at current iteration and saving model...");
+            if obj.isWorkerActive()
+                if ~relayedByApp
+                    obj.requestWorkerStop();
+                end
+            else
+                obj.sendToHTML("TrainStopAck", "Stopping training at current iteration and saving model...");
+            end
+        end
+
+        function forwardStopIfRequested(obj)
+        % FORWARDSTOPIFREQUESTED Relay an app-level stop flag to the worker.
+            if obj.isWorkerActive() && ~obj.trainState.stopSignalled && obj.isStopRequested()
+                obj.requestWorkerStop();
+            end
+        end
+
+        function releaseRunningUnlessAsync(obj)
+            if ~obj.asyncActive
+                obj.setRunning(false);
+            end
+        end
+
+        function lockIterAxis(obj, totIters)
+            if isempty(totIters) || ~isfinite(totIters) || totIters < 1
+                return;
+            end
+            totIters = max(2, double(totIters));
+            if isequal(obj.trainState.totalIters, totIters)
+                return;
+            end
+            obj.trainState.totalIters = totIters;
+            ax = obj.trainState.trainAx;
+            if ~isempty(ax) && isvalid(ax)
+                try
+                    ax.XLim = [1, totIters];
+                    ax.XLimMode = "manual";
+                catch
+                end
+            end
         end
 
         function notifyStopped(obj, msg)
