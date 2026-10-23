@@ -200,14 +200,21 @@ Paper intent: learn a fast “digital twin” that predicts spectral outputs acr
 Code implementation:
 
 - dataset preparation: [src/modeling/prepare_training_dataset.m](src/modeling/prepare_training_dataset.m)
-- training: [src/modeling/train_sers_dnn.m](src/modeling/train_sers_dnn.m)
-- material dispersion: [src/io/load_gold_refractive_index.m](src/io/load_gold_refractive_index.m)
+- physics feature map (`v2_physics`): [src/modeling/buildPhysicsFeatures.m](src/modeling/buildPhysicsFeatures.m)
+- training & architectures (`"resnet"` and `"tensor_resnet"`): [src/modeling/train_surrogate_dnn.m](src/modeling/train_surrogate_dnn.m) (aliased by [src/modeling/train_sers_dnn.m](src/modeling/train_sers_dnn.m))
+- target inversion & Duan smearing: [src/modeling/denormalizeModelTargets.m](src/modeling/denormalizeModelTargets.m)
+- material dispersion ($C^2$ Savitzky-Golay + `makima` interpolation): [src/io/getDefaultRefractiveIndex.m](src/io/getDefaultRefractiveIndex.m), [src/io/load_gold_refractive_index.m](src/io/load_gold_refractive_index.m), [src/data/resolveRefractiveIndexStruct.m](src/data/resolveRefractiveIndexStruct.m)
 
 Practical notes for development:
 
-- geometry and wavelength are log-transformed for scaling behavior (see notation table for `p_um`, `r_um`, `lambda_um` inputs)
-- dispersion features ($n,k$) are provided explicitly so the network does not have to “memorize” Au permittivity
-- the DNN predicts the main spectral outputs used later for averages/optimization
+- **Feature Schema (`v2_physics`)**: Maps $(P, r, \lambda, n, k)$ into z-scored dimensionless electrodynamic features $[\log P, \log r, \log \lambda, \varepsilon_1, \log \varepsilon_2, P/\lambda, r/\lambda, \log(g/\lambda), \log(h_{\text{gap}}/\lambda)]$ (or $\log(1+Q_{\text{mat}})$ when vertical gap is omitted).
+- **Smooth Optical Dispersion (`makima`)**: Refractive index tables (`DefaultRefractiveIndices.dat`, `McPeak.csv`, `db.RI`) are filtered in wavelength space via Savitzky-Golay smoothing (`smoothdata`) and interpolated with Modified Akima (`'makima'`) cubic Hermite splines so that $\varepsilon_1(\lambda)$ and $\varepsilon_2(\lambda)$ are $C^1/C^2$-continuous without piecewise-linear kinks or digitization staircase artifacts.
+- **Dual Backbone Architectures (`"resnet"` vs `"tensor_resnet"`)**:
+  - `"resnet"` (Standard): Two pre-activation-style residual blocks (`fc1a -> bn1a -> gelu1a -> fc1b -> bn1b -> gelu1b + proj1`, `fc2a -> bn2a -> gelu2a -> fc2b -> bn2b -> gelu2b + proj2`) with skip-concatenated physics coordinate injections (`concat_mid`, `concat_head`) and task-specific output heads (`head_1`, `head_2`, `head_3`).
+  - `"tensor_resnet"` (Low-Rank Tensor-Product ResNet): Replaces Block 2 with a rank-$R$ (`tensorRank`, default `128`) Bilinear/Tucker Hadamard tensor contraction (`tt_core_a` from `concat_mid` $\odot$ `tt_core_b` from `input` via `multiplicationLayer(2, 'Name', 'tt_mult')` $\to$ `fc2b`), explicitly modeling multiplicative coupling across $(P, r, \lambda)$ while preserving exact analytical automatic differentiation (`dlgradient`) in `find_local_maxima`.
+- **Peak-Weighted Loss (`"peak_mse"`) & Duan Smearing Calibration**:
+  - `"peak_mse"` weights squared residuals by $w_{\text{peak}}(T) = 1 + 0.5\max(T, 0)^2$ in standardized target space to prevent resonance peak shaving.
+  - Post-training calibration (`localCalibrateLogTargetBias`) computes Duan's log-normal smearing factor $\alpha_c = \mathbb{E}[10^{e_c}]$ on the active resonance regime and adjusts the output head bias so $10^{\hat{Z}_c} - 1$ recovers the unbiased arithmetic expectation $\mathbb{E}[\text{EF}]$ rather than the geometric mean.
 
 ## 8) Topology-aware optimization (multi-mode maxima localization)
 

@@ -7,6 +7,11 @@ function ri = load_gold_refractive_index(csvPath, varargin)
 % micrometers (supported: 'nm','um'). Outputs a struct with fields lambda
 % (micrometers), n, k, and function handles nFunc(lambda), kFunc(lambda).
 
+if nargin < 1 || isempty(csvPath) || strlength(string(csvPath)) == 0
+    ri = getDefaultRefractiveIndex(WavelengthUnit="um");
+    return;
+end
+
 opts = struct('WavelengthUnit', 'nm', 'Extrapolation', 'nearest');
 if mod(numel(varargin), 2) ~= 0
     error('load_gold_refractive_index:Args', 'Name-value pairs expected.');
@@ -29,22 +34,42 @@ for c = requiredCols
 end
 lambdaRaw = double(T.wl(:));
 unitLower = lower(string(opts.WavelengthUnit));
-if unitLower == "nm"
-    lambda = lambdaRaw / 1000; % convert to micrometers
-elseif unitLower == "um" || unitLower == "micron"
-    lambda = lambdaRaw;
-else
+if ~ismember(unitLower, ["nm", "um", "micron"])
     error('load_gold_refractive_index:Unit', 'Unsupported WavelengthUnit: %s', opts.WavelengthUnit);
+end
+% Auto-guard against nm/um mismatch (e.g. temp CSVs written in nm)
+if max(lambdaRaw) > 50
+    lambda = lambdaRaw / 1000; % values > 50 are in nanometers -> convert to um
+elseif max(lambdaRaw) <= 10
+    lambda = lambdaRaw;        % values <= 10 are already in micrometers
+elseif unitLower == "nm"
+    lambda = lambdaRaw / 1000;
+else
+    lambda = lambdaRaw;
 end
 [lambda, sortIdx] = sort(lambda);
 riReal = double(T.n(sortIdx));
 riImag = double(T.k(sortIdx));
+[lambda, uniqIdx] = unique(lambda, 'stable');
+riReal = riReal(uniqIdx);
+riImag = riImag(uniqIdx);
 
-F_n = griddedInterpolant(lambda, riReal, 'linear', opts.Extrapolation);
-F_k = griddedInterpolant(lambda, riImag, 'linear', opts.Extrapolation);
+% Smooth digitization/staircase jitter in wavelength coordinates (35 nm window)
+if numel(lambda) >= 15 && (max(lambda) - min(lambda)) > 0.1
+    riReal = smoothdata(riReal, 'sgolay', 0.035, 'SamplePoints', lambda);
+    riImag = smoothdata(riImag, 'sgolay', 0.035, 'SamplePoints', lambda);
+end
+
+interpMethod = 'makima';
+if numel(lambda) < 4
+    interpMethod = 'linear';
+end
+F_n = griddedInterpolant(lambda, riReal, interpMethod, opts.Extrapolation);
+F_k = griddedInterpolant(lambda, riImag, interpMethod, opts.Extrapolation);
 
 ri = struct();
 ri.lambda = lambda;
+ri.lambda_nm = lambda * 1000;
 ri.n = riReal;
 ri.k = riImag;
 ri.unit = "um";

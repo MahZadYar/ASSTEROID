@@ -1,4 +1,4 @@
-# ☄️ ASSTEROID App Architecture & Integration (Version 5.3)
+# ☄️ ASSTEROID App Architecture & Integration (Version 6.0)
 
 **Scope:** Decoupled MVC controller architecture, session state management, shared HTML5 design token system, and MATLAB backend coupling  
 **Audience:** Developers maintaining or extending the computational platform  
@@ -156,8 +156,8 @@ The continuous colormap used in 2D/3D surface plots ([`src/vis/AuroraAustralis.t
 ### Stage 3: DNN Surrogate Training
 - **HTML View:** [`scripts/apps/training_tab.html`](../scripts/apps/training_tab.html)
 - **Controller:** [`src/app/controllers/TrainingController.m`](../src/app/controllers/TrainingController.m)
-- **Features:** Physics-informed 8-input ResNet configuration, learning rate schedules (piecewise/cosine), real-time loss curves, LayerNorm monitoring, and checkpoint persistence.
-- **Key Events:** `StartTraining`, `StopTraining`, `BrowseCheckpoint`, `SaveModel`.
+- **Features:** Physics-informed 9-input (or 8-input) surrogate configuration supporting both Standard Residual Network (`"resnet"`) and Low-Rank Tensor-Product ResNet (`"tensor_resnet"`, rank-$R$ Bilinear/Tucker Hadamard contraction core), uniform `"mse"` or resonance-focused Peak-Weighted MSE (`"peak_mse"`), Duan log-normal smearing bias calibration, learning rate schedules (piecewise/cosine), real-time epoch-throttled log-log loss curves on the right panel, LayerNorm monitoring, Three-Tier Generalization evaluation (`EvaluateModelPerformance`), and checkpoint persistence.
+- **Key Events:** `RunTraining`, `StopTraining`, `EvaluateModelPerformance`, `BrowseCheckpointFile`, `BrowseCheckpointDir`, `FindLatestCheckpoint`, `SaveDatabaseRequest`.
 
 ### Stage 4: Dense Landscape Prediction
 - **HTML View:** [`scripts/apps/visualization_export_tab.html`](../scripts/apps/visualization_export_tab.html)

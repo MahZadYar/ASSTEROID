@@ -1,4 +1,4 @@
-function Yraw = denormalizeModelTargets(Ytrans, targetLogTransform, targetMean, targetStd, targetLogBase)
+function Yraw = denormalizeModelTargets(Ytrans, targetLogTransform, targetMean, targetStd, targetLogBase, smearingFactor)
 %denormalizeModelTargets Invert target transforms on predicted targets.
 %
 %   Yraw = denormalizeModelTargets(Ytrans) inverts log1p transformation (expm1).
@@ -8,10 +8,13 @@ function Yraw = denormalizeModelTargets(Ytrans, targetLogTransform, targetMean, 
 %   first undoes per-channel z-scoring (v2 schema), then inverts target transforms:
 %
 %       Z    = Ytrans .* targetStd + targetMean
-%       Yraw = 10.^(max(Z, 0)) - 1     (if log10 transformed)
-%       Yraw = expm1(max(Z, 0))        (if log1p transformed)
-%       Yraw = max(Z, 0)               (if linear transformed)
+%       Yraw = alpha .* (10.^(max(Z, 0)) - 1)   (if log10 transformed)
+%       Yraw = alpha .* expm1(max(Z, 0))        (if log1p transformed)
+%       Yraw = max(Z, 0)                        (if linear transformed)
 %
+%   where alpha is the optional Duan log-normal smearing factor (default 1)
+%   correcting Jensen's inequality bias E[10^Z] >= 10^E[Z] on log-transformed
+%   enhancement factors.
 %   The max(.,0) floor guarantees Yraw >= 0 for non-negative physical quantities.
 
 arguments
@@ -20,6 +23,7 @@ arguments
     targetMean = []
     targetStd = []
     targetLogBase = []
+    smearingFactor = []
 end
 
 if isempty(Ytrans)
@@ -33,8 +37,12 @@ if isstruct(targetLogTransform)
     if isfield(tt, "Mean") && isempty(targetMean), targetMean = tt.Mean; end
     if isfield(tt, "Std")  && isempty(targetStd),  targetStd  = tt.Std;  end
     if isfield(tt, "targetLogBase") && isempty(targetLogBase), targetLogBase = tt.targetLogBase; end
+    if isfield(tt, "LogBase") && isempty(targetLogBase), targetLogBase = tt.LogBase; end
+    if isfield(tt, "SmearingFactor") && isempty(smearingFactor), smearingFactor = tt.SmearingFactor; end
     if isfield(tt, "targetLogTransform")
         targetLogTransform = tt.targetLogTransform;
+    elseif isfield(tt, "LogMask")
+        targetLogTransform = tt.LogMask;
     else
         targetLogTransform = true;
     end
@@ -80,13 +88,26 @@ else
     baseVal = double(targetLogBase);
 end
 
+alpha = ones(1, numCols);
+if ~isempty(smearingFactor)
+    sf = reshape(double(smearingFactor), 1, []);
+    sf(~isfinite(sf) | sf <= 0) = 1.0;
+    if isscalar(sf)
+        alpha = repmat(sf, 1, numCols);
+    elseif numel(sf) >= numCols
+        alpha = sf(1:numCols);
+    else
+        alpha(1:numel(sf)) = sf;
+    end
+end
+
 Yraw = Z;
 for c = 1:numCols
     if logMask(c)
         if abs(baseVal - 10) < 1e-6
-            Yraw(:, c) = 10.^(max(Z(:, c), 0)) - 1;
+            Yraw(:, c) = alpha(c) .* (10.^(max(Z(:, c), 0)) - 1);
         else
-            Yraw(:, c) = expm1(max(Z(:, c), 0));
+            Yraw(:, c) = alpha(c) .* expm1(max(Z(:, c), 0));
         end
     else
         % Linear target: non-negativity clamp

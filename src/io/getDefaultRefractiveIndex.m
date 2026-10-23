@@ -33,9 +33,22 @@ end
 
 % Load the .dat file
 data = readmatrix(datPath, 'NumHeaderLines', 1);
-wl_um = data(:, 1);   % Wavelength in micrometers
-n_vals = data(:, 2);  % Real part of RI
-k_vals = data(:, 3);  % Imaginary part of RI
+wl_um = double(data(:, 1));   % Wavelength in micrometers
+n_vals = double(data(:, 2));  % Real part of RI
+k_vals = double(data(:, 3));  % Imaginary part of RI
+
+[wl_um, sortIdx] = sort(wl_um(:));
+n_vals = n_vals(sortIdx);
+k_vals = k_vals(sortIdx);
+[wl_um, uniqIdx] = unique(wl_um, 'stable');
+n_vals = n_vals(uniqIdx);
+k_vals = k_vals(uniqIdx);
+
+% Smooth digitization/staircase jitter in wavelength coordinates (35 nm window)
+if numel(wl_um) >= 15 && (max(wl_um) - min(wl_um)) > 0.1
+    n_vals = smoothdata(n_vals, 'sgolay', 0.035, 'SamplePoints', wl_um);
+    k_vals = smoothdata(k_vals, 'sgolay', 0.035, 'SamplePoints', wl_um);
+end
 
 % Convert wavelength units if needed
 if options.WavelengthUnit == "nm"
@@ -44,13 +57,18 @@ else
     lambda = wl_um;
 end
 
-% Build interpolants
-F_n = griddedInterpolant(lambda(:), n_vals(:), 'linear', options.Extrapolation);
-F_k = griddedInterpolant(lambda(:), k_vals(:), 'linear', options.Extrapolation);
+% Build C^1 smooth Modified Akima (makima) interpolants
+interpMethod = 'makima';
+if numel(lambda) < 4
+    interpMethod = 'linear';
+end
+F_n = griddedInterpolant(lambda(:), n_vals(:), interpMethod, options.Extrapolation);
+F_k = griddedInterpolant(lambda(:), k_vals(:), interpMethod, options.Extrapolation);
 
 % Return struct matching expected output format
 ri = struct();
 ri.lambda = lambda(:)';
+ri.lambda_nm = (wl_um(:)' * 1000);
 ri.n = n_vals(:)';
 ri.k = k_vals(:)';
 ri.unit = options.WavelengthUnit;

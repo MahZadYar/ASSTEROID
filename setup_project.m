@@ -60,4 +60,8 @@ function setup_project()
     end
 
     fprintf("ASSTEROID: %d folders added to path.\n", numel(allDirs));
-    end
+
+    % Prevent OpenMP and Intel MKL worker threads from spinning at 100% CPU when idle
+    setenv("KMP_BLOCKTIME", "0");
+    setenv("OMP_WAIT_POLICY", "PASSIVE");
+end

@@ -448,7 +448,7 @@ lossFcn = localResolveLossFunction(opts.LossFunction);
 weights = [];
 if ~isempty(opts.TargetLossWeights)
     weights = localValidateLossWeights(opts.TargetLossWeights, numTargets);
-    lossFcn = localWrapWeightedLoss(lossFcn, weights);
+    lossFcn = localWrapWeightedLoss(opts.LossFunction, weights);
 end
 
 % Test network initialization with a small forward pass
@@ -471,7 +471,7 @@ if ~isempty(weights)
         % Simulate dlarray layout: trainnet uses [nTargets x batch] internally
         testTargets = YTrain(1:min(10, size(YTrain, 1)), :)';  % Transpose to [nTargets x batch]
         testPredT = testPred';  % Also transpose predictions
-        testLoss = localWeightedMse(testPredT, testTargets, weights);
+        testLoss = lossFcn(testPredT, testTargets);
         if ~isfinite(testLoss)
             error('Weighted loss function returns NaN/Inf');
         end
@@ -494,6 +494,13 @@ end
 
 if opts.Verbose
     fprintf('  ✓ Training complete\n');
+end
+
+% Calibrate output-head biases for log-transformed enhancement factors to
+% correct Jensen's inequality (log-retransformation) underestimation on peaks.
+[net, biasCalibInfo] = localCalibrateLogTargetBias(net, XValidation, YValidation, XTrain, YTrain, dataset, opts.Verbose);
+if isfield(dataset, 'targetTransform') && isstruct(dataset.targetTransform)
+    dataset.targetTransform.BiasCalibration = biasCalibInfo;
 end
 
 % Copy checkpoints from temp directory to original path if needed
@@ -681,23 +688,60 @@ netArchitecture = connectLayers(netArchitecture, 'add1', 'concat_mid/in1');
 netArchitecture = connectLayers(netArchitecture, 'input', 'concat_mid/in2');
 
 % --- Block 2 ---
-block2 = [
-    fullyConnectedLayer(config.fc2a, 'Name', 'fc2a')
-    localNormLayer('bn2a', config.normalization)
-    geluLayer('Name', 'gelu2a')
-    fullyConnectedLayer(config.fc2b, 'Name', 'fc2b')
-    localNormLayer('bn2b', config.normalization)
-    geluLayer('Name', 'gelu2b')];
-netArchitecture = addLayers(netArchitecture, block2);
-netArchitecture = addLayers(netArchitecture, additionLayer(2, 'Name', 'add2'));
+if strcmpi(config.architecture, "tensor_resnet")
+    % Low-Rank Tensor-Product Residual Core (Bilinear / Tucker Contraction):
+    % Contracts multi-scale latent factor U^(A) from concat_mid with direct
+    % spectral/coordinate factor U^(B) from input via Hadamard tensor product
+    % in rank-R latent space before projecting to fc2b.
+    branchA = [
+        fullyConnectedLayer(config.fc2a, 'Name', 'fc2a')
+        localNormLayer('bn2a', config.normalization)
+        geluLayer('Name', 'gelu2a')
+        fullyConnectedLayer(config.tensorRank, 'Name', 'tt_core_a')
+        localNormLayer('tt_bn_a', config.normalization)
+        geluLayer('Name', 'tt_gelu_a')];
+    branchB = [
+        fullyConnectedLayer(config.tensorRank, 'Name', 'tt_core_b')
+        localNormLayer('tt_bn_b', config.normalization)
+        geluLayer('Name', 'tt_gelu_b')];
+    postMult = [
+        multiplicationLayer(2, 'Name', 'tt_mult')
+        fullyConnectedLayer(config.fc2b, 'Name', 'fc2b')
+        localNormLayer('bn2b', config.normalization)
+        geluLayer('Name', 'gelu2b')];
 
-% Residual conn: proj2 projects concat_mid to match fc2b
-netArchitecture = addLayers(netArchitecture, fullyConnectedLayer(config.fc2b, 'Name', 'proj2'));
+    netArchitecture = addLayers(netArchitecture, branchA);
+    netArchitecture = addLayers(netArchitecture, branchB);
+    netArchitecture = addLayers(netArchitecture, postMult);
+    netArchitecture = addLayers(netArchitecture, additionLayer(2, 'Name', 'add2'));
+    netArchitecture = addLayers(netArchitecture, fullyConnectedLayer(config.fc2b, 'Name', 'proj2'));
 
-netArchitecture = connectLayers(netArchitecture, 'concat_mid', 'fc2a');
-netArchitecture = connectLayers(netArchitecture, 'gelu2b', 'add2/in1');
-netArchitecture = connectLayers(netArchitecture, 'concat_mid', 'proj2');
-netArchitecture = connectLayers(netArchitecture, 'proj2', 'add2/in2');
+    netArchitecture = connectLayers(netArchitecture, 'concat_mid', 'fc2a');
+    netArchitecture = connectLayers(netArchitecture, 'input', 'tt_core_b');
+    netArchitecture = connectLayers(netArchitecture, 'tt_gelu_a', 'tt_mult/in1');
+    netArchitecture = connectLayers(netArchitecture, 'tt_gelu_b', 'tt_mult/in2');
+    netArchitecture = connectLayers(netArchitecture, 'gelu2b', 'add2/in1');
+    netArchitecture = connectLayers(netArchitecture, 'concat_mid', 'proj2');
+    netArchitecture = connectLayers(netArchitecture, 'proj2', 'add2/in2');
+else
+    block2 = [
+        fullyConnectedLayer(config.fc2a, 'Name', 'fc2a')
+        localNormLayer('bn2a', config.normalization)
+        geluLayer('Name', 'gelu2a')
+        fullyConnectedLayer(config.fc2b, 'Name', 'fc2b')
+        localNormLayer('bn2b', config.normalization)
+        geluLayer('Name', 'gelu2b')];
+    netArchitecture = addLayers(netArchitecture, block2);
+    netArchitecture = addLayers(netArchitecture, additionLayer(2, 'Name', 'add2'));
+
+    % Residual conn: proj2 projects concat_mid to match fc2b
+    netArchitecture = addLayers(netArchitecture, fullyConnectedLayer(config.fc2b, 'Name', 'proj2'));
+
+    netArchitecture = connectLayers(netArchitecture, 'concat_mid', 'fc2a');
+    netArchitecture = connectLayers(netArchitecture, 'gelu2b', 'add2/in1');
+    netArchitecture = connectLayers(netArchitecture, 'concat_mid', 'proj2');
+    netArchitecture = connectLayers(netArchitecture, 'proj2', 'add2/in2');
+end
 
 % --- Injection 2 (Head): Concatenate Block 2 Output + Input Payload ---
 netArchitecture = addLayers(netArchitecture, concatenationLayer(1, 2, 'Name', 'concat_head'));
@@ -737,6 +781,8 @@ end
 
 function config = localNormalizeNetworkConfig(configIn, numTargets)
 config = struct();
+config.architecture = "resnet";        % "resnet" (default) | "tensor_resnet"
+config.tensorRank = 128;               % Rank R of bilinear tensor core when architecture="tensor_resnet"
 config.useMultiHead = true;
 config.fc1a = 128;
 config.fc1b = 256;
@@ -761,6 +807,18 @@ config = localValidateNetworkConfig(config, numTargets);
 end
 
 function config = localValidateNetworkConfig(config, numTargets)
+if ~isfield(config, 'architecture') || isempty(config.architecture)
+    config.architecture = "resnet";
+end
+config.architecture = lower(string(config.architecture));
+if ~ismember(config.architecture, ["resnet", "tensor_resnet"])
+    error('train_sers_dnn:NetworkConfig', ...
+        'Network config architecture must be "resnet" or "tensor_resnet" (got "%s").', config.architecture);
+end
+if ~isfield(config, 'tensorRank') || isempty(config.tensorRank)
+    config.tensorRank = 128;
+end
+config.tensorRank = localPosInt(config.tensorRank, 'tensorRank');
 config.useMultiHead = logical(config.useMultiHead);
 config.fc1a = localPosInt(config.fc1a, 'fc1a');
 config.fc1b = localPosInt(config.fc1b, 'fc1b');
@@ -870,11 +928,29 @@ diff = Y - T;
 loss = mean(diff .^ 2 .* weights, 'all');
 end
 
+function loss = localPeakMse(Y, T)
+% Peak-weighted MSE for dlarray [nTargets x batch].
+% Amplifies squared error on above-mean resonance peaks (T > 0 in z-scored
+% log10 space) by w_peak(T) = 1 + 0.5 * max(T, 0)^2 to prevent peak shaving.
+peakWeight = 1 + 0.5 * (max(T, 0) .^ 2);
+diff = Y - T;
+loss = mean((diff .^ 2) .* peakWeight, 'all');
+end
+
+function loss = localWeightedPeakMse(Y, T, weights)
+weights = reshape(weights, [], 1);
+peakWeight = 1 + 0.5 * (max(T, 0) .^ 2);
+diff = Y - T;
+loss = mean((diff .^ 2) .* peakWeight .* weights, 'all');
+end
+
 function lossFcn = localResolveLossFunction(lossName)
 lossKey = lower(string(lossName));
 switch lossKey
     case "mse"
         lossFcn = 'mse';
+    case {"peak_mse", "peakmse", "peak-mse"}
+        lossFcn = @localPeakMse;
     case "mae"
         lossFcn = 'mae';
     case "huber"
@@ -904,6 +980,8 @@ if ischar(baseLoss) || isstring(baseLoss)
     switch baseKey
         case "mse"
             lossFcn = @(Y, T) localWeightedMse(Y, T, weights);
+        case {"peak_mse", "peakmse", "peak-mse"}
+            lossFcn = @(Y, T) localWeightedPeakMse(Y, T, weights);
         case "mae"
             lossFcn = @(Y, T) localWeightedMae(Y, T, weights);
         otherwise
@@ -911,6 +989,100 @@ if ischar(baseLoss) || isstring(baseLoss)
     end
 else
     lossFcn = @(Y, T) localWeightedHuber(Y, T, weights);
+end
+end
+
+function [net, calibInfo] = localCalibrateLogTargetBias(net, XVal, YVal, XTrain, YTrain, dataset, verbose)
+%localCalibrateLogTargetBias Correct Jensen's inequality (log-normal smearing)
+%   and resonance peak underestimation by calibrating the final linear layer
+%   Bias of log-transformed target channels when the model has converged.
+calibInfo = struct('applied', false, 'deltaBiasNorm', [], 'smearingFactor', []);
+try
+    if ~isa(net, 'dlnetwork') || ~isprop(net, 'Learnables')
+        return;
+    end
+    if ~isempty(XVal) && ~isempty(YVal) && size(XVal, 1) >= 32
+        XCal = XVal;
+        YCal = YVal;
+    else
+        XCal = XTrain;
+        YCal = YTrain;
+    end
+    if isempty(XCal) || isempty(YCal)
+        return;
+    end
+    numTargets = size(YCal, 2);
+    logMask = true(1, numTargets);
+    if isfield(dataset, 'targetLogMask') && numel(dataset.targetLogMask) == numTargets
+        logMask = logical(dataset.targetLogMask(:)');
+    end
+    sdZ = ones(1, numTargets);
+    if isfield(dataset, 'targetTransform') && isfield(dataset.targetTransform, 'Std') ...
+            && numel(dataset.targetTransform.Std) == numTargets
+        sdZ = double(dataset.targetTransform.Std(:)');
+    end
+
+    YPredCal = double(extractdata(predict(net, XCal)));
+    deltaBias = zeros(1, numTargets);
+    smearing = ones(1, numTargets);
+    learnables = net.Learnables;
+
+    for c = 1:numTargets
+        if ~logMask(c)
+            continue;
+        end
+        resNorm = YCal(:, c) - YPredCal(:, c);
+        rmseNorm = sqrt(mean(resNorm .^ 2, 'omitnan'));
+        % Only apply smearing/peak bias calibration when the model has converged
+        % (skip noisy 1-2 epoch unit test smoke models where rmseNorm > 0.40).
+        if ~isfinite(rmseNorm) || rmseNorm > 0.40
+            continue;
+        end
+        % Evaluate residual on the active resonance regime (top quartile / Z > 0.5)
+        peakMask = YCal(:, c) > 0.5;
+        if nnz(peakMask) < 16
+            peakMask = true(size(YCal, 1), 1);
+        end
+        resLog10 = sdZ(c) * resNorm(peakMask);
+        % Clamp individual outliers before computing Duan's smearing expectation E[10^e]
+        resLog10Clamped = min(max(resLog10, -0.5), 0.5);
+        alphaC = mean(10 .^ resLog10Clamped, 'omitnan');
+        if isfinite(alphaC) && alphaC > 1.001
+            alphaC = min(alphaC, 1.25);
+            smearing(c) = alphaC;
+            deltaBias(c) = log10(alphaC) / max(sdZ(c), eps);
+            % Update bias in net.Learnables
+            headLayerName = sprintf('head_%d_out', c);
+            rowIdx = find(strcmp(string(learnables.Layer), headLayerName) & ...
+                          strcmp(string(learnables.Parameter), "Bias"), 1);
+            if ~isempty(rowIdx)
+                bVal = learnables.Value{rowIdx};
+                learnables.Value{rowIdx} = bVal + cast(deltaBias(c), 'like', bVal);
+                calibInfo.applied = true;
+            else
+                rowOut = find(strcmp(string(learnables.Layer), "out_out") & ...
+                              strcmp(string(learnables.Parameter), "Bias"), 1);
+                if ~isempty(rowOut) && numel(learnables.Value{rowOut}) >= c
+                    bVal = learnables.Value{rowOut};
+                    bVal(c) = bVal(c) + cast(deltaBias(c), 'like', bVal);
+                    learnables.Value{rowOut} = bVal;
+                    calibInfo.applied = true;
+                end
+            end
+        end
+    end
+
+    if calibInfo.applied
+        net.Learnables = learnables;
+        if verbose
+            fprintf('  ✓ Applied log-target Duan smearing bias calibration: alpha = [%s]\n', ...
+                strjoin(compose('%.4f', smearing), ', '));
+        end
+    end
+    calibInfo.deltaBiasNorm = deltaBias;
+    calibInfo.smearingFactor = smearing;
+catch
+    % Non-fatal if custom network layer names differ
 end
 end
 

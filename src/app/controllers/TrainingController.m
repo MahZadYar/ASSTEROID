@@ -142,6 +142,8 @@ classdef TrainingController < handle
             end
 
             networkConfig = struct( ...
+                "architecture", obj.safeStr(d, "architecture", "resnet"), ...
+                "tensorRank", obj.safeNum(d, "tensorRank", 128), ...
                 "useMultiHead", obj.safeBool(d, "useMultiHead", true), ...
                 "fc1a", obj.safeNum(d, "fc1a", 128), ...
                 "fc1b", obj.safeNum(d, "fc1b", 256), ...
@@ -319,8 +321,14 @@ classdef TrainingController < handle
             end
 
             maxEpochsVal = obj.safeNum(d, "maxEpochs", 200);
-            lastUiUpdateTic = tic;
             totalItersLocked = NaN;
+
+            % Buffers for batching plot additions and UI updates once per epoch
+            trainIterBuf = [];
+            trainLossBuf = [];
+            valIterBuf   = [];
+            valLossBuf   = [];
+            lastPlottedEpoch = 0;
 
             cfg.iterationCallback = @(info) onIterProgress(info);
 
@@ -389,66 +397,110 @@ classdef TrainingController < handle
 
                 if isfinite(curIter) && curIter >= 1
                     lastIterLogged = curIter;
+                    % Accumulate all iteration data into buffers (preserving full iteration curve)
+                    if isfinite(curLoss) && curLoss > 0
+                        trainIterBuf(end+1) = curIter; %#ok<AGROW>
+                        trainLossBuf(end+1) = curLoss; %#ok<AGROW>
+                    end
+                    if isfinite(curValLoss) && curValLoss > 0
+                        valIterBuf(end+1) = curIter; %#ok<AGROW>
+                        valLossBuf(end+1) = curValLoss; %#ok<AGROW>
+                    end
                 end
                 if isfinite(curLoss)
                     lastLossLogged = curLoss;
                 end
 
-                % Real-time Log-Log plot point additions
-                if ~isempty(trainAx) && isvalid(trainAx) && curIter >= 1
+                % Trigger graph and UI updates strictly once per epoch (or on initial/final iteration)
+                isEpochTransition = (curEpoch > lastPlottedEpoch && curEpoch > 1);
+                isFirstIteration  = (curIter == 1);
+                isFinalIteration  = (~isnan(totalItersLocked) && curIter >= totalItersLocked);
+
+                if isEpochTransition || isFirstIteration || isFinalIteration
+                    flushEpochPlotAndUi(curEpoch, curIter, curLoss, curValLoss, curLr);
+                end
+            end
+
+            function flushEpochPlotAndUi(epVal, itVal, lossVal, valLossVal, lrVal)
+                if ~isempty(trainAx) && isvalid(trainAx)
                     try
-                        if isfinite(curLoss) && curLoss > 0
-                            addpoints(hTrainLoss, curIter, curLoss);
+                        if ~isempty(trainIterBuf)
+                            addpoints(hTrainLoss, trainIterBuf, trainLossBuf);
+                            trainIterBuf = [];
+                            trainLossBuf = [];
                         end
-                        if isfinite(curValLoss) && curValLoss > 0
-                            addpoints(hValLoss, curIter, curValLoss);
+                        if ~isempty(valIterBuf)
+                            addpoints(hValLoss, valIterBuf, valLossBuf);
+                            valIterBuf = [];
+                            valLossBuf = [];
                         end
+
+                        subText = sprintf("Epoch %d / %d | Iteration %d | Train Loss: %.4e", ...
+                            epVal, maxEpochsVal, itVal, lossVal);
+                        if isfinite(valLossVal) && valLossVal > 0
+                            subText = subText + sprintf(" | Val Loss: %.4e", valLossVal);
+                        end
+                        if isfinite(lrVal)
+                            subText = subText + sprintf(" | LR: %.1e", lrVal);
+                        end
+                        subtitle(trainAx, subText, "Color", [160, 178, 214]/255, "FontSize", 9);
+                        drawnow limitrate;
                     catch
                     end
                 end
 
-                % Throttle UI / HTML updates to ~0.40s for smooth responsive performance without IPC queue congestion
-                if toc(lastUiUpdateTic) >= 0.40 || curIter == 1
-                    lastUiUpdateTic = tic;
-
-                    if ~isempty(trainAx) && isvalid(trainAx)
-                        try
-                            subText = sprintf("Epoch %d / %d | Iteration %d | Train Loss: %.4e", ...
-                                curEpoch, maxEpochsVal, curIter, curLoss);
-                            if isfinite(curValLoss) && curValLoss > 0
-                                subText = subText + sprintf(" | Val Loss: %.4e", curValLoss);
-                            end
-                            if isfinite(curLr)
-                                subText = subText + sprintf(" | LR: %.1e", curLr);
-                            end
-                            subtitle(trainAx, subText, "Color", [160, 178, 214]/255, "FontSize", 9);
-                            drawnow limitrate;
-                        catch
-                        end
-                    end
-
-                    % Send epoch progress and metrics to HTML UI
-                    frac = min(1.0, curEpoch / max(1, maxEpochsVal));
-                    progStruct = struct( ...
-                        "fraction", frac, ...
-                        "epoch", curEpoch, ...
-                        "maxEpochs", maxEpochsVal, ...
-                        "iteration", curIter, ...
-                        "loss", curLoss, ...
-                        "valLoss", curValLoss, ...
-                        "message", sprintf("Epoch %d/%d (Iter %d) - Loss: %.4e", curEpoch, maxEpochsVal, curIter, curLoss));
-                    if isfinite(curLr)
-                        progStruct.lr = curLr;
-                    end
-                    obj.sendToHTML("Progress", progStruct);
+                % Send epoch progress and metrics to HTML UI
+                frac = min(1.0, epVal / max(1, maxEpochsVal));
+                progStruct = struct( ...
+                    "fraction", frac, ...
+                    "epoch", epVal, ...
+                    "maxEpochs", maxEpochsVal, ...
+                    "iteration", itVal, ...
+                    "loss", lossVal, ...
+                    "valLoss", valLossVal, ...
+                    "message", sprintf("Epoch %d/%d (Iter %d) - Loss: %.4e", epVal, maxEpochsVal, itVal, lossVal));
+                if isfinite(lrVal)
+                    progStruct.lr = lrVal;
                 end
+                obj.sendToHTML("Progress", progStruct);
+                lastPlottedEpoch = epVal;
             end
 
             results = runTrainingWorkflow(cfg, rep);
 
+            % Flush any remaining buffered iterations to graph
+            if ~isempty(trainIterBuf) && ~isempty(trainAx) && isvalid(trainAx)
+                try
+                    addpoints(hTrainLoss, trainIterBuf, trainLossBuf);
+                    trainIterBuf = [];
+                    trainLossBuf = [];
+                    if ~isempty(valIterBuf)
+                        addpoints(hValLoss, valIterBuf, valLossBuf);
+                        valIterBuf = [];
+                        valLossBuf = [];
+                    end
+                    drawnow limitrate;
+                catch
+                end
+            end
+
             % Update session state
-            if isfield(results, "db") && isstruct(results.db)
+            if isfield(results, "db") && isstruct(results.db) && ~isempty(fieldnames(results.db))
                 obj.session.db = results.db;
+            end
+            if isfield(results, "ri") && isstruct(results.ri) && isfield(results.ri, "nFunc")
+                obj.session.ri = results.ri;
+                obj.session.riLoaded = true;
+                if isstruct(obj.session.db)
+                    if ~isfield(obj.session.db, "RI") || ~isstruct(obj.session.db.RI)
+                        obj.session.db.RI = struct();
+                    end
+                    obj.session.db.RI.lambda = results.ri.lambda(:);
+                    obj.session.db.RI.n      = results.ri.n(:);
+                    obj.session.db.RI.k      = results.ri.k(:);
+                    obj.session.db.RI.nFunc  = results.ri.nFunc;
+                    obj.session.db.RI.kFunc  = results.ri.kFunc;
+                end
             end
             if isfield(results, "model") && isstruct(results.model)
                 obj.session.model = results.model;
@@ -476,15 +528,39 @@ classdef TrainingController < handle
                     ve = obj.fig.UserData.visExport;
                     ve.model = obj.session.model;
                     ve.modelLoaded = true;
+                    if isfield(results, "ri") && isstruct(results.ri) && isfield(results.ri, "nFunc")
+                        ve.ri = results.ri;
+                    end
                     obj.fig.UserData.visExport = ve;
                 end
-                if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "saveDbFile")
-                    try obj.fig.UserData.app.saveDbFile(); catch; end
+            end
+
+            alreadySaved = isfield(cfg, "databaseFile") && isfile(string(cfg.databaseFile));
+            if alreadySaved
+                if ~isempty(obj.fig) && isvalid(obj.fig)
+                    obj.fig.UserData.dbDirty = false;
+                    if isfield(obj.fig.UserData, "session") && ~isempty(obj.fig.UserData.session) && isvalid(obj.fig.UserData.session)
+                        obj.fig.UserData.session.dbDirty = false;
+                    end
+                    if isfield(obj.fig.UserData.handles, "dbHtml") && isvalid(obj.fig.UserData.handles.dbHtml)
+                        sendEventToHTMLSource(obj.fig.UserData.handles.dbHtml, "SaveComplete", "Database saved.");
+                    end
+                    if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "broadcastDbStatus")
+                        try obj.fig.UserData.app.broadcastDbStatus(); catch; end
+                    end
+                else
+                    obj.session.dbDirty = false;
+                end
+            else
+                if ~isempty(obj.fig) && isvalid(obj.fig)
+                    if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "saveDbFile")
+                        try obj.fig.UserData.app.saveDbFile(); catch; end
+                    else
+                        try obj.session.saveDatabase(); catch; end
+                    end
                 else
                     try obj.session.saveDatabase(); catch; end
                 end
-            else
-                try obj.session.saveDatabase(); catch; end
             end
 
             % Finalize diagnostic plots on right panel

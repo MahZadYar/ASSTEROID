@@ -67,11 +67,16 @@ elseif isscalar(logMask) && logMask
     logBase = exp(1); % legacy default
 end
 
+smearingFactor = [];
+if isfield(tt, "SmearingFactor") && ~isempty(tt.SmearingFactor)
+    smearingFactor = tt.SmearingFactor;
+end
+
 model.TargetLogTransform = logMask;
 model.inputPreprocessing = "physics_v2";
 model.normalizeIncludesRatios = false;
 model.normalize = @(Xraw) standardizeModelFeatures(Xraw, schema);
-model.denormalize = @(Z) denormalizeModelTargets(Z, logMask, tt.Mean, tt.Std, logBase);
+model.denormalize = @(Z) denormalizeModelTargets(Z, logMask, tt.Mean, tt.Std, logBase, smearingFactor);
 model.flags = struct( ...
     "FeatureSchema", "v2_physics", ...
     "FeatureLogTransform", true, ...

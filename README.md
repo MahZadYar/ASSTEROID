@@ -3,7 +3,7 @@
 **Adaptive Sampling, Surrogate Training, Exploration and Refinement for Optimal Inverse Design**
 
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2023b%2B%20%7C%20R2026a-blue.svg)](https://www.mathworks.com/products/matlab.html)
-[![Version](https://img.shields.io/badge/Version-5.3-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
+[![Version](https://img.shields.io/badge/Version-6.0-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.1021%2Facsnano.XXXXXXX-orange.svg)](#citation)
 [![Zenodo](https://img.shields.io/badge/Data-10.5281%2Fzenodo.XXXXXXX-blue.svg)](#dataset--trained-models)
@@ -18,7 +18,7 @@ While ASSTEROID is demonstrated on the rational geometric design of Nanoparticle
 1. 💾 **Master Database Management**: Programmatic state tracking, interactive data tree inspection, metadata archiving, and persistent modal basin repository (`db.Basins`) alongside optimal design solutions (`db.Optima`).
 2. 📥 **Automated Data Ingestion & QA**: Parsing multi-parameter solver outputs into high-performance Structure-of-Arrays (SoA) datasets with electromagnetic passivity verification.
 3. 🎯 **Curvature- & Density-Aware Adaptive Sampling**: Directing subsequent simulation batches toward informative, high-enhancement modal regions using 9-point discrete Laplacian curvature operators and dual-tier minimum-distance rejection sampling.
-4. 🧠 **Physics-Informed Deep Residual Surrogates**: Training multi-task ResNets featuring explicit material dispersion ($n, k$), geometric scale invariance, target-specific scaling (linear for $A_L$, decadic $\log_{10}(1+y)$ for near-field Raman proxies), Layer Normalization, and a three-tier performance evaluation suite (Empirical, Inverse Density Weighted, and Modal Optima RoI).
+4. 🧠 **Physics-Informed Deep Residual & Tensor-Product Surrogates**: Training multi-task surrogates (`"resnet"` or Low-Rank Tensor-Product `"tensor_resnet"` with a bilinear Hadamard Tucker core) featuring $C^2$-smooth gold dispersion (`smoothdata` Savitzky-Golay + `makima` Hermite interpolation), geometric scale invariance, target-specific scaling (linear for $A_L$, decadic $\log_{10}(1+y)$ for near-field Raman proxies with Duan's log-normal smearing bias calibration), Peak-Weighted MSE (`"peak_mse"`), Layer Normalization, and a three-tier performance evaluation suite (Empirical, Inverse Density Weighted, and Modal Optima RoI).
 5. 🔮 **Dense Landscape Exploration & Spectral Integration**: Ultra-dense sub-nanometer grid inference coupled with Modified Akima piecewise cubic Hermite interpolation (`makima`) for continuous figures of merit.
 6. 🔍 **Topology-Aware Multimodal Optimization**: Partitioning the multi-objective optical landscape into discrete topological catchment basins via marker-controlled watershed segmentation (`imextendedmax`, `imimposemin`, `watershed`), persistent territorial archiving (`db.Basins`) for cross-metric multimodal comparison, interactive basin merging and curation with 25% alpha fills, and in-basin MultiStart gradient ascent (`fmincon` with SQP/Interior-Point) featuring 50% dynamic range filtering and summit-contracted jump-retry boundaries driven by analytical neural graph gradients (`dlgradient`).
 7. 🌌 **Multi-Dimensional 3D Visualization & Export**: Rendering 1D spectra, 2D scattered/contour maps, 3D volume slices, and exporting to HDF5, ONNX, and relational MAT tables.
@@ -158,7 +158,7 @@ flowchart TD
 #### 🧠 Stage 3: Physics-Informed Deep Surrogate Training
 * **CLI Entry Point:** [`scripts/pipeline/run_dnn_pipeline.m`](scripts/pipeline/run_dnn_pipeline.m)
 * **Core Orchestrator:** [`src/orchestration/runTrainingWorkflow.m`](src/orchestration/runTrainingWorkflow.m)
-* **Function:** Trains an 8-input, 3-head residual neural network (ResNet) mapping geometric scale ($\log P, \log r, \log \lambda$), complex experimental gold dispersion ($n(\lambda), k(\lambda)$), and electrodynamic ratios ($P/\lambda, r/\lambda, g_{\text{norm}}$) to optical absorbance ($A$), cell-normalized volume enhancement ($\text{EF}_V^{\text{cell}}$), and surface enhancement ($\text{EF}_S^{\text{cell}}$). Employs target-specific standardization (linear for $A$, decadic $\log_{10}(1+y)$ for near-field enhancement factors), Layer Normalization, GELU activations, and Adam optimization with automated checkpointing. Computes a three-tier performance audit (Empirical Holdout, Inverse Density Weighted global design-space expectation, and Resonance Optima Regions of Interest) with automated LaTeX table generation.
+* **Function:** Trains a 9-input (or 8-input), 3-head neural surrogate—selectable between the **Standard Residual Network (`"resnet"`)** and the **Low-Rank Tensor-Product ResNet (`"tensor_resnet"`, rank-$R$ Bilinear/Tucker Hadamard contraction core)**—mapping geometric scale ($\log P, \log r, \log \lambda$), $C^2$-smoothed experimental gold permittivity ($\varepsilon_1(\lambda), \log \varepsilon_2(\lambda), \log(1+Q_{\text{mat}})$), and electrodynamic ratios ($P/\lambda, r/\lambda, \log(g/\lambda), \log(h_{\text{gap}}/\lambda)$) to optical absorbance ($A$), cell-normalized volume enhancement ($\text{EF}_V^{\text{cell}}$), and surface enhancement ($\text{EF}_S^{\text{cell}}$). Supports both uniform `"mse"` and **Peak-Weighted MSE (`"peak_mse"`)** ($w_{\text{peak}}(T) = 1 + 0.5\max(T,0)^2$), automatic Duan log-normal smearing bias calibration to eliminate Jensen's inequality peak underestimation, Layer Normalization, GELU activations, and real-time epoch-throttled log-log training diagnostics. Computes a three-tier performance audit (Empirical Holdout, Inverse Density Weighted global design-space expectation, and Resonance Optima Regions of Interest) with automated LaTeX table generation.
 
 #### 🔮 Stage 4: Dense Landscape Prediction & Spectral Efficacy
 * **CLI Entry Point:** [`scripts/pipeline/run_prediction_vis.m`](scripts/pipeline/run_prediction_vis.m)
@@ -320,7 +320,14 @@ Comprehensive architectural specifications, mathematical formalisms, and user ma
 
 ---
 
-## What's New in Version 5.3
+## What's New in Version 6.0
+
+* 🧮 **Low-Rank Tensor-Product ResNet (`"tensor_resnet"`)**: Selectable alongside the standard `"resnet"` backbone in Stage 3 (`NetworkConfig.architecture = "tensor_resnet"`, `tensorRank = R`). Replaces the purely additive Block 2 bottleneck with a rank-$R$ Bilinear/Tucker Hadamard tensor contraction (`tt_core_a`, `tt_core_b`, `multiplicationLayer`), directly capturing multiplicative coupling across $(P, r, \lambda)$ for smooth 3D manifolds while preserving exact analytical `dlgradient` differentiation in `find_local_maxima`.
+* 🎯 **Peak-Weighted MSE (`"peak_mse"`) & Duan Smearing Calibration**: Introduces a resonance-focused loss function ($w_{\text{peak}}(T) = 1 + 0.5\max(T, 0)^2$) and post-training Duan log-normal smearing bias calibration (`localCalibrateLogTargetBias` + `denormalizeModelTargets`) to eliminate Jensen's inequality underestimation ($10^{\mathbb{E}[\hat{Z}]} < \mathbb{E}[10^Z]$) and peak shaving on $\text{EF}_{\text{vol}}$ and $\text{EF}_{\text{surf}}$.
+* 🌊 **$C^2$-Smooth Optical Dispersion & Session RI Synchronization**: Replaces piecewise-linear `'linear'` refractive index interpolation (`resolveRefractiveIndexStruct`, `getDefaultRefractiveIndex`, `load_gold_refractive_index`) with wavelength-coordinate Savitzky-Golay filtering (`smoothdata`) and Modified Akima (`'makima'`) cubic Hermite splines, automatically upgrading legacy 141-point `db.RI` tables and synchronizing `db.RI` / `session.ri` upon training completion to eliminate 1D spectral staircase jaggedness and covariate shift.
+* 📈 **Real-Time Log-Log Training Diagnostics & Global Console**: Adds epoch-batched live log-log training/validation loss curves on the right visualization canvas, early-stop-and-save controls, and a collapsible bottom system console with progress bar and telemetry pills.
+
+### Previous Highlights (Version 5.3)
 
 * 💾 **Persistent Basin Architecture (`db.Basins`)**: Master database branch storing segmented modal catchment territories (label rasters, boundary polygons, summit coordinates) decoupled from specific metric values, enabling seamless cross-metric multi-objective exploration.
 * 🔗 **Topological Basin Merging**: Interactive merging of adjacent watershed partitions into single composite modal basins, automatically electing overall summits and consolidating territorial boundaries.

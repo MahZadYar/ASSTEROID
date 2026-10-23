@@ -57,12 +57,53 @@ function ri = resolveRefractiveIndexStruct(target, riCsvFile)
         dbRi = db.RI;
         % Prefer fresh interpolants from raw vectors over stale deserialized handles
         if isfield(dbRi, "lambda") && isfield(dbRi, "n") && isfield(dbRi, "k") && ~isempty(dbRi.lambda)
+            hasCustomSource = isfield(dbRi, "SourceFile") && strlength(string(dbRi.SourceFile)) > 0;
+            % Upgrade legacy unsmoothed 141-point default table to current smooth DefaultRefractiveIndices.dat
+            if ~hasCustomSource && numel(dbRi.lambda) == 141
+                try
+                    ri = getDefaultRefractiveIndex(WavelengthUnit="um");
+                    if ~isempty(fig) && isstruct(fig.UserData) && isfield(fig.UserData, "db")
+                        fig.UserData.db.RI = ri;
+                    end
+                    return;
+                catch
+                    % fall through to rebuild from vectors
+                end
+            end
             try
-                Fn = griddedInterpolant(double(dbRi.lambda(:)), double(dbRi.n(:)), 'linear', 'nearest');
-                Fk = griddedInterpolant(double(dbRi.lambda(:)), double(dbRi.k(:)), 'linear', 'nearest');
+                wlRaw = double(dbRi.lambda(:));
+                nRaw  = double(dbRi.n(:));
+                kRaw  = double(dbRi.k(:));
+                if max(wlRaw) > 50
+                    wlUm = wlRaw * 1e-3;
+                else
+                    wlUm = wlRaw;
+                end
+                [wlUm, sortIdx] = unique(wlUm, 'stable');
+                nRaw = nRaw(sortIdx);
+                kRaw = kRaw(sortIdx);
+                if numel(wlUm) >= 7
+                    try
+                        spanUm = 0.035 * (max(wlUm) - min(wlUm));
+                        nSmooth = smoothdata(nRaw, 'sgolay', spanUm, 'SamplePoints', wlUm);
+                        kSmooth = smoothdata(kRaw, 'sgolay', spanUm, 'SamplePoints', wlUm);
+                    catch
+                        nSmooth = nRaw;
+                        kSmooth = kRaw;
+                    end
+                else
+                    nSmooth = nRaw;
+                    kSmooth = kRaw;
+                end
+                Fn = griddedInterpolant(wlUm, nSmooth, 'makima', 'nearest');
+                Fk = griddedInterpolant(wlUm, kSmooth, 'makima', 'nearest');
                 ri = dbRi;
-                ri.nFunc = @(lq) Fn(double(lq));
-                ri.kFunc = @(lq) Fk(double(lq));
+                ri.lambda = wlUm;
+                ri.lambda_nm = wlUm * 1e3;
+                ri.n = nSmooth;
+                ri.k = kSmooth;
+                ri.nFunc = @(lq) Fn(localEnsureUm(lq));
+                ri.kFunc = @(lq) Fk(localEnsureUm(lq));
                 if ~isempty(fig) && isstruct(fig.UserData) && isfield(fig.UserData, "db")
                     fig.UserData.db.RI = ri;
                 end
@@ -135,5 +176,12 @@ function ri = resolveRefractiveIndexStruct(target, riCsvFile)
         ri = getDefaultRefractiveIndex(WavelengthUnit="um");
     catch
         ri = struct();
+    end
+end
+
+function lqUm = localEnsureUm(lq)
+    lqUm = double(lq);
+    if ~isempty(lqUm) && max(lqUm(:), [], 'omitnan') > 50
+        lqUm = lqUm * 1e-3;
     end
 end

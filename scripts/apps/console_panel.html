@@ -351,6 +351,24 @@
 <div id="copyToast">Copied to clipboard!</div>
 
 <script>
+    window.onerror = function(msg, url, line, col, err) {
+        var errText = "[JS ERROR] " + msg + " (" + line + ":" + col + ")";
+        if (err && err.stack) errText += "\n" + err.stack;
+        if (window.htmlComponent) {
+            try {
+                window.htmlComponent.sendEventToMATLAB("JsErrorAlert", { message: errText });
+            } catch(e) {}
+        }
+        return false;
+    };
+    window.addEventListener("unhandledrejection", function(ev) {
+        if (window.htmlComponent) {
+            try {
+                window.htmlComponent.sendEventToMATLAB("JsErrorAlert", { message: "[PROMISE REJECTION] " + (ev.reason ? ev.reason.stack || ev.reason : "") });
+            } catch(e) {}
+        }
+    });
+
     var heightModes = [150, 260, 38]; // Normal, Expanded, Collapsed
     var heightIndex = 0; // Starts at 150
     var maxLogEntries = 1200;
@@ -436,6 +454,13 @@
 
     function appendRawStream(text) {
         if (!text) return;
+        if (Array.isArray(text)) {
+            text = text.join("\n");
+        } else if (typeof text !== "string") {
+            text = String(text);
+        }
+        if (!text.trim()) return;
+
         var lines = text.split(/\r?\n/);
         var body = document.getElementById("consoleBody");
         if (!body) return;
@@ -596,18 +621,27 @@
 
     // Universal Event Router
     function handleIncomingEvent(name, data) {
-        if (!name) return;
-        data = data || {};
-        switch (name) {
-            case "RawConsoleStream":
-                var text = typeof data === "string" ? data : (data.text || "");
-                appendRawStream(text);
-                break;
-            case "ConsoleLog":
-                var msg = typeof data === "string" ? data : (data.message || data.msg || "");
-                var lvl = data.level || "info";
-                appendLog(msg, lvl);
-                break;
+        try {
+            if (!name) return;
+            data = data || {};
+            switch (name) {
+                case "RawConsoleStream":
+                    var rawText = "";
+                    if (typeof data === "string") {
+                        rawText = data;
+                    } else if (data && data.text !== undefined) {
+                        rawText = Array.isArray(data.text) ? data.text.join("\n") : String(data.text);
+                    } else if (data && data.message !== undefined) {
+                        rawText = Array.isArray(data.message) ? data.message.join("\n") : String(data.message);
+                    }
+                    appendRawStream(rawText);
+                    break;
+                case "ConsoleLog":
+                    var msg = typeof data === "string" ? data : (data.message || data.msg || "");
+                    if (Array.isArray(msg)) msg = msg.join("\n");
+                    var lvl = data.level || "info";
+                    appendLog(msg, lvl);
+                    break;
             case "Progress":
             case "ConsoleProgress":
                 var pct = data.percent !== undefined ? data.percent : (data.fraction !== undefined ? data.fraction * 100 : 0);
@@ -639,7 +673,16 @@
                 clearConsole();
                 break;
         }
+    } catch(err) {
+        if (window.htmlComponent) {
+            try {
+                window.htmlComponent.sendEventToMATLAB("JsErrorAlert", {
+                    message: "Exception in handleIncomingEvent (" + name + "): " + err.message + "\n" + (err.stack || "")
+                });
+            } catch(e) {}
+        }
     }
+}
 
     var isListenersAttached = false;
     function attachListeners(component) {

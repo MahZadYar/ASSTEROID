@@ -1458,7 +1458,7 @@ function initConsoleDiary(fig)
     fig.UserData.consoleDiary = struct("file", diaryFile, "lastPos", 0);
     fig.UserData.consoleClientReady = false;
     fig.UserData.consoleBuffer = {};
-    tConsole = timer("ExecutionMode", "fixedRate", "Period", 0.20, "BusyMode", "drop", ...
+    tConsole = timer("ExecutionMode", "fixedRate", "Period", 0.40, "BusyMode", "drop", ...
         "TimerFcn", @(~, ~) pollConsoleDiary(fig));
     fig.UserData.handles.consoleTimer = tConsole;
     start(tConsole);
@@ -1497,7 +1497,14 @@ function pollConsoleDiary(fig)
                 fig.UserData.consoleDiary.lastPos = curBytes;
                 fclose(fid);
                 if ~isempty(newChars)
-                    sendEventToHTMLSource(cHtml, "RawConsoleStream", struct("text", string(newChars)));
+                    % Filter out internal CEF / uihtml warnings to permanently prevent feedback loops
+                    if contains(newChars, "uihtml", "IgnoreCase", true) && ...
+                       (contains(newChars, "ErrorOccuredInHTMLSource") || contains(newChars, "unsupported functionality"))
+                        newChars = regexprep(newChars, '\[?\s*Warning:[^\n]*uihtml[^\n]*\n?', '');
+                    end
+                    if ~isempty(strtrim(newChars))
+                        sendEventToHTMLSource(cHtml, "RawConsoleStream", struct("text", string(newChars)));
+                    end
                 end
             end
         end

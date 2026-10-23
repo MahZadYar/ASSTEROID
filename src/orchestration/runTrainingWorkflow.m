@@ -332,6 +332,22 @@ end
                 'testIdx', dataset.testIdx);
         end
 
+        % Synchronize db.RI with the refractive index table used during training
+        % so downstream prediction and visualization use identical optical constants.
+        if exist('ri', 'var') && isstruct(ri) && isfield(ri, 'lambda')
+            if ~isfield(db, 'RI') || ~isstruct(db.RI)
+                db.RI = struct();
+            end
+            db.RI.lambda = ri.lambda(:);
+            db.RI.n      = ri.n(:);
+            db.RI.k      = ri.k(:);
+            db.RI.nFunc  = ri.nFunc;
+            db.RI.kFunc  = ri.kFunc;
+            if isfile(cfg.riCsvFile)
+                db.RI.SourceFile = string(cfg.riCsvFile);
+            end
+        end
+
         save(dbFile, "db", "-v7.3"); %#ok<NASGU>
         reporter.complete("PackDB", sprintf("Saved db.Model to %s", dbFile));
     else
@@ -348,9 +364,12 @@ end
     results = struct();
     results.model        = model;
     results.dataset      = dataset;
+    results.ri           = ri;
     results.summary      = summary;
     results.cfg          = cfg;
-    results.db           = db;
+    if exist('db', 'var')
+        results.db       = db;
+    end
     if exist('perfReport', 'var') && ~isempty(fieldnames(perfReport))
         results.performanceReport = perfReport;
     end
