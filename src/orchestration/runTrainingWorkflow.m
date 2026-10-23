@@ -224,113 +224,38 @@ end
         reporter.info("SaveArtifacts=false — model not written to disk.");
     end
 
-    %% 10. Pack model metadata into unified database
+    %% 10. Compute three-tier comprehensive evaluation report
+    dbOptima = [];
+    if isfield(cfg, 'databaseFile') && strlength(cfg.databaseFile) > 0 && isfile(cfg.databaseFile)
+        try
+            dbTemp = load(cfg.databaseFile, 'db').db;
+            if isfield(dbTemp, "Optima") && isstruct(dbTemp.Optima)
+                dbOptima = dbTemp.Optima;
+            end
+        catch
+        end
+    end
+    try
+        perfReport = computeSurrogateEvaluationMetrics(model, dataset, dbOptima, Verbose=false);
+        model.performanceReport = perfReport;
+    catch ME_perf
+        reporter.warn(sprintf("Three-tier evaluation computation: %s", ME_perf.message));
+        perfReport = struct();
+    end
+
+    %% 11. Pack model metadata into dbModel struct
+    dbModel = buildDbModelStruct(model, dataset, cfg, summary, perfReport);
+
+    %% 12. Optionally persist to database file on disk if explicitly configured
     if isfield(cfg, 'databaseFile') && strlength(cfg.databaseFile) > 0
-        reporter.start("PackDB", "Packing model metadata into database...");
+        reporter.start("PackDB", "Packing model metadata into database file...");
         dbFile = cfg.databaseFile;
         if isfile(dbFile)
             db = load(dbFile, "db").db;
         else
             db = createDatabaseStruct();
         end
-
-        db.Model.Source       = "Training.DNN";
-        db.Model.TrainingDate = string(datetime("now", "Format", "yyyy-MM-dd HH:mm:ss"));
-        db.Model.TrainDataRef = "Sim";
-        db.Model.NetFile      = string(cfg.outputModelFile);
-        db.Model.TargetNames  = string(model.targetNames);
-
-        % Store the dlnetwork object directly (MATLAB .mat v7.3 supports this)
-        if isfield(model, 'net') && isa(model.net, 'dlnetwork')
-            db.Model.Net = model.net;
-            db.Model.InputSize = model.net.Layers(1).InputSize;
-        end
-
-        % Hyperparameters
-        db.Model.Hyperparams = struct( ...
-            'MaxEpochs', cfg.maxEpochs, ...
-            'MiniBatchSize', cfg.miniBatchSize, ...
-            'LearningRate', cfg.learningRate, ...
-            'Optimizer', cfg.optimizer, ...
-            'LossFunction', cfg.lossFunction, ...
-            'L2Regularization', cfg.l2Regularization, ...
-            'LearnRateSchedule', cfg.learnRateSchedule, ...
-            'LearnRateDropFactor', cfg.learnRateDropFactor, ...
-            'LearnRateDropPeriod', cfg.learnRateDropPeriod);
-
-        % Preprocessing flags (taken from the model: v2 forces IncludeRatios=false)
-        db.Model.Preprocessing = struct( ...
-            'FeatureLogTransform', logical(model.FeatureLogTransform), ...
-            'IncludeRatios', logical(model.IncludeRatios), ...
-            'TargetLogTransform', logical(model.TargetLogTransform), ...
-            'InputPreprocessing', string(model.inputPreprocessing));
-
-        % v2 physics schema: feature and target statistics (required to rebuild
-        % normalize/denormalize when the model is restored from the database).
-        if isfield(model, 'featureSchema') && isfield(model, 'targetTransform')
-            db.Model.FeatureSchema   = model.featureSchema;
-            db.Model.TargetTransform = model.targetTransform;
-        elseif isfield(db.Model, 'FeatureSchema')
-            db.Model = rmfield(db.Model, intersect({'FeatureSchema', 'TargetTransform'}, fieldnames(db.Model)));
-        end
-
-        % Normalization parameters (HDF5-safe numerics)
-        if isfield(model, 'normalize') || isfield(model, 'featureMean')
-            scale = struct();
-            if isfield(model, 'featureMean')
-                scale.featureMean = model.featureMean;
-                scale.featureStd  = model.featureStd;
-            end
-            if isfield(model, 'targetMean')
-                scale.targetMean = model.targetMean;
-                scale.targetStd  = model.targetStd;
-            end
-            if isfield(model, 'featureLogMask')
-                scale.featureLogMask = model.featureLogMask;
-            end
-            if isfield(model, 'targetLogMask')
-                scale.targetLogMask = model.targetLogMask;
-            end
-            db.Model.Scale = scale;
-        end
-
-        % Performance
-        if isfield(model, 'performance')
-            perf = model.performance;
-            dbPerf = struct();
-            if isfield(perf, 'test') && isfield(perf.test, 'rmse')
-                dbPerf.rmse = perf.test.rmse;
-            elseif isfield(perf, 'rmse')
-                dbPerf.rmse = perf.rmse;
-            end
-            if isfield(perf, 'test') && isfield(perf.test, 'rmseLog')
-                dbPerf.rmseLog = perf.test.rmseLog;
-            end
-            dbPerf.testCount = summary.testCount;
-            db.Model.Performance = dbPerf;
-        end
-
-        % Three-tier comprehensive evaluation report (Holdout, IDW Unbiased, RoI Optima)
-        dbOptima = [];
-        if isfield(db, "Optima") && isstruct(db.Optima)
-            dbOptima = db.Optima;
-        end
-        try
-            perfReport = computeSurrogateEvaluationMetrics(model, dataset, dbOptima, Verbose=false);
-            db.Model.PerformanceReport = perfReport;
-            model.performanceReport = perfReport;
-        catch ME_perf
-            reporter.warn(sprintf("Three-tier evaluation computation: %s", ME_perf.message));
-            perfReport = struct();
-        end
-
-        % Training splits (indices)
-        if isfield(dataset, 'trainIdx')
-            db.Model.Splits = struct( ...
-                'trainIdx', dataset.trainIdx, ...
-                'valIdx', dataset.valIdx, ...
-                'testIdx', dataset.testIdx);
-        end
+        db.Model = dbModel;
 
         % Synchronize db.RI with the refractive index table used during training
         % so downstream prediction and visualization use identical optical constants.
@@ -350,14 +275,6 @@ end
 
         save(dbFile, "db", "-v7.3"); %#ok<NASGU>
         reporter.complete("PackDB", sprintf("Saved db.Model to %s", dbFile));
-    else
-        % If databaseFile wasn't specified, still compute performance report for results
-        try
-            perfReport = computeSurrogateEvaluationMetrics(model, dataset, [], Verbose=false);
-            model.performanceReport = perfReport;
-        catch
-            perfReport = struct();
-        end
     end
 
     %% Assemble results
@@ -367,6 +284,7 @@ end
     results.ri           = ri;
     results.summary      = summary;
     results.cfg          = cfg;
+    results.dbModel      = dbModel;
     if exist('db', 'var')
         results.db       = db;
     end
@@ -595,4 +513,87 @@ function s = formatRMSE(model)
         parts(k) = sprintf("%s=%.4g", names{k}, rmseVec(k));
     end
     s = strjoin(parts, ", ");
+end
+
+function dbModel = buildDbModelStruct(model, dataset, cfg, summary, perfReport)
+    dbModel = struct();
+    dbModel.Source       = "Training.DNN";
+    dbModel.TrainingDate = string(datetime("now", "Format", "yyyy-MM-dd HH:mm:ss"));
+    dbModel.TrainDataRef = "Sim";
+    dbModel.NetFile      = string(cfg.outputModelFile);
+    dbModel.TargetNames  = string(model.targetNames);
+
+    if isfield(model, 'net') && isa(model.net, 'dlnetwork')
+        dbModel.Net = model.net;
+        dbModel.InputSize = model.net.Layers(1).InputSize;
+    end
+
+    dbModel.Hyperparams = struct( ...
+        'MaxEpochs', cfg.maxEpochs, ...
+        'MiniBatchSize', cfg.miniBatchSize, ...
+        'LearningRate', cfg.learningRate, ...
+        'Optimizer', cfg.optimizer, ...
+        'LossFunction', cfg.lossFunction, ...
+        'L2Regularization', cfg.l2Regularization, ...
+        'LearnRateSchedule', cfg.learnRateSchedule, ...
+        'LearnRateDropFactor', cfg.learnRateDropFactor, ...
+        'LearnRateDropPeriod', cfg.learnRateDropPeriod);
+
+    dbModel.Preprocessing = struct( ...
+        'FeatureLogTransform', logical(model.FeatureLogTransform), ...
+        'IncludeRatios', logical(model.IncludeRatios), ...
+        'TargetLogTransform', logical(model.TargetLogTransform), ...
+        'InputPreprocessing', string(model.inputPreprocessing));
+
+    if isfield(model, 'featureSchema') && isfield(model, 'targetTransform')
+        dbModel.FeatureSchema   = model.featureSchema;
+        dbModel.TargetTransform = model.targetTransform;
+    end
+
+    if isfield(model, 'normalize') || isfield(model, 'featureMean')
+        scale = struct();
+        if isfield(model, 'featureMean')
+            scale.featureMean = model.featureMean;
+            scale.featureStd  = model.featureStd;
+        end
+        if isfield(model, 'targetMean')
+            scale.targetMean = model.targetMean;
+            scale.targetStd  = model.targetStd;
+        end
+        if isfield(model, 'featureLogMask')
+            scale.featureLogMask = model.featureLogMask;
+        end
+        if isfield(model, 'targetLogMask')
+            scale.targetLogMask = model.targetLogMask;
+        end
+        dbModel.Scale = scale;
+    end
+
+    if isfield(model, 'performance')
+        perf = model.performance;
+        dbPerf = struct();
+        if isfield(perf, 'test') && isfield(perf.test, 'rmse')
+            dbPerf.rmse = perf.test.rmse;
+        elseif isfield(perf, 'rmse')
+            dbPerf.rmse = perf.rmse;
+        end
+        if isfield(perf, 'test') && isfield(perf.test, 'rmseLog')
+            dbPerf.rmseLog = perf.test.rmseLog;
+        end
+        dbPerf.testCount = summary.testCount;
+        dbModel.Performance = dbPerf;
+    end
+
+    if exist('perfReport', 'var') && isstruct(perfReport) && ~isempty(fieldnames(perfReport))
+        dbModel.PerformanceReport = perfReport;
+    end
+
+    if isfield(dataset, 'trainIdx')
+        dbModel.Splits = struct( ...
+            'trainIdx', dataset.trainIdx, ...
+            'valIdx', dataset.valIdx, ...
+            'testIdx', dataset.testIdx);
+    end
+
+    dbModel.Model = model;
 end

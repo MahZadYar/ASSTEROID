@@ -96,7 +96,7 @@ arguments
     options.IncludeVerticalGap  (1,1) logical = true
     options.GapHeightUm         (1,1) double  {mustBePositive} = 0.005
     options.SaveArtifacts       (1,1) logical = true
-    options.DatabaseFile        (1,1) string  = "database.mat"
+    options.DatabaseFile        (1,1) string  = ""
     options.NetworkConfig       (1,1) struct  = struct()
     options.TargetLossWeights   (1,:) double = []
     options.FeatureLogTransform (1,1) logical = true

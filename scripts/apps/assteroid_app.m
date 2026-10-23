@@ -2985,6 +2985,7 @@ function runTrainingPipeline(src, d, fig, visPanel)
 
     cfg = trainingConfig( ...
         WorkDir             = workDir, ...
+        DatabaseFile        = "", ...
         RawDataFiles        = rawFiles(:)', ...
         RICsvFile           = riFile, ...
         OutputModelFile     = defaultModelFile, ...
@@ -3257,10 +3258,9 @@ function runTrainingPipeline(src, d, fig, visPanel)
 
     % Write-back to unified database
     try
-        if isfield(results, "db") && isstruct(results.db)
-            fig.UserData.db = results.db;
-        end
-        if isfield(results, "model") && isstruct(results.model)
+        if isfield(results, "dbModel") && isstruct(results.dbModel)
+            fig.UserData.db.Model = results.dbModel;
+        elseif isfield(results, "model") && isstruct(results.model)
             if ~isfield(fig.UserData.db, "Model") || ~isstruct(fig.UserData.db.Model)
                 fig.UserData.db.Model = struct();
             end
@@ -3274,7 +3274,11 @@ function runTrainingPipeline(src, d, fig, visPanel)
             if isfield(cfg, "outputModelFile") && isfile(string(cfg.outputModelFile))
                 fig.UserData.db.Model.NetFile = string(cfg.outputModelFile);
             end
-
+        end
+        if isfield(results, "model") && isstruct(results.model)
+            if isfield(fig.UserData.db, "Model") && isstruct(fig.UserData.db.Model)
+                fig.UserData.db.Model.Model = results.model;
+            end
             % Directly populate visExport so Prediction/Visualization works immediately
             ve = fig.UserData.visExport;
             ve.model = results.model;

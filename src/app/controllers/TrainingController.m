@@ -201,6 +201,7 @@ classdef TrainingController < handle
 
             cfg = trainingConfig( ...
                 WorkDir             = workDir, ...
+                DatabaseFile        = "", ...
                 RawDataFiles        = rawFiles(:)', ...
                 RICsvFile           = riFile, ...
                 OutputModelFile     = defaultModelFile, ...
@@ -484,9 +485,23 @@ classdef TrainingController < handle
                 end
             end
 
-            % Update session state
-            if isfield(results, "db") && isstruct(results.db) && ~isempty(fieldnames(results.db))
-                obj.session.db = results.db;
+            % Update session model and RI without touching any other database branches
+            if isfield(results, "dbModel") && isstruct(results.dbModel)
+                obj.session.db.Model = results.dbModel;
+            elseif isfield(results, "model") && isstruct(results.model)
+                if ~isfield(obj.session.db, "Model") || ~isstruct(obj.session.db.Model)
+                    obj.session.db.Model = struct();
+                end
+                obj.session.db.Model.Model = results.model;
+                if isfield(results.model, "net")
+                    obj.session.db.Model.Net = results.model.net;
+                end
+                if isfield(results.model, "targetNames")
+                    obj.session.db.Model.TargetNames = cellstr(results.model.targetNames);
+                end
+                if isfield(cfg, "outputModelFile") && isfile(string(cfg.outputModelFile))
+                    obj.session.db.Model.NetFile = string(cfg.outputModelFile);
+                end
             end
             if isfield(results, "ri") && isstruct(results.ri) && isfield(results.ri, "nFunc")
                 obj.session.ri = results.ri;
@@ -505,23 +520,12 @@ classdef TrainingController < handle
             if isfield(results, "model") && isstruct(results.model)
                 obj.session.model = results.model;
                 obj.session.modelLoaded = true;
-
-                if ~isfield(obj.session.db, "Model") || ~isstruct(obj.session.db.Model)
-                    obj.session.db.Model = struct();
-                end
-                obj.session.db.Model.Model = results.model;
-                if isfield(results.model, "net")
-                    obj.session.db.Model.Net = results.model.net;
-                end
-                if isfield(results.model, "targetNames")
-                    obj.session.db.Model.TargetNames = cellstr(results.model.targetNames);
-                end
-                if isfield(cfg, "outputModelFile") && isfile(string(cfg.outputModelFile))
-                    obj.session.db.Model.NetFile = string(cfg.outputModelFile);
+                if isfield(obj.session.db, "Model") && isstruct(obj.session.db.Model)
+                    obj.session.db.Model.Model = results.model;
                 end
             end
 
-            % Sync session and figure state, then persist database once
+            % Sync session and figure state, then persist database
             if ~isempty(obj.fig) && isvalid(obj.fig)
                 obj.fig.UserData.db = obj.session.db;
                 if isfield(obj.fig.UserData, "visExport")
@@ -533,34 +537,20 @@ classdef TrainingController < handle
                     end
                     obj.fig.UserData.visExport = ve;
                 end
-            end
-
-            alreadySaved = isfield(cfg, "databaseFile") && isfile(string(cfg.databaseFile));
-            if alreadySaved
-                if ~isempty(obj.fig) && isvalid(obj.fig)
-                    obj.fig.UserData.dbDirty = false;
-                    if isfield(obj.fig.UserData, "session") && ~isempty(obj.fig.UserData.session) && isvalid(obj.fig.UserData.session)
-                        obj.fig.UserData.session.dbDirty = false;
-                    end
-                    if isfield(obj.fig.UserData.handles, "dbHtml") && isvalid(obj.fig.UserData.handles.dbHtml)
-                        sendEventToHTMLSource(obj.fig.UserData.handles.dbHtml, "SaveComplete", "Database saved.");
-                    end
-                    if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "broadcastDbStatus")
-                        try obj.fig.UserData.app.broadcastDbStatus(); catch; end
-                    end
+                if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "markDbDirty")
+                    try obj.fig.UserData.app.markDbDirty(); catch; end
                 else
-                    obj.session.dbDirty = false;
+                    obj.fig.UserData.dbDirty = true;
+                end
+                if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "saveDbFile")
+                    try obj.fig.UserData.app.saveDbFile(); catch; end
+                end
+                if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "broadcastDbStatus")
+                    try obj.fig.UserData.app.broadcastDbStatus(); catch; end
                 end
             else
-                if ~isempty(obj.fig) && isvalid(obj.fig)
-                    if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "saveDbFile")
-                        try obj.fig.UserData.app.saveDbFile(); catch; end
-                    else
-                        try obj.session.saveDatabase(); catch; end
-                    end
-                else
-                    try obj.session.saveDatabase(); catch; end
-                end
+                obj.session.dbDirty = true;
+                try obj.session.saveDatabase(); catch; end
             end
 
             % Finalize diagnostic plots on right panel
