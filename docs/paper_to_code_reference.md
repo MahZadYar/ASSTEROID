@@ -4,7 +4,7 @@ This document extracts the **rationale** and **methodology** of the study (see `
 
 ## 1) Goal and High-Level Idea
 
-**Scientific goal:** optimize Nanoparticle-on-Mirror (NPoM) array geometry for gas-phase and surface-adsorbed SERS by maximizing a generalized, multi-dimensional **Enhancement Efficacy ($\mathrm{EE}$)** objective functional across spatial, spectral, polarizational, and chemical dimensions, rather than relying on far-field absorptance or single-frequency scalar approximations.
+**Scientific goal:** optimize Nanoparticle-on-Mirror (NPoM) array geometry for gas-phase and surface-adsorbed SERS by maximizing a generalized, multi-dimensional **Enhancement Efficacy (EE)** objective functional ($\eta$) across spatial, spectral, polarizational, and chemical dimensions, rather than relying on far-field absorptance or single-frequency scalar approximations.
 
 **Engineering goal:** pair adaptive multi-wavelength FEM sweeps in COMSOL (`6,144` unique geometries $\times 25$ wavelengths $= 153{,}600$ single-wavelength FEM solutions) with a physics-informed deep residual neural network (DNN) surrogate that serves as a **high-speed landscape exploration shortcut/proxy tool** for watershed basin localization, followed by full-wave FEM verification of every proposed refined optimum:
 
@@ -58,9 +58,9 @@ Important implementation note:
 ### 2.2 Spatially-Aware Design Continuum & Unit-Cell Normalization (Paper Eqs. 9–13)
 
 The paper formulates spatial integration via a normalized molecular concentration profile $\rho(\mathbf{r})$ defining a unified **spatially-aware design continuum**:
-1. **Uniform 3D open-volume integration ($\mathrm{EF}_V^{\text{cell}}, \mathrm{EE}_V$):** Non-adsorbing gas sensing in bare open cavities.
+1. **Uniform 3D open-volume integration ($\mathrm{EF}_V^{\text{cell}}, \eta_V$):** Non-adsorbing gas sensing in bare open cavities.
 2. **Weighted 3D volume integration ($\rho(\mathbf{r})$):** Porous 3D capture matrices (e.g., MOFs or aerogels) where gas density varies spatially across the pore volume.
-3. **2D surface integration ($\mathrm{EF}_S^{\text{cell}}, \mathrm{EE}_S$):** Extreme limit of strong surface adsorption or ultra-thin 2D functional capture overlayers (such as monolayer graphene or graphitic shells acting as SERS gas-adsorption enablers/enhancers).
+3. **2D surface integration ($\mathrm{EF}_S^{\text{cell}}, \eta_S$):** Extreme limit of strong surface adsorption or ultra-thin 2D functional capture overlayers (such as monolayer graphene or graphitic shells acting as SERS gas-adsorption enablers/enhancers).
 
 To reflect **total signal per unit substrate footprint** (loading capacity), surface and volume averages are scaled by $S_{\text{corr}} = A_{\text{acc}} / A_{\text{cell}}$ and $V_{\text{corr}} = V_{\text{acc}} / V_{\text{cell}}$:
 
@@ -81,35 +81,35 @@ where the hexagonal unit-cell footprint is $A_{\text{cell}}=\tfrac{\sqrt{3}}{2}P
 
 See import pipeline extraction in [src/orchestration/runImportSweepWorkflow.m](src/orchestration/runImportSweepWorkflow.m).
 
-### 2.3 Generalized "Enhancement Efficacy" ($\mathrm{EE}$) vs. "Enhancement Factor" ($\mathrm{EF}$) (Paper Eqs. 14–16)
+### 2.3 Generalized Enhancement Efficacy (EE, $\eta$) vs. Enhancement Factor ($\mathrm{EF}$) (Paper Eqs. 14–16)
 
 Whereas **Enhancement Factor ($\mathrm{EF}$)** denotes a local, single-state physical ratio, **Enhancement Efficacy ($\mathrm{EE}$)**—specialized in the present context to **Raman Enhancement Efficacy (Raman $\mathrm{EE}$)**—is coined as the generalized, multi-dimensional design functional integrating local $\mathrm{EF}$ across spatial ($\rho(\mathbf{r})$), spectral ($w_{\text{spec}}(\Delta\widetilde{\nu})$), polarizational/rotational ($\langle \cdot \rangle_{\Omega, \text{pol}}$), and chemical affinity ($w_{\text{chem}}(\mathbf{r})$) dimensions (Eq. 14). **Nomenclature Convention**: Never use bare *"efficacy"* alone (e.g., never write *"broadband surface efficacy"*); always use the full coined term **"Enhancement Efficacy"** or **"$\mathrm{EE}$"** (e.g., *Broadband surface Enhancement Efficacy*, *Analyte-weighted volumetric Enhancement Efficacy*, *Raman Enhancement Efficacy*), which establishes a universal paradigm generalizable beyond SERS to SEIRA $\mathrm{EE}$, PEF/SEF $\mathrm{EE}$, and TERS $\mathrm{EE}$:
 
 $$
-\mathrm{EE}(\mathbf{g}) = \mathcal{N}_{\text{cell}}(\mathbf{g}) \int_{\Delta\widetilde{\nu}_1}^{\Delta\widetilde{\nu}_2} w_{\text{spec}}(\Delta\widetilde{\nu}) \left[ \int_{\Omega_{\text{acc}}} \rho(\mathbf{r})\, w_{\text{chem}}(\mathbf{r})\, \left\langle \mathrm{EF}\big(\mathbf{r}, \lambda_L, \lambda_R(\Delta\widetilde{\nu})\big) \right\rangle_{\Omega, \text{pol}} \mathrm{d}\Omega_{\mathbf{r}} \right] \mathrm{d}\Delta\widetilde{\nu}
+\eta(\mathbf{g}) = \mathcal{N}_{\text{cell}}(\mathbf{g}) \int_{\Delta\widetilde{\nu}_1}^{\Delta\widetilde{\nu}_2} w_{\text{spec}}(\Delta\widetilde{\nu}) \left[ \int_{\Omega_{\text{acc}}} \rho(\mathbf{r})\, w_{\text{chem}}(\mathbf{r})\, \left\langle \mathrm{EF}\big(\mathbf{r}, \lambda_L, \lambda_R(\Delta\widetilde{\nu})\big) \right\rangle_{\Omega, \text{pol}} \mathrm{d}\Omega_{\mathbf{r}} \right] \mathrm{d}\Delta\widetilde{\nu}
 $$
 
-To maintain seamless notation continuity across figures, tables, and codebase variables, the symbols $\mathrm{EE}_D^{\text{broad}} \equiv \eta_D^{\text{broad}}$ and $\mathrm{EE}_D^{\text{analyte}} \equiv \eta_D^{\text{analyte}}$ ($D \in \{S, V\}$) are used synonymously:
+To maintain seamless notation continuity across figures, tables, and codebase variables, the symbols Enhancement Efficacy is denoted by $\eta_D^{\text{broad}}$ and $\eta_D^{\text{analyte}}$ ($D \in \{S, V\}$):
 
 Broadband Enhancement Efficacy (uniform spectral weight):
 
 $$
-\mathrm{EE}_D^{\text{broad}} \equiv \eta_D^{\text{broad}} = \frac{1}{\Delta\widetilde{\nu}_2 - \Delta\widetilde{\nu}_1} \int_{\Delta\widetilde{\nu}_1}^{\Delta\widetilde{\nu}_2} \mathrm{EF}_D^{\text{cell}}(\lambda_L, \Delta\widetilde{\nu})\,\mathrm{d}\Delta\widetilde{\nu}
+\eta_D^{\text{broad}} = \frac{1}{\Delta\widetilde{\nu}_2 - \Delta\widetilde{\nu}_1} \int_{\Delta\widetilde{\nu}_1}^{\Delta\widetilde{\nu}_2} \mathrm{EF}_D^{\text{cell}}(\lambda_L, \Delta\widetilde{\nu})\,\mathrm{d}\Delta\widetilde{\nu}
 $$
 
 Analyte-Specific Enhancement Efficacy (weighted by normalized vibrational fingerprint $I_{\text{analyte, norm}}$):
 
 $$
-\mathrm{EE}_D^{\text{analyte}} \equiv \eta_D^{\text{analyte}} = \int_{\Delta\widetilde{\nu}_1}^{\Delta\widetilde{\nu}_2} \mathrm{EF}_D^{\text{cell}}(\lambda_L, \Delta\widetilde{\nu})\,I_{\text{analyte, norm}}(\Delta\widetilde{\nu})\,\mathrm{d}\Delta\widetilde{\nu}
+\eta_D^{\text{analyte}} = \int_{\Delta\widetilde{\nu}_1}^{\Delta\widetilde{\nu}_2} \mathrm{EF}_D^{\text{cell}}(\lambda_L, \Delta\widetilde{\nu})\,I_{\text{analyte, norm}}(\Delta\widetilde{\nu})\,\mathrm{d}\Delta\widetilde{\nu}
 $$
 
 **Code mapping:**
 
 - Raman shift axis: `RamanShift` ($\text{cm}^{-1}$)
 - Broadband averages (stored per geometry):
-  - `EF_vol_avg` ($\mathrm{EE}_V^{\text{broad}} \equiv \eta_V^{\text{broad}}$), `EF_surf_avg` ($\mathrm{EE}_S^{\text{broad}} \equiv \eta_S^{\text{broad}}$)
+  - `EF_vol_avg` ($\eta_V^{\text{broad}}$), `EF_surf_avg` ($\eta_S^{\text{broad}}$)
 - Analyte-weighted scalars:
-  - `EF_vol_analyte` ($\mathrm{EE}_V^{\text{analyte}} \equiv \eta_V^{\text{analyte}}$), `EF_surf_analyte` ($\mathrm{EE}_S^{\text{analyte}} \equiv \eta_S^{\text{analyte}}$)
+  - `EF_vol_analyte` ($\eta_V^{\text{analyte}}$), `EF_surf_analyte` ($\eta_S^{\text{analyte}}$)
 - Weighting implementation: [src/physics/computeAnalyteWeightedMetric.m](src/physics/computeAnalyteWeightedMetric.m)
 
 The import workflow densifies 25-point FEM spectra using **makima** interpolation solely for adaptive sampling density estimation, whereas the trained DNN surrogate evaluates continuous spectral grids directly without intermediate spline interpolation.

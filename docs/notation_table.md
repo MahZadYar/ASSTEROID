@@ -21,11 +21,11 @@ This table maps the mathematical notation used in the manuscript to the specific
 | $\text{EF}_V^{\text{cell}}(\lambda_L, \lambda_R)$ | `EF_vol` | Unit-cell-normalized volumetric SERS EF (spectral) | `src/orchestration/runImportSweepWorkflow.m` |
 | $\text{EF}_{S, \text{approx}}^{\text{cell}}$ | `EF_surf_approx` | Surface-averaged $\|\mathbf{E}\|^4$ approximation at $\lambda_L$ | `scripts/pipeline/run_import_prl_sweep.m` |
 | $\text{EF}_{V, \text{approx}}^{\text{cell}}$ | `EF_vol_approx` | Volume-averaged $\|\mathbf{E}\|^4$ approximation at $\lambda_L$ | `scripts/pipeline/run_import_prl_sweep.m` |
-| $\text{EE}(\mathbf{g})$ | --- | Generalized multi-dimensional Enhancement Efficacy functional (spatial, spectral, polarizational/rotational, chemical; eq.~14) | Analytical formulation (`sections/02_theory.tex`) |
-| $\text{EE}_S^{\text{broad}} \equiv \eta_{S}^{\text{broad}}$ | `EF_surf_avg` | Broadband surface Enhancement Efficacy (`trapz` over Raman window) | `scripts/pipeline/run_import_prl_sweep.m` |
-| $\text{EE}_V^{\text{broad}} \equiv \eta_{V}^{\text{broad}}$ | `EF_vol_avg` | Broadband volumetric Enhancement Efficacy (`trapz` over Raman window) | `scripts/pipeline/run_import_prl_sweep.m` |
-| $\text{EE}_S^{\text{analyte}} \equiv \eta_{S}^{\text{analyte}}$ | `EF_surf_analyte` | Analyte-weighted surface Enhancement Efficacy | `src/physics/computeAnalyteWeightedMetric.m` |
-| $\text{EE}_V^{\text{analyte}} \equiv \eta_{V}^{\text{analyte}}$ | `EF_vol_analyte` | Analyte-weighted volumetric Enhancement Efficacy | `src/physics/computeAnalyteWeightedMetric.m` |
+| $\eta(\mathbf{g})$ | --- | Generalized multi-dimensional Enhancement Efficacy functional (spatial, spectral, polarizational/rotational, chemical; eq.~14) | Analytical formulation (`sections/02_theory.tex`) |
+| $\eta_{S}^{\text{broad}}$ | `EF_surf_avg` | Broadband surface Enhancement Efficacy (`trapz` over Raman window) | `scripts/pipeline/run_import_prl_sweep.m` |
+| $\eta_{V}^{\text{broad}}$ | `EF_vol_avg` | Broadband volumetric Enhancement Efficacy (`trapz` over Raman window) | `scripts/pipeline/run_import_prl_sweep.m` |
+| $\eta_{S}^{\text{analyte}}$ | `EF_surf_analyte` | Analyte-weighted surface Enhancement Efficacy | `src/physics/computeAnalyteWeightedMetric.m` |
+| $\eta_{V}^{\text{analyte}}$ | `EF_vol_analyte` | Analyte-weighted volumetric Enhancement Efficacy | `src/physics/computeAnalyteWeightedMetric.m` |
 | $I_{\text{analyte, norm}}(\Delta\widetilde{\nu})$ | `analyteRamanSpectrum` | Normalized analyte Raman cross-section ($w_{\text{spec}}$) | `src/io/loadAndNormalizeAnalyteSpectrum.m` |
 | $n_{\text{Au}}, k_{\text{Au}}, \varepsilon_1, \varepsilon_2$ | `n_real`, `n_imag` / `nFunc`, `kFunc` | Complex refractive index and permittivity of gold | `src/io/load_gold_refractive_index.m` |
 | $\nabla F$, $\nabla^2 F$ | `gradMagnitude`, `laplacianField` | Fitness landscape gradients (for mode identification) | `scripts/pipeline/run_locate_maxima.m` |
