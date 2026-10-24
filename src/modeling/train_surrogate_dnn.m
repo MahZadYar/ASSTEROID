@@ -27,14 +27,14 @@ arguments
     dataset struct {mustBeDatasetStruct(dataset)}
     options.MaxEpochs (1,1) uint32 {mustBePositive} = 1000
     options.MiniBatchSize (1,1) uint32 {mustBePositive} = 512
-    options.LearningRate (1,1) double {mustBePositive} = 1e-3
+    options.LearningRate (1,1) double {mustBePositive} = 1e-5
     options.Layers = []
     options.NetworkConfig (1,1) struct = struct()
     options.TargetLossWeights (1,:) double = []
     options.Verbose (1,1) logical = true
     options.Optimizer (1,1) string = "adam"
     options.LossFunction (1,1) string = "mse"
-    options.LearnRateSchedule (1,1) string = "cosine"
+    options.LearnRateSchedule (1,1) string = "polynomial"
     options.LearnRateDropFactor (1,1) double = 0.1
     options.LearnRateDropPeriod (1,1) double {mustBePositive, mustBeInteger} = 10
     options.GradientThreshold (1,1) double = inf
@@ -781,15 +781,15 @@ end
 
 function config = localNormalizeNetworkConfig(configIn, numTargets)
 config = struct();
-config.architecture = "resnet";        % "resnet" (default) | "tensor_resnet"
-config.tensorRank = 128;               % Rank R of bilinear tensor core when architecture="tensor_resnet"
+config.architecture = "tensor_resnet"; % "tensor_resnet" (default) | "resnet"
+config.tensorRank = 512;               % Rank R of bilinear tensor core when architecture="tensor_resnet"
 config.useMultiHead = true;
-config.fc1a = 128;
-config.fc1b = 256;
-config.proj1 = 256;  % Auto-determined: must equal fc1b
-config.fc2a = 512;
-config.fc2b = 256;   % Auto-determined: must equal fc1b
-config.headHiddenSizes = 128;          % Used for both single and multi-head
+config.fc1a = 256;
+config.fc1b = 512;
+config.proj1 = 512;  % Auto-determined: must equal fc1b
+config.fc2a = 1024;
+config.fc2b = 512;   % Auto-determined: must equal fc1b
+config.headHiddenSizes = 512;          % Used for both single and multi-head
 config.normalization = "layer";        % "layer" (default) | "batch" (legacy)
 
 if nargin < 1 || isempty(configIn)
@@ -808,7 +808,7 @@ end
 
 function config = localValidateNetworkConfig(config, numTargets)
 if ~isfield(config, 'architecture') || isempty(config.architecture)
-    config.architecture = "resnet";
+    config.architecture = "tensor_resnet";
 end
 config.architecture = lower(string(config.architecture));
 if ~ismember(config.architecture, ["resnet", "tensor_resnet"])

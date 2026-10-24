@@ -85,9 +85,9 @@ arguments
     options.ContinueTraining    (1,1) logical = false
     options.RatioLimit          (1,2) double  = [0, 0.49]
     options.MetricsToTrain      (1,:) string  = ["Absorptance", "EF_vol", "EF_surf"]
-    options.MaxEpochs           (1,1) double  {mustBePositive, mustBeInteger} = 200
+    options.MaxEpochs           (1,1) double  {mustBePositive, mustBeInteger} = 1000
     options.MiniBatchSize       (1,1) double  {mustBePositive, mustBeInteger} = 1024
-    options.LearningRate        (1,1) double  {mustBePositive} = 1e-4
+    options.LearningRate        (1,1) double  {mustBePositive} = 1e-5
     options.Verbose             (1,1) logical = true
     options.Holdout             (1,1) double  {mustBeBetween(options.Holdout,0,1)} = 0.2
     options.ValSplit            (1,1) double  {mustBeBetween(options.ValSplit,0,1)} = 0.5
@@ -104,7 +104,7 @@ arguments
     options.TargetLogTransform  (1,1) logical = true
     options.Optimizer            (1,1) string = "adam"
     options.LossFunction         (1,1) string = "mse"
-    options.LearnRateSchedule    (1,1) string = "piecewise"
+    options.LearnRateSchedule    (1,1) string = "polynomial"
     options.LearnRateDropFactor  (1,1) double = 0.85
     options.LearnRateDropPeriod  (1,1) double {mustBePositive, mustBeInteger} = 5
     options.GradientThreshold    (1,1) double = inf

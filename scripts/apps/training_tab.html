@@ -519,15 +519,15 @@ function collectConfig() {
         featureLogTransform: chk("featureLogTransform"),
         includeRatios: (val("featureSchema") === "v1_legacy") ? chk("includeRatios") : false,
         targetLogTransform: chk("targetLogTransform"),
-        architecture: val("architecture") || "resnet",
-        tensorRank: num("tensorRank") || 128,
+        architecture: val("architecture") || "tensor_resnet",
+        tensorRank: num("tensorRank") || 512,
         useMultiHead: chk("useMultiHead"),
-        fc1a: num("fc1a"),
-        fc1b: fc1b,
-        proj1: fc1b,  // Auto-determined
-        fc2a: num("fc2a"),
-        fc2b: fc1b,   // Auto-determined
-        headHiddenSizes: headSizes,
+        fc1a: num("fc1a") || 256,
+        fc1b: fc1b || 512,
+        proj1: fc1b || 512,  // Auto-determined
+        fc2a: num("fc2a") || 1024,
+        fc2b: fc1b || 512,   // Auto-determined
+        headHiddenSizes: headSizes || "512",
         targetLossWeights: val("targetLossWeights")
     };
 }
@@ -546,7 +546,7 @@ function runTraining() {
     setStatus("running", "Training...");
 
     // Reset epoch progress and metric pills
-    var maxEp = num("maxEpochs") || 200;
+    var maxEp = num("maxEpochs") || 1000;
     var epLbl = document.getElementById("epochProgressLabel");
     if (epLbl) epLbl.textContent = "Epoch: 0 / " + maxEp;
     var pctLbl = document.getElementById("epochPercentLabel");
@@ -866,6 +866,7 @@ function copyLatexTable() {
 }
 
 document.addEventListener("DOMContentLoaded", function() {
+    toggleArchitectureMode();
     if (window.AssteroidBridge && window.AssteroidBridge.init) {
         window.AssteroidBridge.init("Stage3_Training");
     }
@@ -1132,13 +1133,13 @@ document.addEventListener("DOMContentLoaded", function() {
             <div class="field">
                 <label>Backbone Architecture</label>
                 <select id="architecture" onchange="toggleArchitectureMode()">
-                    <option value="resnet" selected>Standard Residual Network (ResNet-MLP)</option>
-                    <option value="tensor_resnet">Low-Rank Tensor-Product ResNet (Tucker / Bilinear Core)</option>
+                    <option value="resnet">Standard Residual Network (ResNet-MLP)</option>
+                    <option value="tensor_resnet" selected>Low-Rank Tensor-Product ResNet (Tucker / Bilinear Core)</option>
                 </select>
             </div>
-            <div id="tensorRankRow" class="field" style="display:none; background:rgba(72, 178, 172, 0.08); border:1px solid var(--border); border-radius:4px; padding:8px; margin-bottom:8px;">
+            <div id="tensorRankRow" class="field" style="display:block; background:rgba(72, 178, 172, 0.08); border:1px solid var(--border); border-radius:4px; padding:8px; margin-bottom:8px;">
                 <label>Tensor Contraction Rank (R) <span style="color:var(--accent);font-size:10px;">(Bilinear Hadamard Core)</span></label>
-                <input type="number" id="tensorRank" value="128" step="16" min="8">
+                <input type="number" id="tensorRank" value="512" step="16" min="8">
                 <div style="font-size:10px; color:var(--text-secondary); margin-top:4px; line-height:1.35;">
                     Contracts multi-scale Block 2 features with direct coordinate/spectral basis modes via a rank-R multiplicative core for smooth 3D (p, r, &lambda;) manifolds.
                 </div>
@@ -1150,21 +1151,21 @@ document.addEventListener("DOMContentLoaded", function() {
             <div class="field-row">
                 <div class="field">
                     <label>FC1a Width</label>
-                    <input type="number" id="fc1a" value="128" step="16" min="1">
+                    <input type="number" id="fc1a" value="256" step="16" min="1">
                 </div>
                 <div class="field">
                     <label>FC1b Width <span style="color:var(--text-secondary);font-size:10px;">(skip connections auto-match)</span></label>
-                    <input type="number" id="fc1b" value="256" step="16" min="1">
+                    <input type="number" id="fc1b" value="512" step="16" min="1">
                 </div>
             </div>
             <div class="field-row">
                 <div class="field">
                     <label>FC2a Width</label>
-                    <input type="number" id="fc2a" value="512" step="16" min="1">
+                    <input type="number" id="fc2a" value="1024" step="16" min="1">
                 </div>
                 <div class="field">
                     <label>Head Hidden Sizes <span style="color:var(--text-secondary);font-size:10px;">(can be comma-separated)</span></label>
-                    <input type="text" id="headHiddenSizes" value="128" placeholder="e.g., 128 or 128,64">
+                    <input type="text" id="headHiddenSizes" value="512" placeholder="e.g., 512 or 512,256">
                 </div>
             </div>
         </div>
@@ -1177,7 +1178,7 @@ document.addEventListener("DOMContentLoaded", function() {
             <div class="field-row">
                 <div class="field">
                     <label>Max Epochs</label>
-                    <input type="number" id="maxEpochs" value="200" step="1000" min="1">
+                    <input type="number" id="maxEpochs" value="1000" step="1000" min="1">
                 </div>
                 <div class="field">
                     <label>Mini-Batch Size</label>
@@ -1186,7 +1187,7 @@ document.addEventListener("DOMContentLoaded", function() {
             </div>
             <div class="field">
                 <label>Learning Rate</label>
-                <input type="number" id="learningRate" value="0.0001" step="0.000001" min="0">
+                <input type="number" id="learningRate" value="0.00001" step="0.000001" min="0">
             </div>
             <div class="field-row">
                 <div class="field">
@@ -1215,9 +1216,9 @@ document.addEventListener("DOMContentLoaded", function() {
                     <select id="learnRateSchedule">
                         <option value="cosine">Cosine</option>
                         <option value="none">None</option>
-                        <option value="piecewise" selected>Piecewise</option>
+                        <option value="piecewise">Piecewise</option>
                         <option value="warmup">Warmup</option>
-                        <option value="polynomial">Polynomial</option>
+                        <option value="polynomial" selected>Polynomial</option>
                         <option value="exponential">Exponential</option>
                         <option value="cyclical">Cyclical</option>
                     </select>
