@@ -37,20 +37,15 @@ Both CLI pipeline scripts and uihtml app backends call the same functions here.
 
 ## Architecture Pattern
 
-```
-┌──────────────┐      ┌──────────────────┐      ┌─────────────────────┐
-│  CLI Script  │─cfg─▶│  Orchestration   │─────▶│  Domain Functions   │
-│  (thin)      │      │  (workflow)       │      │  (src/modeling, …)  │
-└──────────────┘      └────────┬─────────┘      └─────────────────────┘
-                               │
-┌──────────────┐      ┌────────▼─────────┐
-│  uihtml App  │─cfg─▶│  Same workflow   │
-│  (HTML+JS)   │      │  + Reporter CB   │
-└──────────────┘      └──────────────────┘
+```mermaid
+flowchart LR
+    CLI["CLI Script (thin)"] -- "cfg" --> Orch["Orchestration (workflow)"]
+    App["uihtml App (HTML+JS)"] -- "cfg + Reporter CB" --> Orch
+    Orch --> Domain["Domain Functions (src/modeling, src/data, ...)"]
 ```
 
 1. **Config builder** assembles a plain struct from user-facing parameters.
-2. **Workflow function** executes the pipeline steps with ProgressReporter.
+2. **Workflow function** executes the pipeline steps with `ProgressReporter`.
 3. **CLI scripts** call config → workflow → optional vis (thin wrappers).
 4. **Apps** call the same config → workflow with `ProgressReporter.fromCallback()`.
 
@@ -78,7 +73,7 @@ Rules:
 - **Arguments block** for validation — every parameter typed and bounded.
 - **Name-Value** syntax with UpperCamelCase parameter names.
 - Returns a **flat struct** (no nested structs) for JSON serialisability.
-- Metric names resolved through `normalizeMetricNames()` — never inlined.
+- Metric names resolved through `normalizeMetricNames()` (`EE_V`, `EE_S`, `EF_max`, `Abs`, `ECC`, `kappa_V`, `kappa_S`, plus legacy aliases) and `resolveDerivedMetricField()` (`_laser`, `_broad`, `_analyte`) — never inlined.
 - Grid vectors computed through `computeDenseGridParams()` — never duplicated.
 
 ---
@@ -133,9 +128,9 @@ end
 
 ---
 
-## Unified App — `run_sers_app.m`
+## Unified App — `assteroid_app.m` / `run_sers_app.m`
 
-The five-stage unified application (`scripts/apps/run_sers_app.m`) replaces
+The five-stage unified application (`scripts/apps/assteroid_app.m`) replaces
 individual standalone app launchers with a single `uitabgroup`-based interface:
 
 | Tab | HTML Panel | Orchestration |
@@ -144,15 +139,10 @@ individual standalone app launchers with a single `uitabgroup`-based interface:
 | 2 Sampling | `adaptive_sampling_app.html` | `adaptiveSamplingConfig` → sampling library functions |
 | 3 Training | `training_tab.html` | `trainingConfig` → `runTrainingWorkflow` → `visualizeTrainingResults` |
 | 4 Optimize | `optimization_tab.html` | `localizeMaximaConfig` → `runLocalizationWorkflow` → `visualizeMaximaResults` |
-| 5 Visualize | `prediction_vis_app.html` | Full prediction + 3-D volume vis (5 sub-tabs) |
+| 5 Visualize | `visualize_tab.html` / `visualization_export_tab.html` | Full prediction + 3-D volume vis |
 
 Each tab follows the layout: **LEFT** uihtml control panel (400 px) +
 **RIGHT** visualization area (uipanel with axes/tiledlayout/viewer3d).
-
-All HTML panels use the AuroraAustralis-derived colour theme (`--accent: #00e8ff`).
-
-Standalone launchers (`run_prediction_vis_app.m`, `run_adaptive_sampling_app.m`)
-are kept for backward compatibility but include deprecation notices.
 
 ---
 
@@ -160,8 +150,8 @@ are kept for backward compatibility but include deprecation notices.
 
 ### Target-Specific Scaling & Invertibility
 - **`prepare_training_dataset.m`**: Applies physics-aware target scaling via the `tt` struct:
-  - Far-field absorptance (`Absorptance`): Preserved linearly (`tt.targetLogTransform(1) = false`).
-  - Near-field Raman proxies (`EF_vol`, `EF_surf`): Decadic pseudo-log compression $\log_{10}(1+y)$ (`tt.targetLogTransform(2:3) = true`, `tt.targetLogBase(2:3) = 10`).
+  - Far-field absorptance (`Abs` / `Absorptance`): Preserved linearly (`tt.targetLogTransform(1) = false`).
+  - Near-field Enhancement Efficacy and hotspot metrics (`EE_V`, `EE_S`, `EF_max`; legacy `EF_vol`, `EF_surf`): Decadic pseudo-log compression $\log_{10}(1+y)$ (`tt.targetLogTransform = true`, `tt.targetLogBase = 10`).
 - **`denormalizeModelTargets.m`**: Handles channel-specific inversion and enforces strict physical non-negativity ($\widehat{Y} \ge 0$) via clamping before decadic power expansion.
 
 ### Multi-Tier Performance Framework (`computeSurrogateEvaluationMetrics.m`)
@@ -174,4 +164,3 @@ Because adaptive sampling concentrates observations in high-gradient resonant re
 - **`db.Model.PerformanceReport`**: Persists the structured evaluation results, per-tier metrics, sample counts, and auto-generated publication-ready LaTeX table code.
 - **`runTrainingWorkflow.m`**: Automatically invokes `computeSurrogateEvaluationMetrics` upon training completion, populating both `results.performanceReport` and `db.Model.PerformanceReport`.
 - **Stage 3 Training Tab (`training_tab.html`)**: Features an interactive Performance Audit Card with multi-tier display, re-evaluation trigger, and one-click LaTeX table clipboard copy.
-

@@ -1,7 +1,7 @@
 function [simData, updatedCount] = recomputeDerivedMetrics(simData, cfg, analyteSpectrum, reporter)
-%recomputeDerivedMetrics Recompute *_laser, *_avg, *_analyte for all base metrics.
-%   Iterates over rows of a SoA struct and derives laser-line, spectral average, and
-%   analyte-weighted average for each base metric field present.
+%recomputeDerivedMetrics Recompute *_laser, *_broad (*_avg), *_analyte for all base metrics.
+%   Iterates over rows of a SoA struct and derives laser-line, broadband spectral
+%   average, and analyte-weighted average for each base metric field present.
 %
 %   [simData, updatedCount] = recomputeDerivedMetrics(simData, cfg, analyteSpectrum, reporter)
 %
@@ -27,7 +27,9 @@ function [simData, updatedCount] = recomputeDerivedMetrics(simData, cfg, analyte
         reporter = ProgressReporter.console();
     end
 
-    baseMetrics = ["EF_vol", "EF_surf", "Absorptance", "M_vol", "M_surf", "EF_vol_M", "EF_surf_M", "EF_Abs"];
+    baseMetrics = ["EE_V", "EE_S", "EF_max", "Abs", "ECC", ...
+                   "EF_vol", "EF_surf", "Absorptance", "M_vol", "M_surf", ...
+                   "M2_vol", "M2_surf", "EF_vol_M", "EF_surf_M", "EF_Abs"];
     nRows = structRowCount(simData);
     updatedCount = 0;
 
@@ -44,14 +46,15 @@ function [simData, updatedCount] = recomputeDerivedMetrics(simData, cfg, analyte
         metric = baseMetrics(m);
         if isfield(simData, metric)
             data = simData.(metric);
-            present(m) = isnumeric(data) && ndims(data) == 2 && size(data, 1) >= nRows;
+            present(m) = isnumeric(data) && ndims(data) == 2 && size(data, 1) >= nRows && size(data, 2) > 1;
         end
         if present(m)
             if isVariantEnabled(metricVariants, metric + "_laser")
                 simData.(metric + "_laser") = nan(nRows, 1);
             end
-            if isVariantEnabled(metricVariants, metric + "_avg")
-                simData.(metric + "_avg") = nan(nRows, 1);
+            if isBroadEnabled(metricVariants, metric)
+                simData.(metric + "_broad") = nan(nRows, 1);
+                simData.(metric + "_avg")   = nan(nRows, 1);
             end
             if hasValidAnalyte && isVariantEnabled(metricVariants, metric + "_analyte")
                 simData.(metric + "_analyte") = nan(nRows, 1);
@@ -82,7 +85,8 @@ function [simData, updatedCount] = recomputeDerivedMetrics(simData, cfg, analyte
         shiftRow = [];
         if hasShift
             shiftRow = extractRow(simData.RamanShift, i);
-        elseif ~isempty(lambdaRow)
+        end
+        if (isempty(shiftRow) || (~isempty(lambdaRow) && numel(shiftRow) ~= numel(lambdaRow))) && ~isempty(lambdaRow)
             shiftRow = (1 ./ laserWavelength - 1 ./ lambdaRow) * 1e7;
         end
         if isempty(shiftRow)
@@ -149,8 +153,10 @@ function [simData, updatedCount] = recomputeDerivedMetrics(simData, cfg, analyte
                 mv = mv(ord);
                 mvDense = interpolateSpectral(rs, mv, shiftDense, spectralInterpMethod);
                 if ~all(isnan(mvDense))
-                    if isVariantEnabled(metricVariants, metric + "_avg")
-                        simData.(metric + "_avg")(i) = trapz(shiftDense, mvDense) / (shiftDense(end) - shiftDense(1));
+                    if isBroadEnabled(metricVariants, metric)
+                        broadVal = trapz(shiftDense, mvDense) / (shiftDense(end) - shiftDense(1));
+                        simData.(metric + "_broad")(i) = broadVal;
+                        simData.(metric + "_avg")(i)   = broadVal;
                     end
                     if hasValidAnalyte && isVariantEnabled(metricVariants, metric + "_analyte")
                         simData.(metric + "_analyte")(i) = computeAnalyteWeightedMetric(shiftDense, mvDense, analyteSpectrum);
@@ -226,6 +232,18 @@ function enabled = isVariantEnabled(metricVariants, key)
     key = char(key);
     if isfield(metricVariants, key)
         enabled = logical(metricVariants.(key));
+    else
+        enabled = true;
+    end
+end
+
+function enabled = isBroadEnabled(metricVariants, metric)
+    bKey = char(metric + "_broad");
+    aKey = char(metric + "_avg");
+    if isfield(metricVariants, bKey)
+        enabled = logical(metricVariants.(bKey));
+    elseif isfield(metricVariants, aKey)
+        enabled = logical(metricVariants.(aKey));
     else
         enabled = true;
     end

@@ -26,12 +26,13 @@ function interpData = interpolateRawSimulationData(simData, gp, options)
     end
 
     if isempty(options.TargetNames)
-        candidateTargets = ["Absorptance", "EF_vol", "EF_surf", "M_vol", "M_surf"];
+        candidateTargets = ["EE_V", "EE_S", "EF_max", "Abs", "ECC", ...
+                            "Absorptance", "EF_vol", "EF_surf", "M_vol", "M_surf"];
         fn = string(fieldnames(simData));
         targetNames = intersect(candidateTargets, fn);
         if isempty(targetNames)
             targetNames = setdiff(fn, ["period", "radius", "lambda", "LaserWl", "lambda_exc_nm", ...
-                "RamanWindow", "RamanShift", "idx", "nanFiltered", "entry_id"]);
+                "RamanWindow", "RamanShift", "idx", "nanFiltered", "entry_id", "kappa_V", "kappa_S"]);
         end
     else
         targetNames = options.TargetNames;

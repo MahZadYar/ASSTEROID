@@ -83,7 +83,7 @@ function cfg = predictionVisConfig(options)
         options.StokesShiftResolution (1,1) double = 2
         
         %% Metrics
-        options.Metrics (1,:) string = ["Absorptance", "EF_vol", "EF_surf"]
+        options.Metrics (1,:) string = ["Abs", "EE_V", "EE_S"]
         
         %% Control
         options.RecomputePredictions (1,1) logical = false

@@ -6,27 +6,6 @@ function allData = loadOrGeneratePredictions(options)
     %   Handles both SoA (allData) and legacy (predictions) formats with automatic
     %   conversion.
     %
-    %   This centralises the prediction loading/generation pattern found across
-    %   run_locate_maxima, run_prediction_vis, and run_prediction_vis_app.
-    %
-    %   Name-Value Arguments:
-    %       Recompute       (1,1) logical — Force regeneration (default: false)
-    %       PredictionFile  (1,1) string  — Path to cached prediction .mat file
-    %       Model           — Trained model struct (required if Recompute=true)
-    %       Ri              — Refractive index struct (required if Recompute=true)
-    %       PSamples        (1,:) double  — Period sample vector in µm
-    %       RSamples        (1,:) double  — Radius sample vector in µm
-    %       LambdaSamples   (1,:) double  — Wavelength sample vector in µm
-    %       LambdaLaser     (1,1) double  — Laser wavelength in nm (default: 785)
-    %       StokesShiftLimits (1,2) double — Raman window limits in cm^-1
-    %       AnalyteSpectrum struct         — Optional analyte spectrum for weighting
-    %       InterpResolution (1,1) double — Spectral interpolation resolution (cm^-1)
-    %       SaveAfterGeneration (1,1) logical — Save generated predictions (default: true)
-    %       Reporter        — Optional ProgressReporter for status feedback
-    %
-    %   Output:
-    %       allData — SoA struct with dense predictions
-    %
     %   See also: predict_dense_spectrum, convertGridToSoA, ProgressReporter
 
     arguments
@@ -209,6 +188,23 @@ function allData = localNormalizePredictionFieldNames(allData)
         end
     end
 
+    % Synchronize _broad <-> _avg for all metrics present
+    fns = fieldnames(allData);
+    for i = 1:numel(fns)
+        fn = string(fns{i});
+        if endsWith(fn, "_avg")
+            broadName = replace(fn, "_avg", "_broad");
+            if ~isfield(allData, char(broadName))
+                allData.(broadName) = allData.(fn);
+            end
+        elseif endsWith(fn, "_broad")
+            avgName = replace(fn, "_broad", "_avg");
+            if ~isfield(allData, char(avgName))
+                allData.(avgName) = allData.(fn);
+            end
+        end
+    end
+
     % Defensive synthesis for key laser fields if missing.
     % Use RamanShift (nearest to shift=0) when available; fall back to column 1.
     laserCol = 1;
@@ -220,7 +216,7 @@ function allData = localNormalizePredictionFieldNames(allData)
         [~, laserCol] = min(abs(shRow));
     end
 
-    laserFields = {"Absorptance", "EF_vol", "EF_surf"};
+    laserFields = {"EE_V", "EE_S", "EF_max", "Abs", "Absorptance", "EF_vol", "EF_surf"};
     for k = 1:numel(laserFields)
         baseName = laserFields{k};
         laserName = baseName + "_laser";

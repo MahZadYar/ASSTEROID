@@ -59,15 +59,25 @@ function refinedSeeds = extractRefinedSeeds(results, baseMetric, seeds)
     if isfield(metricRes, "metricName") && strlength(string(metricRes.metricName)) > 0
         metricKey = string(metricRes.metricName);
     end
-    % Try all three variant suffixes so the displayed value is never NaN
-    % regardless of which metric variant was used during optimization.
+    % Try all variant suffixes (and cross-alias base names) so the displayed
+    % value is never NaN regardless of which metric variant was used.
     valueField = '';
-    for vs = {'_avg', '_laser', '_analyte'}
-        candidate = matlab.lang.makeValidName(char(metricKey + vs{1}));
-        if any(strcmp(varNames, candidate))
-            valueField = candidate;
-            break;
+    aliasMap = struct('EE_V','EF_vol', 'EF_vol','EE_V', ...
+                      'EE_S','EF_surf', 'EF_surf','EE_S', ...
+                      'Abs','Absorptance', 'Absorptance','Abs');
+    keyCandidates = {char(metricKey)};
+    if isfield(aliasMap, char(metricKey))
+        keyCandidates{end+1} = aliasMap.(char(metricKey));
+    end
+    for kc = 1:numel(keyCandidates)
+        for vs = {'_broad', '_avg', '_laser', '_analyte'}
+            candidate = matlab.lang.makeValidName([keyCandidates{kc}, vs{1}]);
+            if any(strcmp(varNames, candidate))
+                valueField = candidate;
+                break;
+            end
         end
+        if ~isempty(valueField), break; end
     end
     n = height(tbl);
     refinedSeeds = repmat(struct("Tag", "", "P", NaN, "R", NaN, "Value", NaN, ...

@@ -665,7 +665,7 @@ classdef VisualizeController < handle
                     spec(end+1) = fn; %#ok<AGROW>
                 end
             end
-            pref = contains(scal, ["_laser", "_avg", "_analyte"]) | startsWith(scal, ["BEE_", "AEE_"]);
+            pref = contains(scal, ["_laser", "_broad", "_avg", "_analyte"]) | startsWith(scal, ["BEE_", "AEE_"]);
             scal = [scal(pref), scal(~pref)];
         end
 

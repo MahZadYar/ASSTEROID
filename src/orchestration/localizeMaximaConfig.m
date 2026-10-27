@@ -6,76 +6,6 @@ function cfg = localizeMaximaConfig(options)
     %   and can be overridden individually. This config builder enables both CLI
     %   scripts and uihtml apps to construct workflow configurations consistently.
     %
-    %   Name-Value Arguments:
-    %     --- Data Source ---
-    %       DataSource          (1,1) string  — "model" | "interpolation" (default: "model")
-    %       DataFile            (1,1) string  — Path to raw SoA data .mat (for interpolation)
-    %       DiscreteOnly        (1,1) logical — Skip MultiStart, report best grid points only
-    %
-    %     --- File Paths ---
-    %       WorkDir             (1,1) string  — Working directory (default: pwd)
-    %       ModelFile           (1,1) string  — Path to trained model .mat
-    %       RiCsvFile           (1,1) string  — Path to McPeak.csv
-    %       PredictionFile      (1,1) string  — Path to cached predictions .mat
-    %
-    %     --- Grid Parameters ---
-    %       LambdaLaser         (1,1) double  — Laser wavelength in nm (default: 785)
-    %       PLimits             (1,2) double  — [min, max] period in nm
-    %       RLimits             (1,2) double  — [min, max] radius in nm
-    %       StokesShiftLimits   (1,2) double  — [min, max] Stokes shift in cm^-1
-    %       Resolution          (1,1) double  — Spatial resolution in nm
-    %       StokesShiftResolution (1,1) double — Spectral resolution in cm^-1
-    %
-    %     --- Metrics ---
-    %       MetricsToLocate     (1,:) string  — Metric names to optimise
-    %       RatioLimit          (1,2) double  — [min, max] r/p ratio constraint
-    %
-    %     --- Prediction Control ---
-    %       RecomputePredictions (1,1) logical — Regenerate predictions
-    %
-    %     --- MultiStart Parameters ---
-    %       NumLocalMaxima      (1,1) double  — Number of maxima to report
-    %       MultiStartPoints    (1,1) double  — Random start count
-    %       MultiStartUseParallel (1,1) logical — Use parallel pool (default: true)
-    %       ShowIterationPaths  (1,1) logical — Show fmincon iteration trajectories (overrides UseParallel→false, Display→iter)
-    %       MultiStartDisplay   (1,1) string  — Verbosity: "off"|"final"|"iter"
-    %       FunctionTolerance   (1,1) double  — Optimisation function tolerance
-    %       StepTolerance       (1,1) double  — Optimisation step tolerance
-    %       MaxIterations       (1,1) double  — Maximum fmincon iterations
-    %       InitialPoints       (:,2) double  — Custom [p, r] seed points
-    %       InitialCandidates   (table)       — Table of pre-detected candidate seeds
-    %
-    %     --- Candidate Detection ---
-    %       GradientPercentile     (1,1) double — Gradient percentile threshold
-    %       LaplacianFactor        (1,1) double — Fraction of negative Laplacian retained
-    %       NeighborSuppressionRadius (1,1) double — Grid cells suppressed around seeds
-    %       LocalWindowRadiusSteps (1,1) double — Half-width in grid steps for local bounds
-    %       MinLocalWindow         (1,1) double — Minimum local bounds half-width (µm)
-    %       TuningRadius           (1,1) double — Refinement radius (µm)
-    %       NeighborTolerance      (1,1) double — Tolerance for plateau detection
-    %       UseWatershedBasins     (1,1) logical — Detect seeds as watershed basins and
-    %                              refine with in-basin multi-start (default true)
-    %       BasinSensitivity       (1,1) double — H-maxima merge threshold as a fraction
-    %                              of the metric range (default 0.005)
-    %       BasinMinArea           (1,1) double — Minimum basin size in grid cells (default 4)
-    %       InBasinStarts          (1,1) double — Starts per basin incl. the seed (default 5)
-    %       BasinValueThreshold    (1,1) double — Value threshold (% of basin range) for starts (default 50)
-    %       BasinMap               struct — Pre-computed basin map (refine mode)
-    %
-    %   Output:
-    %       cfg — struct with all configuration fields, ready for runLocalizationWorkflow
-    %
-    %   Example:
-    %       % Model-based (default):
-    %       cfg = localizeMaximaConfig( ...
-    %           ModelFile="sers_model.mat", RiCsvFile="McPeak.csv", ...
-    %           PLimits=[850, 920], RLimits=[70, 430]);
-    %
-    %       % Interpolation from raw data:
-    %       cfg = localizeMaximaConfig( ...
-    %           DataSource="interpolation", DataFile="prl_sweep.mat", ...
-    %           PLimits=[850, 920], RLimits=[70, 430], DiscreteOnly=true);
-    %
     %   See also: runLocalizationWorkflow, computeDenseGridParams, ProgressReporter
 
     arguments
@@ -127,7 +57,7 @@ function cfg = localizeMaximaConfig(options)
         options.DestinationBoundPadding (1,1) double {mustBeNonnegative} = 0
         options.KeepRejectedSeeds (1,1) logical = true
         options.BorderRejectFraction (1,1) double {mustBeNonnegative} = 0.02
-        options.MetricVariant (1,1) string {mustBeMember(options.MetricVariant, ["laser","avg","weighted"])} = "avg"
+        options.MetricVariant (1,1) string {mustBeMember(options.MetricVariant, ["laser","broad","broadband","avg","analyte","weighted"])} = "avg"
         options.UseWatershedBasins (1,1) logical = true
         options.BasinSensitivity (1,1) double {mustBeNonnegative} = 0.005
         options.BasinMinArea (1,1) double {mustBePositive} = 4

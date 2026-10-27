@@ -111,7 +111,6 @@ for i = 1:numMetrics
                 % If this candidate is a 2D matrix matching numPoints x K,
                 % check if a 1D averaged alternative exists in candidates first
                 if size(rawVal, 1) == numPoints && size(rawVal, 2) > 1
-                    % Look for a 1D alternative later in candidates
                     alt1dFound = false;
                     for altIdx = (cIdx+1):numel(candidates)
                         altCand = candidates{altIdx};
@@ -145,7 +144,7 @@ for i = 1:numMetrics
     
     % --- Strategy 2: Check predictions struct if not found in allData ---
     if ~found && ~isempty(predictions) && isstruct(predictions)
-        predCandidates = {mName, [mName, '_avg'], regexprep(mName, '_(avg|laser|analyte|approx)$', '')};
+        predCandidates = {mName, [mName, '_broad'], [mName, '_avg'], regexprep(mName, '_(broad|broadband|avg|laser|analyte|weighted|approx)$', '')};
         pFields = fieldnames(predictions);
         for pIdx = 1:numel(predCandidates)
             pCand = predCandidates{pIdx};
@@ -192,33 +191,43 @@ candidates = {mName};
 
 % Normalize key for alias lookups
 baseKey = lower(regexprep(mName, '[^a-zA-Z0-9_]', ''));
-stem = regexprep(baseKey, '_(avg|laser|analyte|approx)$', '');
+stem = regexprep(baseKey, '_(broad|broadband|avg|laser|analyte|weighted|approx)$', '');
 
-if contains(baseKey, "ef_vol") || contains(baseKey, "bee_vol")
-    if contains(baseKey, "laser")
-        candidates = [candidates, {'EF_vol_laser', 'EF_vol_avg', 'EF_vol', 'BEE_vol', 'bee_vol'}];
-    elseif contains(baseKey, "analyte") || contains(baseKey, "aee_vol")
-        candidates = [candidates, {'EF_vol_analyte', 'aee_vol', 'EF_vol_avg', 'EF_vol'}];
+if contains(baseKey, "ee_v") || contains(baseKey, "ef_vol") || contains(baseKey, "bee_vol")
+    if contains(baseKey, "laser") || contains(baseKey, "approx")
+        candidates = [candidates, {'EE_V_laser', 'EF_vol_laser', 'EF_vol_approx', 'EE_V_broad', 'EF_vol_avg', 'EE_V', 'EF_vol'}];
+    elseif contains(baseKey, "analyte") || contains(baseKey, "weighted") || contains(baseKey, "aee_vol")
+        candidates = [candidates, {'EE_V_analyte', 'EF_vol_analyte', 'AEE_vol', 'aee_vol', 'EE_V_broad', 'EF_vol_avg', 'EE_V', 'EF_vol'}];
     elseif contains(baseKey, "bee")
-        candidates = [candidates, {'BEE_vol', 'bee_vol', 'EF_vol_avg', 'EF_vol', 'EF_vol_laser'}];
+        candidates = [candidates, {'BEE_vol', 'bee_vol', 'EE_V_broad', 'EF_vol_avg', 'EE_V', 'EF_vol', 'EE_V_laser', 'EF_vol_laser'}];
     else
-        candidates = [candidates, {'EF_vol_avg', 'EF_vol', 'BEE_vol', 'bee_vol', 'EF_vol_laser', 'EF_vol_analyte'}];
+        candidates = [candidates, {'EE_V_broad', 'EF_vol_avg', 'EE_V', 'EF_vol', 'BEE_vol', 'bee_vol', 'EE_V_laser', 'EF_vol_laser', 'EE_V_analyte', 'EF_vol_analyte'}];
     end
-elseif contains(baseKey, "ef_surf") || contains(baseKey, "bee_surf")
-    if contains(baseKey, "laser")
-        candidates = [candidates, {'EF_surf_laser', 'EF_surf_avg', 'EF_surf', 'BEE_surf', 'bee_surf'}];
-    elseif contains(baseKey, "analyte") || contains(baseKey, "aee_surf")
-        candidates = [candidates, {'EF_surf_analyte', 'aee_surf', 'EF_surf_avg', 'EF_surf'}];
+elseif contains(baseKey, "ee_s") || contains(baseKey, "ef_surf") || contains(baseKey, "bee_surf")
+    if contains(baseKey, "laser") || contains(baseKey, "approx")
+        candidates = [candidates, {'EE_S_laser', 'EF_surf_laser', 'EF_surf_approx', 'EE_S_broad', 'EF_surf_avg', 'EE_S', 'EF_surf'}];
+    elseif contains(baseKey, "analyte") || contains(baseKey, "weighted") || contains(baseKey, "aee_surf")
+        candidates = [candidates, {'EE_S_analyte', 'EF_surf_analyte', 'AEE_surf', 'aee_surf', 'EE_S_broad', 'EF_surf_avg', 'EE_S', 'EF_surf'}];
     elseif contains(baseKey, "bee")
-        candidates = [candidates, {'BEE_surf', 'bee_surf', 'EF_surf_avg', 'EF_surf', 'EF_surf_laser'}];
+        candidates = [candidates, {'BEE_surf', 'bee_surf', 'EE_S_broad', 'EF_surf_avg', 'EE_S', 'EF_surf', 'EE_S_laser', 'EF_surf_laser'}];
     else
-        candidates = [candidates, {'EF_surf_avg', 'EF_surf', 'BEE_surf', 'bee_surf', 'EF_surf_laser', 'EF_surf_analyte'}];
+        candidates = [candidates, {'EE_S_broad', 'EF_surf_avg', 'EE_S', 'EF_surf', 'BEE_surf', 'bee_surf', 'EE_S_laser', 'EF_surf_laser', 'EE_S_analyte', 'EF_surf_analyte'}];
+    end
+elseif contains(baseKey, "ef_max") || contains(baseKey, "m2_max")
+    if contains(baseKey, "laser")
+        candidates = [candidates, {'EF_max_laser', 'EF_laser_max', 'EF_max_broad', 'EF_max_avg', 'EF_max'}];
+    elseif contains(baseKey, "analyte")
+        candidates = [candidates, {'EF_max_analyte', 'EF_max_broad', 'EF_max_avg', 'EF_max'}];
+    else
+        candidates = [candidates, {'EF_max_broad', 'EF_max_avg', 'EF_max_laser', 'EF_max'}];
     end
 elseif contains(baseKey, "abs")
     if contains(baseKey, "laser")
-        candidates = [candidates, {'Abs_laser', 'Abs_avg', 'Absorptance_avg', 'Absorptance', 'Abs'}];
+        candidates = [candidates, {'Abs_laser', 'Absorptance_laser', 'Abs_broad', 'Abs_avg', 'Absorptance_avg', 'Absorptance', 'Abs'}];
+    elseif contains(baseKey, "analyte")
+        candidates = [candidates, {'Abs_analyte', 'Absorptance_analyte', 'Abs_broad', 'Abs_avg', 'Absorptance_avg', 'Absorptance', 'Abs'}];
     else
-        candidates = [candidates, {'Abs_avg', 'Absorptance_avg', 'Absorptance', 'Abs', 'Abs_laser'}];
+        candidates = [candidates, {'Abs_broad', 'Abs_avg', 'Absorptance_broad', 'Absorptance_avg', 'Absorptance', 'Abs', 'Abs_laser'}];
     end
 elseif contains(baseKey, "m_vol")
     candidates = [candidates, {'M_vol_laser', 'M_vol', 'm_vol'}];
@@ -226,7 +235,7 @@ elseif contains(baseKey, "m_surf")
     candidates = [candidates, {'M_surf_laser', 'M_surf', 'm_surf'}];
 else
     % Generic fallback
-    candidates = [candidates, {[mName, '_avg']}, {stem}, {[mName, '_laser']}];
+    candidates = [candidates, {[mName, '_broad']}, {[mName, '_avg']}, {stem}, {[mName, '_laser']}];
 end
 
 candidates = unique(candidates, 'stable');

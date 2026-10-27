@@ -66,11 +66,12 @@ function values = evaluateMetricAtPoints(results, baseMetric, seeds)
         % Fallback: reconstruct 2D grid from allData SoA directly
         if isfield(results, "allData") && isstruct(results.allData)
             allData = results.allData;
-            variant = "avg";
+            variant = "broad";
             if isfield(evalCfg, "metricVariant"), variant = string(evalCfg.metricVariant); end
-            if variant == "weighted", vField = "analyte";
+            if variant == "weighted" || variant == "analyte", vField = "analyte";
             elseif variant == "laser", vField = "laser";
-            else, vField = "avg"; end
+            elseif variant == "avg", vField = "avg";
+            else, vField = "broad"; end
             avgFieldName = char(resolveDerivedMetricField(baseMetric, vField, allData));
             if isfield(allData, avgFieldName) && isfield(allData, "period") && isfield(allData, "radius")
                 P = double(allData.period(:));
@@ -114,12 +115,14 @@ function values = evaluateFromModel(predictor, baseMetric, seeds, lambdaSamples,
     values = NaN(numel(seeds), 1);
     metricVariant = "";
     if isfield(cfg, "metricVariant"), metricVariant = string(cfg.metricVariant); end
-    if metricVariant == "weighted"
+    if metricVariant == "weighted" || metricVariant == "analyte"
         variantForField = "analyte";
     elseif metricVariant == "laser"
         variantForField = "laser";
-    else
+    elseif metricVariant == "avg"
         variantForField = "avg";
+    else
+        variantForField = "broad";
     end
     stokesLimits = [0, 0];
     lambdaLaser = 785;
@@ -133,7 +136,7 @@ function values = evaluateFromModel(predictor, baseMetric, seeds, lambdaSamples,
             continue;
         end
         try
-            if metricVariant == "weighted"
+            if metricVariant == "weighted" || metricVariant == "analyte"
                 analyteSpecEval = getDefaultAnalyteSpectrum();
                 soa = predictor.predictGrid(pNm * 1e-3, rNm * 1e-3, lambdaSamples, ...
                     "LaserWavelength", lambdaLaser, "RamanWindow", stokesLimits, ...

@@ -479,7 +479,7 @@ function updateMetricLists() {
     var b = getRadio("branch", "");
     var bi = branchInfo(b) || {};
     fillSelect(document.getElementById("metric2d"), [
-        { label: "Scalar variants (laser / avg / analyte)", prefix: "scalar:", items: bi.scalarFields },
+        { label: "Scalar variants (laser / broad / analyte)", prefix: "scalar:", items: bi.scalarFields },
         { label: "Spectral slice at Raman shift", prefix: "slice:", items: bi.spectralFields, suffix: "  @ shift" }
     ], true);
     fillSelect(document.getElementById("metric3d"), [

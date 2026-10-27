@@ -22,11 +22,10 @@ function predictions = predict_dense_spectrum(model, pVec, rVec, lambdaVec, ri, 
 %     LaserWl     [N × 1] laser wavelength (nanometers)
 %     lambda_exc_nm [N × 1] laser wavelength (nm, for compatibility)
 %     RamanWindow [N × 2] Raman window (cm^-1)
-%     <metric>    [N × L] metric spectra (e.g., EF_vol, M_vol, Absorptance)
-%     BEE_*       [N × 1] broadband enhancement efficacy (spectral averages)
-%     AEE_*       [N × 1] analyte enhancement efficacy (if AnalyteSpectrum provided)
-%     EF_*_laser  [N × 1] value at laser wavelength (EF_vol_laser, EF_surf_laser)
-%     Abs_laser   [N × 1] absorptance at laser wavelength
+%     <metric>    [N × L] metric spectra (e.g., EE_V, EE_S, EF_max, Abs)
+%     *_broad     [N × 1] broadband spectral averages (plus *_avg alias)
+%     *_analyte   [N × 1] analyte-weighted spectral averages (if AnalyteSpectrum provided)
+%     *_laser     [N × 1] value at laser wavelength
 %
 % Any (p,r) combination where r >= p/2 is considered invalid and excluded.
 %
@@ -98,7 +97,6 @@ PgValidCol = PgValid(:);
 RgValidCol = RgValid(:);
 
 %% Pre-allocate SoA output directly — no 4D volumes grid, no full featuresAll
-% Peak memory = SoA spectra only (numValid × Nlambda × numTargets × 8 bytes).
 predictions            = struct();
 predictions.period     = PgValidCol * 1e3;                      % [numValid×1] nm
 predictions.radius     = RgValidCol * 1e3;                      % [numValid×1] nm
@@ -116,14 +114,11 @@ for t = 1:numTargets
 end
 
 %% Geometry-batched DNN inference
-% Processes batchSize geometries × all wavelengths per iteration.
-% Peak memory per batch ≈ batchSize × Nlambda × 6 × 8 bytes (tiny).
 numBatches = ceil(numValid / batchSize);
 for batchNum = 1:numBatches
     bStart   = (batchNum - 1) * batchSize + 1;
     bEnd     = min(batchNum   * batchSize, numValid);
     bRange   = bStart:bEnd;
-    nInBatch = numel(bRange);
 
     Pb       = PgValidCol(bRange);
     Rb       = RgValidCol(bRange);
@@ -149,7 +144,7 @@ for batchNum = 1:numBatches
     end
 end
 
-%% Vectorised scalar derivation (_laser, _avg, _analyte)
+%% Vectorised scalar derivation (_laser, _broad / _avg, _analyte)
 [~, laserIdx] = min(abs(ramanShiftRow));
 
 % Use MetricsRamanWindow if provided; otherwise fall back to RamanWindow
@@ -163,7 +158,10 @@ stokesMask    = (ramanShiftRow > 0) & ...
                 (ramanShiftRow <= metricsWindow(2));
 shiftVec  = ramanShiftRow(stokesMask);   % [1×nStokes]
 canAvg    = numel(shiftVec) >= 2;
-shiftRange = shiftVec(end) - shiftVec(1);
+shiftRange = 0;
+if canAvg
+    shiftRange = shiftVec(end) - shiftVec(1);
+end
 
 % Analyte weights
 analyteSpec = opts.AnalyteSpectrum;
@@ -188,24 +186,77 @@ for t = 1:numTargets
     % _laser: column at Raman shift ≈ 0
     predictions.([tName, '_laser']) = specMat(:, laserIdx);
 
-    if canAvg
+    if canAvg && shiftRange > 0
         stokesMat = specMat(:, stokesMask); % [numValid×nStokes]
-        % _avg: trapz over Stokes window (grid is already at InterpResolution spacing)
-        predictions.([tName, '_avg']) = trapz(shiftVec, stokesMat, 2) ./ shiftRange;
+        broadVal = trapz(shiftVec, stokesMat, 2) ./ shiftRange;
+        % _broad (canonical) and _avg (backward-compatible alias)
+        predictions.([tName, '_broad']) = broadVal;
+        predictions.([tName, '_avg'])   = broadVal;
         % _analyte: analyte-spectrum-weighted average
         if hasAnalyte
             predictions.([tName, '_analyte']) = stokesMat * analyteWeights(:);
         end
     else
-        predictions.([tName, '_avg']) = specMat(:, laserIdx);
+        predictions.([tName, '_broad']) = specMat(:, laserIdx);
+        predictions.([tName, '_avg'])   = specMat(:, laserIdx);
     end
 end
 
-% Legacy field aliases so downstream callers expecting old names keep working
-if isfield(predictions, 'EF_vol_avg'),        predictions.BEE_vol   = predictions.EF_vol_avg;        end
-if isfield(predictions, 'EF_surf_avg'),       predictions.BEE_surf  = predictions.EF_surf_avg;       end
-if isfield(predictions, 'Absorptance_avg'),   predictions.Abs_avg   = predictions.Absorptance_avg;   end
-if isfield(predictions, 'Absorptance_laser'), predictions.Abs_laser = predictions.Absorptance_laser; end
-if isfield(predictions, 'EF_vol_analyte'),    predictions.AEE_vol   = predictions.EF_vol_analyte;    end
-if isfield(predictions, 'EF_surf_analyte'),   predictions.AEE_surf  = predictions.EF_surf_analyte;   end
+% Cross-aliases and legacy field aliases so downstream callers keep working
+if isfield(predictions, 'EF_vol_avg')
+    predictions.BEE_vol      = predictions.EF_vol_avg;
+    predictions.EE_V_broad   = predictions.EF_vol_avg;
+end
+if isfield(predictions, 'EE_V_broad')
+    predictions.BEE_vol      = predictions.EE_V_broad;
+    predictions.EF_vol_avg   = predictions.EE_V_broad;
+    predictions.EF_vol_broad = predictions.EE_V_broad;
+end
+if isfield(predictions, 'EF_surf_avg')
+    predictions.BEE_surf     = predictions.EF_surf_avg;
+    predictions.EE_S_broad   = predictions.EF_surf_avg;
+end
+if isfield(predictions, 'EE_S_broad')
+    predictions.BEE_surf     = predictions.EE_S_broad;
+    predictions.EF_surf_avg  = predictions.EE_S_broad;
+    predictions.EF_surf_broad = predictions.EE_S_broad;
+end
+if isfield(predictions, 'Absorptance_avg')
+    predictions.Abs_avg      = predictions.Absorptance_avg;
+    predictions.Abs_broad    = predictions.Absorptance_avg;
+end
+if isfield(predictions, 'Abs_broad')
+    predictions.Abs_avg          = predictions.Abs_broad;
+    predictions.Absorptance_avg  = predictions.Abs_broad;
+    predictions.Absorptance_broad = predictions.Abs_broad;
+end
+if isfield(predictions, 'Absorptance_laser')
+    predictions.Abs_laser = predictions.Absorptance_laser;
+elseif isfield(predictions, 'Abs_laser')
+    predictions.Absorptance_laser = predictions.Abs_laser;
+end
+if isfield(predictions, 'EF_vol_laser') && ~isfield(predictions, 'EE_V_laser')
+    predictions.EE_V_laser = predictions.EF_vol_laser;
+elseif isfield(predictions, 'EE_V_laser') && ~isfield(predictions, 'EF_vol_laser')
+    predictions.EF_vol_laser = predictions.EE_V_laser;
+end
+if isfield(predictions, 'EF_surf_laser') && ~isfield(predictions, 'EE_S_laser')
+    predictions.EE_S_laser = predictions.EF_surf_laser;
+elseif isfield(predictions, 'EE_S_laser') && ~isfield(predictions, 'EF_surf_laser')
+    predictions.EF_surf_laser = predictions.EE_S_laser;
+end
+if isfield(predictions, 'EF_vol_analyte')
+    predictions.AEE_vol      = predictions.EF_vol_analyte;
+    predictions.EE_V_analyte = predictions.EF_vol_analyte;
+elseif isfield(predictions, 'EE_V_analyte')
+    predictions.AEE_vol        = predictions.EE_V_analyte;
+    predictions.EF_vol_analyte = predictions.EE_V_analyte;
+end
+if isfield(predictions, 'EF_surf_analyte')
+    predictions.AEE_surf     = predictions.EF_surf_analyte;
+    predictions.EE_S_analyte = predictions.EF_surf_analyte;
+elseif isfield(predictions, 'EE_S_analyte')
+    predictions.AEE_surf        = predictions.EE_S_analyte;
+    predictions.EF_surf_analyte = predictions.EE_S_analyte;
+end
 end

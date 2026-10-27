@@ -38,11 +38,13 @@ function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSee
 
     allData = results.allData;
 
-    % Resolve derived field name (canonical: _avg/_analyte/_laser)
-    if metricVariant == "weighted"
+    % Resolve derived field name (canonical: _broad/_avg/_analyte/_laser)
+    if metricVariant == "weighted" || metricVariant == "analyte"
         variantForField = "analyte";
     elseif metricVariant == "laser"
         variantForField = "laser";
+    elseif metricVariant == "broad" || metricVariant == "broadband"
+        variantForField = "broad";
     else
         variantForField = "avg";
     end
@@ -96,10 +98,10 @@ function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSee
     ylabel(ax, "Radius (nm)");
     if metricVariant == "laser"
         title(ax, baseMetric + " (at laser \lambda)");
-    elseif metricVariant == "weighted"
-        title(ax, baseMetric + " (analyte-weighted avg)");
+    elseif metricVariant == "weighted" || metricVariant == "analyte"
+        title(ax, baseMetric + " (analyte-weighted)");
     else
-        title(ax, baseMetric + " (spectral avg)");
+        title(ax, baseMetric + " (broadband avg)");
     end
     axis(ax, "tight");
     hold(ax, "on");

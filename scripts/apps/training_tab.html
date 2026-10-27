@@ -758,9 +758,11 @@ function renderPerformanceReport(data) {
         for (var i = 0; i < nT; i++) {
             var rawName = String(targets[i].name || ("Target " + (i + 1)));
             var disp = rawName;
-            if (rawName.toLowerCase() === "absorptance") disp = "Absorptance <em>A<sub>L</sub></em>";
-            else if (rawName.toLowerCase() === "ef_vol") disp = "Volumetric EF <em>EF<sub>V</sub></em>";
-            else if (rawName.toLowerCase() === "ef_surf") disp = "Surface EF <em>EF<sub>S</sub></em>";
+            var rl = rawName.toLowerCase();
+            if (rl === "absorptance" || rl === "abs") disp = "Absorptance <em>Abs</em>";
+            else if (rl === "ef_max") disp = "Hotspot Max EF <em>EF<sub>max</sub></em>";
+            else if (rl === "ee_v" || rl === "ef_vol") disp = "Volumetric EE <em>EE<sub>V</sub></em>";
+            else if (rl === "ee_s" || rl === "ef_surf") disp = "Surface EE <em>EE<sub>S</sub></em>";
             
             var th = document.createElement("th");
             th.style.cssText = "padding:6px 8px; text-align:center; font-weight:700; color:var(--text-primary);";
@@ -970,16 +972,20 @@ document.addEventListener("DOMContentLoaded", function() {
                 <label>Metrics to Train</label>
                 <div class="metrics-grid">
                     <div class="toggle-row">
-                        <input type="checkbox" class="metric-cb" value="Absorptance" id="m_Abs" checked>
-                        <label for="m_Abs">Absorptance</label>
+                        <input type="checkbox" class="metric-cb" value="Abs" id="m_Abs" checked>
+                        <label for="m_Abs">Abs (Absorptance)</label>
                     </div>
                     <div class="toggle-row">
-                        <input type="checkbox" class="metric-cb" value="EF_vol" id="m_EFv" checked>
-                        <label for="m_EFv">EF_vol</label>
+                        <input type="checkbox" class="metric-cb" value="EF_max" id="m_EFmax">
+                        <label for="m_EFmax">EF_max</label>
                     </div>
                     <div class="toggle-row">
-                        <input type="checkbox" class="metric-cb" value="EF_surf" id="m_EFs" checked>
-                        <label for="m_EFs">EF_surf</label>
+                        <input type="checkbox" class="metric-cb" value="EE_V" id="m_EFv" checked>
+                        <label for="m_EFv">EE_V (EF_vol)</label>
+                    </div>
+                    <div class="toggle-row">
+                        <input type="checkbox" class="metric-cb" value="EE_S" id="m_EFs" checked>
+                        <label for="m_EFs">EE_S (EF_surf)</label>
                     </div>
                     <div class="toggle-row">
                         <input type="checkbox" class="metric-cb" value="M_vol" id="m_Mv">
@@ -1547,9 +1553,9 @@ document.addEventListener("DOMContentLoaded", function() {
                         <thead>
                             <tr id="perfReportHeaderRow" style="border-bottom:1px solid var(--border); background:var(--bg-tertiary);">
                                 <th style="padding:6px 8px; font-weight:700;">Evaluation Tier / Metric</th>
-                                <th style="padding:6px 8px; text-align:center; font-weight:700;">Absorptance <em>A<sub>L</sub></em></th>
-                                <th style="padding:6px 8px; text-align:center; font-weight:700;">Volumetric EF <em>EF<sub>V</sub></em></th>
-                                <th style="padding:6px 8px; text-align:center; font-weight:700;">Surface EF <em>EF<sub>S</sub></em></th>
+                                <th style="padding:6px 8px; text-align:center; font-weight:700;">Absorptance <em>Abs</em></th>
+                                <th style="padding:6px 8px; text-align:center; font-weight:700;">Volumetric EE <em>EE<sub>V</sub></em></th>
+                                <th style="padding:6px 8px; text-align:center; font-weight:700;">Surface EE <em>EE<sub>S</sub></em></th>
                             </tr>
                         </thead>
                         <tbody id="perfReportBody">

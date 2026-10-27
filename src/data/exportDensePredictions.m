@@ -11,9 +11,9 @@ function outputPath = exportDensePredictions(allData, options)
 %   Name-Value Arguments:
 %       OutputFile     (1,1) string  - Full path to output .mat file
 %       Metrics        (1,:) string  - Base metric names to include
-%                                      (default: ["Absorptance","EF_vol","EF_surf"])
+%                                      (default: ["Abs","EF_max","EE_V","EE_S"])
 %       Variants       (1,:) string  - Variant suffixes to include
-%                                      (default: ["spectral","laser","avg","analyte"])
+%                                      (default: ["spectral","laser","broad","analyte"])
 %       Reporter       -              Optional ProgressReporter for status feedback
 %
 %   Output:
@@ -24,18 +24,19 @@ function outputPath = exportDensePredictions(allData, options)
 %   Selected metrics are included based on Metrics × Variants combinations.
 %
 %   Variant mapping:
-%       "spectral" → base field [N×L] (e.g. EF_vol)
-%       "laser"    → _laser field [N×1] (legacy fallback: _approx)
-%       "avg"      → _avg field [N×1]
-%       "analyte"  → _analyte field [N×1]
+%       "spectral" -> base field [N×L] (e.g. EE_V)
+%       "laser"    -> _laser field [N×1] (legacy fallback: _approx)
+%       "broad"    -> _broad field [N×1] (legacy fallback: _avg)
+%       "avg"      -> _avg field [N×1] (fallback: _broad)
+%       "analyte"  -> _analyte field [N×1]
 %
 %   See also: validateSoAStructure, predict_dense_spectrum
 
     arguments
         allData (1,1) struct
         options.OutputFile     (1,1) string = "dense_predictions.mat"
-        options.Metrics        (1,:) string = ["Absorptance", "EF_vol", "EF_surf"]
-        options.Variants       (1,:) string = ["spectral", "laser", "avg", "analyte"]
+        options.Metrics        (1,:) string = ["Abs", "EF_max", "EE_V", "EE_S", "Absorptance", "EF_vol", "EF_surf"]
+        options.Variants       (1,:) string = ["spectral", "laser", "broad", "avg", "analyte"]
         options.Reporter                    = []
     end
 
@@ -47,7 +48,7 @@ function outputPath = exportDensePredictions(allData, options)
     end
 
     %% Always-included fields (geometry + metadata)
-    geoFields = ["period", "radius", "lambda"];
+    geoFields = ["period", "radius", "lambda", "kappa_V", "kappa_S"];
     metaFields = ["LaserWl", "lambda_exc_nm", "RamanShift", "RamanWindow", "RamanWindowEffective"];
 
     exported = struct();
@@ -66,10 +67,13 @@ function outputPath = exportDensePredictions(allData, options)
 
     %% Variant suffix mapping
     variantMap = struct( ...
-        "spectral", "",        ...
-        "laser",    "_laser",  ...
-        "avg",      "_avg",    ...
-        "analyte",  "_analyte" ...
+        "spectral",  "",        ...
+        "laser",     "_laser",  ...
+        "broad",     "_broad",  ...
+        "broadband", "_broad",  ...
+        "avg",       "_avg",    ...
+        "analyte",   "_analyte", ...
+        "weighted",  "_analyte" ...
     );
 
     %% Add selected metric × variant combinations
@@ -92,6 +96,22 @@ function outputPath = exportDensePredictions(allData, options)
                 legacyField = baseMetric + "_approx";
                 if isfield(allData, legacyField)
                     exported.(fieldName) = allData.(legacyField);
+                    includedFields(end+1) = fieldName; %#ok<AGROW>
+                else
+                    skippedFields(end+1) = fieldName; %#ok<AGROW>
+                end
+            elseif variant == "broad" || variant == "broadband"
+                legacyField = baseMetric + "_avg";
+                if isfield(allData, legacyField)
+                    exported.(fieldName) = allData.(legacyField);
+                    includedFields(end+1) = fieldName; %#ok<AGROW>
+                else
+                    skippedFields(end+1) = fieldName; %#ok<AGROW>
+                end
+            elseif variant == "avg"
+                broadField = baseMetric + "_broad";
+                if isfield(allData, broadField)
+                    exported.(fieldName) = allData.(broadField);
                     includedFields(end+1) = fieldName; %#ok<AGROW>
                 else
                     skippedFields(end+1) = fieldName; %#ok<AGROW>

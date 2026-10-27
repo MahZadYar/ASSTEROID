@@ -64,7 +64,7 @@ Key properties:
 
 Important implementation note:
 
-- This repository **treats** the spectral arrays `EF_vol` ($\mathrm{EE}_V(\Delta\widetilde{\nu})$) and `EF_surf` ($\mathrm{EE}_S(\Delta\widetilde{\nu})$) as the rigorous two-frequency unit-cell Enhancement Efficacy outputs (as evaluated via COMSOL `withsol` and scaled by $\kappa_V, \kappa_S$ upon import into the SoA database).
+- This repository **treats** the spectral arrays `EE_V` (legacy alias `EF_vol`, representing $\mathrm{EE}_V(\Delta\widetilde{\nu})$) and `EE_S` (legacy alias `EF_surf`, representing $\mathrm{EE}_S(\Delta\widetilde{\nu})$) as the rigorous two-frequency unit-cell Enhancement Efficacy outputs (as evaluated via COMSOL `withsol` and scaled by `kappa_V`, `kappa_S` upon import into the SoA database).
 - The function [src/physics/compute_raman_ef.m](src/physics/compute_raman_ef.m) computes a **two-channel scalar product** from intensity volumes: $\mathrm{EF}(\omega_R)=M(\omega_R)\,M(\omega_L)$ where $M=|\mathbf{E}|^2$. This is useful for voxel-based post-processing and correlation diagnostics, but it is **not the full vector ORT dot-product** unless the upstream $M$ already encodes that physics.
 
 ### 2.2 Spatially-Aware Design Continuum & Unit-Cell Enhancement Efficacy $\mathrm{EE}_D(\Delta\widetilde{\nu})$ (Paper Eqs. 9–13)
@@ -100,10 +100,10 @@ $$
 
 **Code mapping:** these appear in the SoA database as:
 
-- `EF_surf` (unit-cell surface Enhancement Efficacy spectrum, $\mathrm{EE}_S(\Delta\widetilde{\nu})$)
-- `EF_vol` (unit-cell volumetric Enhancement Efficacy spectrum, $\mathrm{EE}_V(\Delta\widetilde{\nu})$)
-- `EF_surf_laser` / `EF_surf_approx` (single-wavelength surface Enhancement Efficacy benchmark, $\mathrm{EE}_S^L$)
-- `EF_vol_laser` / `EF_vol_approx` (single-wavelength volumetric Enhancement Efficacy benchmark, $\mathrm{EE}_V^L$)
+- `EE_S` (legacy alias `EF_surf` — unit-cell surface Enhancement Efficacy spectrum, $\mathrm{EE}_S(\Delta\widetilde{\nu})$)
+- `EE_V` (legacy alias `EF_vol` — unit-cell volumetric Enhancement Efficacy spectrum, $\mathrm{EE}_V(\Delta\widetilde{\nu})$)
+- `EE_S_laser` (legacy aliases `EF_surf_laser`, `EF_surf_approx` — single-wavelength surface Enhancement Efficacy benchmark, $\mathrm{EE}_S^L$)
+- `EE_V_laser` (legacy aliases `EF_vol_laser`, `EF_vol_approx` — single-wavelength volumetric Enhancement Efficacy benchmark, $\mathrm{EE}_V^L$)
 
 See import pipeline extraction in [src/orchestration/runImportSweepWorkflow.m](src/orchestration/runImportSweepWorkflow.m).
 
@@ -128,25 +128,27 @@ Spectrally integrated Enhancement Efficacies ($D \in \{S, V\}$):
 
 **Summary of the 8 Comparative Metrics (4 Single-Wavelength $\lambda_L$ Benchmarks vs. 4 Two-Frequency $\mathrm{EE}$ Metrics):**
 
-| # | Symbol | Codebase Field | Regime | Physical Meaning |
-| :-: | :--- | :--- | :--- | :--- |
-| 1 | $\mathrm{Abs}^L$ | `Absorptance_laser` | Far-field at $\lambda_L$ | Conventional far-field optical absorptance $1 - R(\omega_L)$ proxy |
-| 2 | $\mathrm{EF}_{\max}^L$ | `EF_max` | 0D point at $\lambda_L$ | Conventional single-point hotspot peak $\max \|\widetilde{\mathbf{E}}_L\|^4/|E_{0,L}|^4$ proxy |
-| 3 | $\mathrm{EE}_S^L$ | `EF_surf_laser` | 2D surface at $\lambda_L$ | Single-wavelength unit-cell surface Enhancement Efficacy $\kappa_S \langle \mathrm{EF}^L \rangle_S$ |
-| 4 | $\mathrm{EE}_V^L$ | `EF_vol_laser` | 3D volume at $\lambda_L$ | Single-wavelength unit-cell volumetric Enhancement Efficacy $\kappa_V \langle \mathrm{EF}^L \rangle_V$ |
-| 5 | $\mathrm{EE}_S^{\text{broad}}$ | `EF_surf_avg` (`BEE_surf`) | 2D surface, broadband | Two-frequency broadband surface Enhancement Efficacy |
-| 6 | $\mathrm{EE}_V^{\text{broad}}$ | `EF_vol_avg` (`BEE_vol`) | 3D volume, broadband | Two-frequency broadband volumetric Enhancement Efficacy |
-| 7 | $\mathrm{EE}_S^{\text{analyte}}$ | `EF_surf_analyte` (`AEE_surf`) | 2D surface, fingerprint | Two-frequency analyte-weighted surface Enhancement Efficacy |
-| 8 | $\mathrm{EE}_V^{\text{analyte}}$ | `EF_vol_analyte` (`AEE_vol`) | 3D volume, fingerprint | Two-frequency analyte-weighted volumetric Enhancement Efficacy |
+| # | Symbol | Canonical Code Field | Legacy Aliases | Regime | Physical Meaning |
+| :-: | :--- | :--- | :--- | :--- | :--- |
+| 1 | $\mathrm{Abs}^L$ | `Abs_laser` | `Absorptance_laser` | Far-field at $\lambda_L$ | Conventional far-field optical absorptance $1 - R(\omega_L)$ proxy |
+| 2 | $\mathrm{EF}_{\max}^L$ | `EF_max_laser` | `EF_laser_max`, `M2_max_laser` | 0D point at $\lambda_L$ | Conventional single-point hotspot peak $\max \|\widetilde{\mathbf{E}}_L\|^4/|E_{0,L}|^4$ proxy |
+| 3 | $\mathrm{EE}_S^L$ | `EE_S_laser` | `EF_surf_laser`, `EF_surf_approx` | 2D surface at $\lambda_L$ | Single-wavelength unit-cell surface Enhancement Efficacy $\kappa_S \langle \mathrm{EF}^L \rangle_S$ |
+| 4 | $\mathrm{EE}_V^L$ | `EE_V_laser` | `EF_vol_laser`, `EF_vol_approx` | 3D volume at $\lambda_L$ | Single-wavelength unit-cell volumetric Enhancement Efficacy $\kappa_V \langle \mathrm{EF}^L \rangle_V$ |
+| 5 | $\mathrm{EE}_S^{\text{broad}}$ | `EE_S_broad` | `EE_S_avg`, `EF_surf_avg`, `BEE_surf` | 2D surface, broadband | Two-frequency broadband surface Enhancement Efficacy |
+| 6 | $\mathrm{EE}_V^{\text{broad}}$ | `EE_V_broad` | `EE_V_avg`, `EF_vol_avg`, `BEE_vol` | 3D volume, broadband | Two-frequency broadband volumetric Enhancement Efficacy |
+| 7 | $\mathrm{EE}_S^{\text{analyte}}$ | `EE_S_analyte` | `EF_surf_analyte`, `AEE_surf` | 2D surface, fingerprint | Two-frequency analyte-weighted surface Enhancement Efficacy |
+| 8 | $\mathrm{EE}_V^{\text{analyte}}$ | `EE_V_analyte` | `EF_vol_analyte`, `AEE_vol` | 3D volume, fingerprint | Two-frequency analyte-weighted volumetric Enhancement Efficacy |
 
 **Code mapping:**
 
 - Raman shift axis: `RamanShift` ($\text{cm}^{-1}$)
-- Broadband averages (stored per geometry):
-  - `EF_vol_avg` ($\mathrm{EE}_V^{\text{broad}}$), `EF_surf_avg` ($\mathrm{EE}_S^{\text{broad}}$)
-- Analyte-weighted scalars:
-  - `EF_vol_analyte` ($\mathrm{EE}_V^{\text{analyte}}$), `EF_surf_analyte` ($\mathrm{EE}_S^{\text{analyte}}$)
-- Weighting implementation: [src/physics/computeAnalyteWeightedMetric.m](src/physics/computeAnalyteWeightedMetric.m)
+- Single-wavelength laser benchmarks (`_laser`):
+  - `Abs_laser` ($\mathrm{Abs}^L$), `EF_max_laser` ($\mathrm{EF}_{\max}^L$), `EE_S_laser` ($\mathrm{EE}_S^L$), `EE_V_laser` ($\mathrm{EE}_V^L$)
+- Broadband averages (`_broad`, with `_avg` alias stored per geometry):
+  - `EE_V_broad` ($\mathrm{EE}_V^{\text{broad}}$), `EE_S_broad` ($\mathrm{EE}_S^{\text{broad}}$)
+- Analyte-weighted scalars (`_analyte`):
+  - `EE_V_analyte` ($\mathrm{EE}_V^{\text{analyte}}$), `EE_S_analyte` ($\mathrm{EE}_S^{\text{analyte}}$)
+- Weighting implementation: [src/physics/computeAnalyteWeightedMetric.m](src/physics/computeAnalyteWeightedMetric.m) and [src/data/recomputeDerivedMetrics.m](src/data/recomputeDerivedMetrics.m)
 
 The import workflow densifies discrete FEM spectra using **makima** interpolation solely for adaptive sampling density estimation, whereas the trained DNN surrogate evaluates continuous spectral grids directly without intermediate spline interpolation.
 
@@ -161,30 +163,31 @@ Header normalization uses default aliases from:
 - [src/utils/defaultComsolVarNames.m](src/utils/defaultComsolVarNames.m)
 - [src/utils/mapHeadersToDefaults.m](src/utils/mapHeadersToDefaults.m)
 
-Canonical columns expected in the sweep table include:
+Canonical per-wavelength columns expected in the COMSOL sweep table include:
 
-- geometry: `period`, `radius`, `lambda`
-- far-field: `Absorptance`, `Reflectance`, `Transmittance`
-- spectral Enhancement Efficacy & hotspot metrics: `EF_vol`, `EF_surf`, `EF_max`
+- geometry & wavelength: `period`, `radius`, `lambda`
+- far-field & energy conservation: `Abs` (legacy `Absorptance`), `Reflectance`, `Transmittance`, `ECC` (legacy `ECCheck`)
+- spectral Enhancement Efficacy & hotspot metrics: `EE_V` (legacy `EF_vol`), `EE_S` (legacy `EF_surf`), `EF_max`
+- geometric loading capacity factors: `kappa_V` (legacy `VolCorr`, `V_corr`), `kappa_S` (legacy `SurfCorr`, `S_corr`)
 - auxiliary (optional): `M_vol`, `M_surf`, `M2_vol`, `M2_surf`, `E_vol`, `E_surf`, etc.
 
 These are extracted in [src/orchestration/runImportSweepWorkflow.m](src/orchestration/runImportSweepWorkflow.m) by `extractAllColumns()`.
 
 ## 4) “Space correction” (geometric loading capacity factors $\kappa_S, \kappa_V$ in code)
 
-To reflect the paper’s footprint-normalized Enhancement Efficacy definitions, the import pipeline applies geometric loading capacity factors ($\kappa_S, \kappa_V$) that account for geometry-dependent accessible surface area and open gas volume.
+To reflect the paper’s footprint-normalized Enhancement Efficacy definitions, the import pipeline applies geometric loading capacity factors (`kappa_S`, `kappa_V`; legacy aliases `SurfCorr`, `VolCorr`) that account for geometry-dependent accessible surface area and open gas volume.
 
-In [src/orchestration/runImportSweepWorkflow.m](src/orchestration/runImportSweepWorkflow.m), inside `processGeometryGroup()`:
+In [src/orchestration/runImportSweepWorkflow.m](src/orchestration/runImportSweepWorkflow.m) (and standalone utility [src/physics/corr_calc.m](src/physics/corr_calc.m)), inside `processGeometryGroup()`:
 
-- Surface loading capacity factor ($\kappa_S$):
-  $$\mathrm{SurfCorr} = \kappa_S = \frac{A_{\text{cell}}+4\pi r^2}{A_{\text{cell}}} = 1 + \frac{2\pi}{\sqrt{3}}\left(\frac{D}{P}\right)^2$$
-- Volumetric loading / exclusion factor ($\kappa_V$):
-  $$\mathrm{VolCorr} = \kappa_V = \frac{H_{\text{cell}}\,A_{\text{cell}}-\tfrac{4}{3}\pi r^3}{H_{\text{cell}}\,A_{\text{cell}}} = 1 - \frac{\pi D^3}{3\sqrt{3} h_{\text{sup}} P^2}$$
+- Surface loading capacity factor (`kappa_S`):
+  $$\kappa_S = \frac{A_{\text{cell}}+4\pi r^2}{A_{\text{cell}}} = 1 + \frac{2\pi}{\sqrt{3}}\left(\frac{D}{P}\right)^2$$
+- Volumetric loading / exclusion factor (`kappa_V`):
+  $$\kappa_V = \frac{H_{\text{cell}}\,A_{\text{cell}}-\tfrac{4}{3}\pi r^3}{H_{\text{cell}}\,A_{\text{cell}}} = 1 - \frac{\pi D^3}{3\sqrt{3} h_{\text{sup}} P^2}$$
 
-and then:
+and then (when raw domain-averaged quantities are imported):
 
-- `EF_surf = EF_surf * SurfCorr` (yielding $\mathrm{EE}_S(\Delta\widetilde{\nu})$)
-- `EF_vol  = EF_vol  * VolCorr` (yielding $\mathrm{EE}_V(\Delta\widetilde{\nu})$)
+- `EE_S = EE_S * kappa_S` (yielding $\mathrm{EE}_S(\Delta\widetilde{\nu})$)
+- `EE_V = EE_V * kappa_V` (yielding $\mathrm{EE}_V(\Delta\widetilde{\nu})$)
 
 This enforces the unit-cell reference normalization described in the paper.
 
@@ -207,9 +210,9 @@ Within the Raman window `[shiftMin, shiftMax]`:
 - build `shiftDense = linspace(shiftMin, shiftMax, interpSamples)`
 - interpolate using `makima`
 - integrate using `trapz`
-- store the averaged scalars (`EF_*_avg`, etc.) per geometry
+- store the derived scalars (`*_laser`, `*_broad` / `*_avg`, `*_analyte`) per geometry
 
-This logic lives in `computeSpectralAverages()` inside [src/orchestration/runImportSweepWorkflow.m](src/orchestration/runImportSweepWorkflow.m).
+This logic lives in `computeSpectralAverages()` inside [src/orchestration/runImportSweepWorkflow.m](src/orchestration/runImportSweepWorkflow.m) and [src/data/recomputeDerivedMetrics.m](src/data/recomputeDerivedMetrics.m).
 
 ### 5.3 Analyte spectrum weighting
 
@@ -235,14 +238,14 @@ All workflows exchange data in Structure-of-Arrays (SoA) format (see also [docs/
 Key conventions:
 
 - `period`, `radius`: $[N\times 1]$ (nm), with $N = 6{,}144$ unique geometries in the dataset
-- spectral fields (`lambda`, `EF_vol`, `EF_surf`, `Absorptance`, …): $[N\times L]$ (nm for `lambda`; $L = 25$ wavelengths in the `[100, 3600] cm^-1` sweep and $L = 30$ wavelengths in the extended `[100, 4200] cm^-1` sweep)
-- scalar integrated/benchmark metrics (`*_avg`, `*_analyte`, `*_laser`, `EF_max`): $[N\times 1]$
+- spectral fields (`lambda`, `EE_V`, `EE_S`, `EF_max`, `Abs`, `ECC`, plus legacy aliases `EF_vol`, `EF_surf`, `Absorptance`): $[N\times L]$ (nm for `lambda`; $L = 25$ wavelengths in the `[100, 3600] cm^-1` sweep and $L = 30$ wavelengths in the extended `[100, 4200] cm^-1` sweep)
+- scalar integrated/benchmark metrics (`*_laser`, `*_broad` / `*_avg`, `*_analyte`, `kappa_V`, `kappa_S`): $[N\times 1]$
 
 SoA utilities:
 
 - reshape for visualization/optimization: [src/data/reshapeSoAToVolume.m](src/data/reshapeSoAToVolume.m)
 - validate: [src/data/validateSoAStructure.m](src/data/validateSoAStructure.m)
-- legacy migration: [src/data/normalizeGeometryFields.m](src/data/normalizeGeometryFields.m)
+- legacy migration: [src/data/normalizeGeometryFields.m](src/data/normalizeGeometryFields.m) and [src/data/renameLegacyMetricNamesInDatabase.m](src/data/renameLegacyMetricNamesInDatabase.m)
 
 ## 7) DNN surrogate methodology (paper → implementation)
 
@@ -301,10 +304,10 @@ Dual-mode behavior:
 - Canonical geometry/wavelengths are stored in **nm** in SoA.
 - Some optimization/prediction grids are internally expressed in **µm** (see `computeDenseGridParams(..., OutputUnit="um")`).
 - The import pipeline includes heuristics for whether geometry columns look like nm (`p>1`) vs meters.
-- For analyte metrics: if the analyte spectrum is missing/invalid, `EF_*_analyte` is `NaN` by design.
+- For analyte metrics: if the analyte spectrum is missing/invalid, `*_analyte` is `NaN` by design.
 
 ## 10) “If you change X, update Y” (development checklist)
 
-- Add a new metric name → update metric normalization/aliases (see `normalizeMetricNames()` usage in config builders) and ensure it becomes a valid SoA field.
-- Change Raman window logic → update import spectral averaging in [src/orchestration/runImportSweepWorkflow.m](src/orchestration/runImportSweepWorkflow.m) and any prediction-time averaging.
+- Add a new metric name → update metric normalization/aliases in [src/utils/normalizeMetricNames.m](src/utils/normalizeMetricNames.m), [src/utils/resolveDerivedMetricField.m](src/utils/resolveDerivedMetricField.m), and [src/utils/defaultComsolVarNames.m](src/utils/defaultComsolVarNames.m), and ensure it becomes a valid SoA field.
+- Change Raman window logic → update import spectral averaging in [src/orchestration/runImportSweepWorkflow.m](src/orchestration/runImportSweepWorkflow.m), [src/data/recomputeDerivedMetrics.m](src/data/recomputeDerivedMetrics.m), and any prediction-time averaging in [src/modeling/predict_dense_spectrum.m](src/modeling/predict_dense_spectrum.m).
 - Change optimization behavior → adjust candidate detection knobs in [src/orchestration/localizeMaximaConfig.m](src/orchestration/localizeMaximaConfig.m) and the detection in `detectCandidateMaxima()` in [src/orchestration/runLocalizationWorkflow.m](src/orchestration/runLocalizationWorkflow.m).

@@ -280,7 +280,7 @@
 
 var previewSchema = []; // [{name, role, originalName}]
 var previewData = null;
-var VARIANTS = ['laser', 'avg', 'analyte'];
+var VARIANTS = ['laser', 'broad', 'analyte'];
 
 function setup(htmlComponent) {
     window.htmlComponent = htmlComponent;
@@ -536,8 +536,8 @@ function buildMetricVariantsTable() {
             var cb = document.createElement('input');
             cb.type = 'checkbox';
             cb.id = 'mv_' + m.name + '_' + variant;
-            // Default: laser=true, avg=true for all, analyte=false
-            if (variant === 'laser' || variant === 'avg') {
+            // Default: laser=true, broad=true for all, analyte=false
+            if (variant === 'laser' || variant === 'broad') {
                 cb.checked = true;
             } else {
                 cb.checked = false;
@@ -826,8 +826,8 @@ function toggleSection(el) {
                                     <button class="col-toggle-btn" onclick="toggleColumn('laser')">toggle all</button>
                                 </th>
                                 <th>
-                                    _avg
-                                    <button class="col-toggle-btn" onclick="toggleColumn('avg')">toggle all</button>
+                                    _broad
+                                    <button class="col-toggle-btn" onclick="toggleColumn('broad')">toggle all</button>
                                 </th>
                                 <th>
                                     _analyte

@@ -1897,9 +1897,13 @@ function toggleAllDbOptima(masterCb) {
                                 <div class="field">
                                     <label>Optimize Metric</label>
                                     <select id="metric">
-                                        <option value="EF_vol">EF_vol (Volume SERS EF)</option>
-                                        <option value="EF_surf">EF_surf (Surface SERS EF)</option>
-                                        <option value="Absorptance" selected>Absorptance</option>
+                                        <option value="EE_V">EE_V (Volumetric Enhancement Efficacy)</option>
+                                        <option value="EE_S">EE_S (Surface Enhancement Efficacy)</option>
+                                        <option value="EF_max">EF_max (Hotspot Maximum EF)</option>
+                                        <option value="Abs" selected>Abs (Absorptance)</option>
+                                        <option value="EF_vol">EF_vol (Legacy alias for EE_V)</option>
+                                        <option value="EF_surf">EF_surf (Legacy alias for EE_S)</option>
+                                        <option value="Absorptance">Absorptance (Legacy alias for Abs)</option>
                                         <option value="M_vol">M_vol (Volume Cross-product)</option>
                                         <option value="M_surf">M_surf (Surface Cross-product)</option>
                                     </select>
@@ -1907,9 +1911,9 @@ function toggleAllDbOptima(masterCb) {
                                 <div class="field">
                                     <label>Metric Variant</label>
                                     <select id="metricVariant">
-                                        <option value="laser" selected>At Laser Wavelength</option>
-                                        <option value="avg">Spectral Average (Stokes Window)</option>
-                                        <option value="weighted">Analyte-Weighted Average</option>
+                                        <option value="laser" selected>At Laser Wavelength (_laser)</option>
+                                        <option value="broad">Broadband Average (_broad)</option>
+                                        <option value="analyte">Analyte-Weighted (_analyte)</option>
                                     </select>
                                 </div>
                             </div>

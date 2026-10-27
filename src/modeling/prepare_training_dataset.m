@@ -2,17 +2,17 @@ function dataset = prepare_training_dataset(allData, ri, options)
 % prepare_training_dataset  Convert structure-of-arrays spectra into ML-ready matrices.
 %
 % dataset = prepare_training_dataset(allData, ri) builds feature and target
-% matrices using per-sample inputs [p, r, lambda, n, k] and targets
-% [Absorptance, M_vol, M_surf, EF_vol, EF_surf]. Geometry and wavelength
-% can be optionally log-transformed before standardisation, while targets
-% can be optionally stored as log1p(targets).
+% matrices using per-sample inputs [p, r, lambda, n, k] and targets such as
+% [Abs, EF_max, EE_V, EE_S] (or legacy [Absorptance, M_vol, M_surf, EF_vol, EF_surf]).
+% Geometry and wavelength can be optionally log-transformed before standardisation,
+% while near-field targets are stored as log10(1 + targets).
 %
 % Parameters:
 %   Holdout         (default 0.2) - fraction reserved for validation+test
 %   ValSplit        (default 0.5) - validation fraction within holdout
 %   Shuffle         (default true) - shuffle entries before splitting
 %   RatioLimit      (default []) - optional [min max] allowed for r./p
-%   TargetFields    (default all) - cell array of metric field names
+%   TargetFields    (default ["Absorptance","M_vol","M_surf","EF_vol","EF_surf"])
 %   FeatureSchema   (default "v2_physics") - "v2_physics" | "v1_legacy"
 %   SplitMode       (default "geometry") - "geometry" keeps every wavelength
 %                   of a (P, r) pair in one split; "row" is the legacy
@@ -20,12 +20,6 @@ function dataset = prepare_training_dataset(allData, ri, options)
 %   IncludeVerticalGap (default false) - v2 only: add h_gap/lambda feature
 %   GapHeightUm     (default 0.005) - v2 only: vertical gap height [µm]
 %   Seed            (default 0) - RNG seed for the split
-%
-% v2_physics schema:
-%   X stores the 5 raw inputs [p, r, lambda, n, k] (µm); dataset.normalize
-%   maps them to the physics feature set (buildPhysicsFeatures) and z-scores
-%   with train-split statistics. Targets are Z = log1p(Y), then z-scored per
-%   channel with train-split statistics.
 
 arguments
     allData struct {mustBeAllDataStruct(allData)}
@@ -70,31 +64,42 @@ featureNames = {'p_um','r_um','lambda_um','n','k'};
 if opts.IncludeRatios
     featureNames = [featureNames, {'p_over_lambda','r_over_lambda','p_over_r'}];
 end
-allTargetFieldOrder = {'Absorptance','M_vol','M_surf','EF_vol','EF_surf'};
+supportedTargets = {'EE_V','EE_S','EF_max','Abs','ECC', ...
+                    'Absorptance','M_vol','M_surf','EF_vol','EF_surf', ...
+                    'M2_vol','M2_surf','E_vol','E_surf','intW_vol','intW_t'};
 
 targetFields = opts.TargetFields(:)';
-for tf = targetFields
-    if ~ismember(tf{1}, allTargetFieldOrder)
-        error('prepare_training_dataset:UnknownTarget', 'Unsupported target field: %s', tf{1});
+numTargets = numel(targetFields);
+for k = 1:numTargets
+    tfName = targetFields{k};
+    if ~ismember(tfName, supportedTargets) && ~isfield(allData, tfName)
+        error('prepare_training_dataset:UnknownTarget', 'Unsupported target field: %s', tfName);
     end
 end
 
 targetNames = targetFields;
-% Target-specific log transform: near-field and intensity metrics use log10(1+y),
-% while bounded energy ratios (e.g. Absorptance) remain on their linear physical scale.
-logFieldNames = ["EF_vol", "EF_surf", "M_vol", "M_surf", "intW_vol", "intW_t"];
+% Target-specific log transform: near-field and Enhancement Efficacy/Factor metrics use log10(1+y),
+% while bounded energy ratios (e.g. Abs / Absorptance) remain on their linear physical scale.
+logFieldNames = ["EE_V", "EE_S", "EF_max", "EF_vol", "EF_surf", ...
+                 "M_vol", "M_surf", "M2_vol", "M2_surf", "intW_vol", "intW_t"];
 if islogical(opts.TargetLogTransform) && isscalar(opts.TargetLogTransform) && opts.TargetLogTransform
     targetLogMask = ismember(string(targetFields), logFieldNames);
 elseif islogical(opts.TargetLogTransform) && isscalar(opts.TargetLogTransform) && ~opts.TargetLogTransform
-    targetLogMask = false(1, numel(targetFields));
+    targetLogMask = false(1, numTargets);
 else
     targetLogMask = logical(opts.TargetLogTransform);
 end
-requiredFields = [{'lambda'}, targetFields];
-for f = requiredFields
-    if ~isfield(allData, f{1})
-        error('prepare_training_dataset:MissingField', 'allData missing field %s', f{1});
+
+if ~isfield(allData, 'lambda')
+    error('prepare_training_dataset:MissingField', 'allData missing field lambda');
+end
+resolvedDataFields = cell(1, numTargets);
+for k = 1:numTargets
+    resolvedField = resolveTargetFieldInAllData(allData, targetFields{k});
+    if isempty(resolvedField)
+        error('prepare_training_dataset:MissingField', 'allData missing field %s', targetFields{k});
     end
+    resolvedDataFields{k} = resolvedField;
 end
 
 numRows = structRowCount(allData);
@@ -114,8 +119,7 @@ rVals = getColumn(allData, 'radius');
 
 fprintf(' average p (raw): %.6e , r (raw): %.6e \n', mean(pVals), mean(rVals));
 
-% Convert nanometers to µm (input data from COMSOL is in meters)
-% nanometers -> micrometers: multiply by 1e-3
+% Convert nanometers to µm (nanometers -> micrometers: multiply by 1e-3)
 pVals = double(pVals(:)) * 1e-3;
 rVals = double(rVals(:)) * 1e-3;
 
@@ -127,7 +131,6 @@ if any(pVals <= 0) || any(rVals <= 0)
         'Found %d non-positive period values and %d non-positive radius values. These will be skipped.', ...
         invalidP, invalidR);
     
-    % Additional diagnostics
     if invalidP > 0
         pMin = min(pVals);
         pMax = max(pVals);
@@ -153,67 +156,40 @@ end
 fprintf('  Valid geometries: %d/%d (filtered %d rows with non-positive p or r)\n', ...
     numValidGeometries, numRows, numRows - numValidGeometries);
 
-% Extract spectral data
+% Extract spectral data dynamically for all requested targetFields
 lambdaData = allData.lambda;  % [N × L] array
-absorptanceData = getColumn(allData, 'Absorptance');
-mVolData = getColumn(allData, 'M_vol');
-mSurfData = getColumn(allData, 'M_surf');
-efVolData = getColumn(allData, 'EF_vol');
-efSurfData = getColumn(allData, 'EF_surf');
-
-% Ensure all have [N × L] shape; pad if needed
 maxLambdaWidth = size(lambdaData, 2);
 numRowsExpected = size(lambdaData, 1);
-absorptanceData = padSpectra(absorptanceData, maxLambdaWidth, numRowsExpected);
-mVolData = padSpectra(mVolData, maxLambdaWidth, numRowsExpected);
-mSurfData = padSpectra(mSurfData, maxLambdaWidth, numRowsExpected);
-efVolData = padSpectra(efVolData, maxLambdaWidth, numRowsExpected);
-efSurfData = padSpectra(efSurfData, maxLambdaWidth, numRowsExpected);
 
-% Build full metric matrix [N × L × 5]
-metricStack = cat(3, absorptanceData, mVolData, mSurfData, efVolData, efSurfData);
+metricStack = nan(numRowsExpected, maxLambdaWidth, numTargets);
+for k = 1:numTargets
+    rawTargetData = getColumn(allData, resolvedDataFields{k});
+    paddedTargetData = padSpectra(rawTargetData, maxLambdaWidth, numRowsExpected);
+    metricStack(:, :, k) = paddedTargetData;
 
-% Data QA: absorptance is stored in percent; values above 100 % are unphysical.
-if ismember('Absorptance', targetFields)
-    absOver = any(absorptanceData > 100, 2);
-    if any(absOver)
-        warning('prepare_training_dataset:AbsorptanceAbove100', ...
-            ['%d of %d geometries have Absorptance > 100 %% (max %.1f %%). ', ...
-             'These are unphysical and are kept in training; check the COMSOL import.'], ...
-            nnz(absOver), numRows, max(absorptanceData(:), [], 'omitnan'));
+    % Data QA: absorptance is stored in percent; values above 100 % are unphysical.
+    if any(strcmpi(targetFields{k}, {'Abs', 'Absorptance'}))
+        absOver = any(paddedTargetData > 100, 2);
+        if any(absOver)
+            warning('prepare_training_dataset:AbsorptanceAbove100', ...
+                ['%d of %d geometries have %s > 100 %% (max %.1f %%). ', ...
+                 'These are unphysical and are kept in training; check the COMSOL import.'], ...
+                nnz(absOver), numRows, targetFields{k}, max(paddedTargetData(:), [], 'omitnan'));
+        end
     end
 end
 
 % --- P3 Optimization: Parallel batch RI lookups ---
-% Collect all unique wavelengths once to enable vectorized RI lookup
 fprintf('  Building wavelength lookup cache (P3 parallel RI optimization)...\n');
-allWavelengths = double(lambdaData(:));  % Flatten all wavelengths
-allWavelengths(isnan(allWavelengths)) = [];  % Remove NaNs
-uniqueLambdaMicrometers = unique(allWavelengths * 1e-3);  % Convert nm to µm
+allWavelengths = double(lambdaData(:));
+allWavelengths(isnan(allWavelengths)) = [];
+uniqueLambdaMicrometers = unique(allWavelengths * 1e-3);
 nUniqueLambdas = numel(uniqueLambdaMicrometers);
 
-% Perform batch RI lookup for all unique wavelengths at once
-% This leverages griddedInterpolant's vectorized operation
-% evalRefractiveIndex accepts µm queries regardless of the RI grid unit.
 [nBatch, kBatch] = evalRefractiveIndex(ri, uniqueLambdaMicrometers);
 nBatch = double(nBatch(:));
 kBatch = double(kBatch(:));
 
-% Create lookup table [N × K] for fast per-wavelength RI access
-% Row: geometry index, Col: wavelength index
-riLookupN = zeros(numRows, nUniqueLambdas);
-riLookupK = zeros(numRows, nUniqueLambdas);
-for idx = 1:numRows
-    lambdaVecMicrometers = double(lambdaData(idx, :)) * 1e-3;
-    for j = 1:nUniqueLambdas
-        % Find matching wavelength in this row
-        matchIdx = find(abs(lambdaVecMicrometers - uniqueLambdaMicrometers(j)) < 1e-9, 1);
-        if ~isempty(matchIdx)
-            riLookupN(idx, j) = nBatch(j);
-            riLookupK(idx, j) = kBatch(j);
-        end
-    end
-end
 fprintf('    ✓ Wavelength cache built: %d unique wavelengths\n', nUniqueLambdas);
 
 % Process each row (geometry/sample) with cached RI values
@@ -226,18 +202,13 @@ for idx = 1:numRows
     end
     
     % Find valid wavelengths
-    validMask = ~isnan(lambdaVec) & (lambdaVec > 0);  % Also check for non-positive wavelengths
+    validMask = ~isnan(lambdaVec) & (lambdaVec > 0);
     
     % Check all target metrics are valid at these wavelengths
-    metricsAtRow = squeeze(metricStack(idx, :, :));  % [L × 5]
-    for tf = targetFields
-        tfIdx = find(strcmp(allTargetFieldOrder, tf{1}), 1);
-        if ~isempty(tfIdx)
-            metricVec = metricsAtRow(:, tfIdx);
-            % Ensure metricVec is same shape as validMask (row vector)
-            metricVec = reshape(metricVec, size(validMask));
-            validMask = validMask & ~isnan(metricVec);
-        end
+    metricsAtRow = reshape(metricStack(idx, :, :), [maxLambdaWidth, numTargets]);  % [L × numTargets]
+    for k = 1:numTargets
+        metricVec = reshape(metricsAtRow(:, k), size(validMask));
+        validMask = validMask & ~isnan(metricVec);
     end
     
     % Skip if no valid wavelengths remain
@@ -248,51 +219,42 @@ for idx = 1:numRows
     % Extract valid data
     lambdaCol = lambdaVec(validMask)' * 1e-3;  % Convert nm to µm, column vector
     
-    % Ensure lambda values are positive (sanity check after unit conversion)
     if any(lambdaCol <= 0)
-        continue;  % Skip this row if any wavelength became non-positive after conversion
+        continue;
     end
     
     nSamples = numel(lambdaCol);
     
-    % Expand geometry to match wavelength count
     p_current = pVals(idx);
     r_current = rVals(idx);
     
-    % Double-check that geometry is still positive (should be guaranteed by validGeometryMask)
     if p_current <= 0 || r_current <= 0
-        continue;  % Skip this row if geometry became non-positive
+        continue;
     end
     
     pCol = repmat(p_current, nSamples, 1);
     rCol = repmat(r_current, nSamples, 1);
     
     % Look up refractive index from cached batch results
-    % Use arrayfun for fully vectorized lookup mapping
     nVals = arrayfun(@(lambda) nBatch(findNearest(uniqueLambdaMicrometers, lambda)), lambdaCol);
     kVals = arrayfun(@(lambda) kBatch(findNearest(uniqueLambdaMicrometers, lambda)), lambdaCol);
     nVals = double(nVals(:));
     kVals = double(kVals(:));
     
     % Extract target metrics at valid wavelengths
-    metricsAtRowValid = metricsAtRow(validMask, :);  % [nSamples × 5]
-    selectedIdx = cellfun(@(name) find(strcmp(allTargetFieldOrder, name), 1, 'first'), targetFields);
-    targetMatrix = metricsAtRowValid(:, selectedIdx);
+    targetMatrix = metricsAtRow(validMask, :);  % [nSamples × numTargets]
     targetMatrixRaw = targetMatrix;
     
     % Apply log transformation to specified targets (using decimal log: log10(1 + y))
     if any(targetLogMask)
         logInput = targetMatrix(:, targetLogMask);
         
-        % Enhancement and intensity metrics are physically non-negative
         if any(logInput(:) < 0)
             logInput = max(logInput, 0);
         end
         
-        % Apply decimal log10(1 + y) transformation
         targetMatrix(:, targetLogMask) = log10(1 + logInput);
         
-        % Validate no -Inf or NaN after transformation
         transformedValid = targetMatrix(:, targetLogMask);
         if any(~isfinite(transformedValid(:)))
             infMask = isinf(transformedValid);
@@ -304,8 +266,6 @@ for idx = 1:numRows
         end
     end
     
-    % Assemble feature matrix with RAW values (not log-transformed)
-    % Log transform will be applied only in normalizeFeatures during training/validation
     if opts.IncludeRatios
         ratio_PL = pCol ./ lambdaCol;
         ratio_RL = rCol ./ lambdaCol;
@@ -332,7 +292,6 @@ if size(X,1) ~= size(Y,1)
 end
 
 invalidMask = ~all(isfinite([X, Y]), 2);
-initialCount = size(X, 1);
 if any(invalidMask)
     nanInX = sum(any(isnan(X), 2));
     infInX = sum(any(isinf(X), 2));
@@ -342,7 +301,6 @@ if any(invalidMask)
     fprintf('  Found non-finite values: %d NaN in X, %d Inf in X, %d NaN in Y, %d Inf in Y\n', ...
         nanInX, infInX, nanInY, infInY);
     
-    % Show which target columns have issues
     if nanInY > 0 || infInY > 0
         for col = 1:size(Y, 2)
             colInvalid = sum(~isfinite(Y(:, col)));
@@ -364,7 +322,6 @@ if any(invalidMask)
     fprintf('  Removed %d rows with NaN/Inf values\n', sum(invalidMask));
 end
 
-% Additional safety check: ensure geometric features are positive when required
 needsPositiveGeometry = isV2 || opts.FeatureLogTransform || opts.IncludeRatios;
 if needsPositiveGeometry
     geomMask = [true, true, true, false, false];
@@ -408,9 +365,6 @@ end
 
 switch opts.SplitMode
     case "geometry"
-        % Group by unique (P, r): every wavelength of a geometry stays in
-        % exactly one split, so test metrics measure generalisation to
-        % unseen nanostructures rather than spectral interpolation.
         geomKey = round(X(:, 1:2) * 1e6);   % µm -> pm integer key
         [~, ~, geomId] = unique(geomKey, 'rows');
         nGeom = max(geomId);
@@ -479,7 +433,6 @@ YTrainRaw = YRaw(trainIdx, :);
 YValidationRaw = YRaw(valIdx, :);
 YTestRaw = YRaw(testIdx, :);
 
-% DEBUG: Check what's actually in the dataset
 fprintf('\n=== Dataset Feature Ranges (before normalization) ===\n');
 fprintf('XTrain:       p=[%.6e, %.6e], r=[%.6e, %.6e], lambda=[%.6e, %.6e]\n', ...
     min(XTrain(:,1)), max(XTrain(:,1)), min(XTrain(:,2)), max(XTrain(:,2)), ...
@@ -496,11 +449,8 @@ fprintf('Are all positive? Train:%s, Val:%s, Test:%s\n', ...
     iif(all(XTest(:,1:3) > 0, 'all'), 'YES', 'NO'));
 fprintf('\n');
 
-% Features are already in good scale (0.1-1 µm)
-% Store as RAW values; log transform is applied in normalizeFeatures when enabled
-trainRaw = XTrain;  % Keep raw values
-featureCenter = zeros(1, size(XTrain, 2));  % No centering
-featureScale = ones(1, size(XTrain, 2));    % No scaling
+featureCenter = zeros(1, size(XTrain, 2));
+featureScale = ones(1, size(XTrain, 2));
 
 scale = struct();
 scale.featureMean = featureCenter;
@@ -548,7 +498,6 @@ dataset.testIdx = testIdx;
 dataset.splitMode = opts.SplitMode;
 dataset.featureSchemaName = opts.FeatureSchema;
 
-% Add preprocessing flags for model metadata
 dataset.FeatureLogTransform = opts.FeatureLogTransform;
 dataset.IncludeRatios = opts.IncludeRatios;
 dataset.TargetLogTransform = any(targetLogMask);
@@ -559,7 +508,35 @@ if isV2
 end
 end
 
-function dataset = localApplyPhysicsSchema(dataset, opts, targetLogActive)
+function resolved = resolveTargetFieldInAllData(allData, tfName)
+resolved = '';
+if isfield(allData, tfName)
+    resolved = tfName;
+    return;
+end
+switch tfName
+    case 'EE_V'
+        if isfield(allData, 'EF_vol'), resolved = 'EF_vol'; end
+    case 'EF_vol'
+        if isfield(allData, 'EE_V'), resolved = 'EE_V'; end
+    case 'EE_S'
+        if isfield(allData, 'EF_surf'), resolved = 'EF_surf'; end
+    case 'EF_surf'
+        if isfield(allData, 'EE_S'), resolved = 'EE_S'; end
+    case 'Abs'
+        if isfield(allData, 'Absorptance'), resolved = 'Absorptance'; end
+    case 'Absorptance'
+        if isfield(allData, 'Abs'), resolved = 'Abs'; end
+    case 'EF_max'
+        if isfield(allData, 'M2_max'), resolved = 'M2_max'; end
+    case 'ECC'
+        if isfield(allData, 'ECCheck'), resolved = 'ECCheck'; end
+    case 'ECCheck'
+        if isfield(allData, 'ECC'), resolved = 'ECC'; end
+end
+end
+
+function dataset = localApplyPhysicsSchema(dataset, opts, targetLogActive) %#ok<INUSD>
 % v2: physics features + z-scoring (features and targets), train-split stats only.
 schema = struct();
 schema.Name = "v2_physics";
@@ -574,14 +551,13 @@ schema.FeatureNames = names;
 schema.FeatureMean = mu;
 schema.FeatureStd = sd;
 
-% Targets: log10-compressed for near-field factors, linear for bounded ratios; z-score each channel.
 muZ = mean(dataset.YTrain, 1);
 sdZ = std(dataset.YTrain, 0, 1);
 sdZ(~isfinite(sdZ) | sdZ < 1e-12) = 1;
 tt = struct('Name', "target_specific_zscore", ...
             'LogMask', dataset.targetLogMask, ...
             'LogBase', 10, ...
-            'Log1p', dataset.targetLogMask, ...  % backward compat
+            'Log1p', dataset.targetLogMask, ...
             'Mean', muZ, ...
             'Std', sdZ);
 dataset.YTrain      = (dataset.YTrain - muZ) ./ sdZ;
@@ -600,7 +576,7 @@ dataset.denormalize = @(Z) denormalizeModelTargets(Z, dataset.targetLogMask, muZ
 dataset.transformFeatures = @(Xraw) buildPhysicsFeatures(Xraw, schema);
 dataset.inputCenter = mu;
 dataset.inputScale = sd;
-dataset.featureLogMask = false(1, numel(names));   % logs are inside buildPhysicsFeatures
+dataset.featureLogMask = false(1, numel(names));
 dataset.scale.featureMean = mu;
 dataset.scale.featureStd = sd;
 dataset.scale.featureTransform = 'v2_physics_zscore';
@@ -612,27 +588,12 @@ dataset.IncludeRatios = false;
 dataset.InputSize = numel(names);
 end
 
-function Xnorm = normalizeFeatures(Xraw, center, scale, featureLogMask)
-% Optional log transformation; features are already in good scale (0.1-1 µm)
-% No centering or scaling needed to preserve actual physical values
+function Xnorm = normalizeFeatures(Xraw, center, scale, featureLogMask) %#ok<INUSL>
 if isempty(Xraw)
     Xnorm = Xraw;
     return;
 end
-
-% Apply log transform only when enabled
 Xnorm = transformFeatures(Xraw, featureLogMask);
-end
-
-function Yraw = denormalizeTargetsLocal(Ytrans, logMask)
-Yraw = Ytrans;
-if isempty(Yraw)
-    return;
-end
-if any(logMask)
-    idx = find(logMask);
-    Yraw(:, idx) = exp(Ytrans(:, idx)) - 1;
-end
 end
 
 function Xtrans = transformFeatures(Xraw, featureLogMask)
@@ -646,10 +607,7 @@ if ~any(logMask)
 end
 geomCols = Xtrans(:, logMask);
 
-% Check INPUT values are positive (required for log transform)
-% The OUTPUT can be negative - that's fine! (log of 0.1-1 µm = -2.3 to 0)
 if any(geomCols(:) <= 0)
-    % Find which rows and columns have non-positive input values
     [badRows, badCols] = find(geomCols <= 0);
     colNames = {'p_um', 'r_um', 'lambda_um'};
     if ~isempty(badRows)
@@ -675,12 +633,10 @@ if any(geomCols(:) <= 0)
         '%sInput geometric features must be positive for log transform.', errorMsg);
 end
 
-% Apply log transform - output will be negative for 0.1-1 µm range, which is OK
 Xtrans(:, logMask) = log(geomCols);
 end
 
 function dataPadded = padSpectra(data, targetWidth, targetRows)
-% Pad spectral data to target width and row count with NaN
 if nargin < 3
     targetRows = size(data, 1);
 end
@@ -708,43 +664,7 @@ else
 end
 end
 
-function row = getrow(entry, fieldName)
-if isfield(entry, fieldName)
-    fieldVal = entry.(fieldName);
-    if isnumeric(fieldVal) || islogical(fieldVal)
-        row = double(fieldVal(:)');
-    else
-        row = nan(1, numel(fieldVal));
-    end
-else
-    row = [];
-end
-end
-
-function entry = extractSoARow(S, idx)
-entry = struct();
-flds = fieldnames(S);
-for k = 1:numel(flds)
-    fn = flds{k};
-    val = S.(fn);
-    if isnumeric(val) || islogical(val) || isstring(val)
-        if size(val,1) >= idx
-            subs = repmat({':'}, 1, ndims(val));
-            subs{1} = idx;
-            slice = squeeze(val(subs{:}));
-            entry.(fn) = slice;
-        end
-    elseif iscell(val)
-        if size(val,1) >= idx
-            entry.(fn) = val(idx, :);
-        end
-    end
-end
-end
-
-
 function mustBeAllDataStruct(allData)
-% Validate allData is a struct with expected fields
 if ~isstruct(allData)
     throwAsCaller(MException('prepare_training_dataset:InvalidAllData', ...
         'allData must be a struct'));
@@ -756,14 +676,10 @@ end
 end
 
 function idx = findNearest(searchArray, value)
-% findNearest  Find index of nearest value in array.
-% idx = findNearest(searchArray, value) returns the index of the element
-% in searchArray that is closest to value in Euclidean distance.
 [~, idx] = min(abs(searchArray - value));
 end
 
 function mustBeRiStruct(ri)
-% Validate refractive index struct
 if ~isstruct(ri)
     throwAsCaller(MException('prepare_training_dataset:InvalidRi', ...
         'ri must be a struct with nFunc and kFunc fields'));

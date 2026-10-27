@@ -83,7 +83,7 @@ function results = runLocalizationWorkflow(cfg, reporter)
 
     % For weighted variant: load default analyte spectrum once
     analyteSpec = struct();
-    if metricVariant == "weighted"
+    if metricVariant == "weighted" || metricVariant == "analyte"
         try
             analyteSpec = getDefaultAnalyteSpectrum();
         catch ae
@@ -158,7 +158,7 @@ function results = runLocalizationWorkflow(cfg, reporter)
         % For interpolation mode: generate dense predictions via interpolant
         reporter.start("GeneratePredictions", "Generating dense predictions via interpolation...");
         interpPredArgs = {"LaserWavelength", cfg.lambdaLaser, "RamanWindow", cfg.stokesShiftLimits};
-        if metricVariant == "weighted" && ~isempty(fieldnames(analyteSpec))
+        if metricVariant == "weighted" || metricVariant == "analyte" && ~isempty(fieldnames(analyteSpec))
             interpPredArgs = [interpPredArgs, {"AnalyteSpectrum", analyteSpec}];
         end
         allData = predictor.predictGrid(gp.pSamples, gp.rSamples, gp.lambdaSamples, interpPredArgs{:});
@@ -232,7 +232,7 @@ function results = runLocalizationWorkflow(cfg, reporter)
 
     % Compute analyte weights aligned to lambdaSamples for weighted-avg objective
     analyteWeights = [];
-    if metricVariant == "weighted" && ~isempty(fieldnames(analyteSpec)) && ~isempty(lambdaSamples)
+    if metricVariant == "weighted" || metricVariant == "analyte" && ~isempty(fieldnames(analyteSpec)) && ~isempty(lambdaSamples)
         lambdaLaser_um = cfg.lambdaLaser * 1e-3;   % nm → µm
         shiftVec_cm = max(0, 1e4/lambdaLaser_um - 1e4./lambdaSamples(:));  % cm⁻¹
         wRaw = interp1(double(analyteSpec.shift_cm(:)), double(analyteSpec.intensity(:)), ...
@@ -291,10 +291,12 @@ function results = runLocalizationWorkflow(cfg, reporter)
 
     for metricIdx = 1:numMetrics
         primaryMetric = cfg.metricsToLocate{metricIdx};
-        if metricVariant == "weighted"
+        if metricVariant == "weighted" || metricVariant == "analyte"
             metricFieldVariant = "analyte";
         elseif metricVariant == "laser"
             metricFieldVariant = "laser";
+        elseif metricVariant == "broad" || metricVariant == "broadband"
+            metricFieldVariant = "broad";
         else
             metricFieldVariant = "avg";
         end

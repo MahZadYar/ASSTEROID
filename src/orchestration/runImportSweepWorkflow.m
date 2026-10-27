@@ -432,7 +432,7 @@ function entry = processGeometryGroup(idx, cols, keyValues, ...
         inputNames, spectralName, metricNames, cfg, analyteSpectrum, c)
     %processGeometryGroup Process a single geometry group (dynamic schema).
     %   Groups rows by input parameter values, sorts by spectral variable,
-    %   and computes derived metrics.
+    %   and computes derived metrics (_laser, _broad, _analyte).
 
     entry = struct();
 
@@ -451,18 +451,17 @@ function entry = processGeometryGroup(idx, cols, keyValues, ...
         ord = ord(uniqueIdx);
     else
         spectralSorted = [];
+        uniqueIdx = [];
         ord = (1:nnz(idx))';
-        if islogical(idx)
-            linearIdx = find(idx);
-        else
-            linearIdx = idx;
-        end
     end
 
     % Store spectral variable
     if ~isempty(spectralName)
         entry.(spectralName) = spectralSorted(:)';
     end
+
+    % Geometric loading capacity factors (stored as scalar per geometry)
+    loadingFactorNames = ["kappa_V", "kappa_S", "VolCorr", "SurfCorr", "V_corr", "S_corr"];
 
     % Store all metric columns (sorted by spectral variable)
     for k = 1:numel(metricNames)
@@ -473,7 +472,11 @@ function entry = processGeometryGroup(idx, cols, keyValues, ...
             if ~isempty(uniqueIdx)
                 sortedVals = sortedVals(1:numel(spectralSorted));
             end
-            entry.(mn) = sortedVals(:)';
+            if any(strcmpi(mn, loadingFactorNames)) && ~isempty(sortedVals)
+                entry.(mn) = sortedVals(1);
+            else
+                entry.(mn) = sortedVals(:)';
+            end
         end
     end
 
@@ -521,6 +524,7 @@ function entry = processGeometryGroup(idx, cols, keyValues, ...
         for k = 1:numel(metricNames)
             mn = metricNames{k};
             if ~isfield(entry, mn), continue; end
+            if any(strcmpi(mn, loadingFactorNames)), continue; end
 
             spectralData = entry.(mn);
             if numel(spectralData) ~= numel(spectralSorted), continue; end
@@ -531,14 +535,19 @@ function entry = processGeometryGroup(idx, cols, keyValues, ...
                 entry.(laserFieldName) = spectralData(laserIdx);
             end
 
-            % _avg variant: spectral average over Raman window
-            avgFieldName = mn + "_avg";
-            if isVariantEnabled(mv, avgFieldName) && nnz(stokesWindowMask) >= 2 && shiftRange > 0
-                entry.(avgFieldName) = computeSpectralAverage( ...
+            % _broad variant (and _avg alias): spectral average over Raman window
+            broadFieldName = mn + "_broad";
+            avgFieldName   = mn + "_avg";
+            broadEnabled = isBroadVariantEnabled(mv, mn);
+            if broadEnabled && nnz(stokesWindowMask) >= 2 && shiftRange > 0
+                broadVal = computeSpectralAverage( ...
                     RamanShift_cm, stokesWindowMask, shiftMin, shiftMax, ...
                     interpSamples, spectralData, cfg.spectralInterpMethod);
-            elseif isVariantEnabled(mv, avgFieldName)
-                entry.(avgFieldName) = spectralData(laserIdx);
+                entry.(broadFieldName) = broadVal;
+                entry.(avgFieldName)   = broadVal;
+            elseif broadEnabled
+                entry.(broadFieldName) = spectralData(laserIdx);
+                entry.(avgFieldName)   = spectralData(laserIdx);
             end
 
             % _analyte variant: analyte-weighted average
@@ -625,6 +634,18 @@ function enabled = isVariantEnabled(metricVariants, key)
     key = char(key);
     if isfield(metricVariants, key)
         enabled = logical(metricVariants.(key));
+    else
+        enabled = true;
+    end
+end
+
+function enabled = isBroadVariantEnabled(metricVariants, mn)
+    bKey = char(mn + "_broad");
+    aKey = char(mn + "_avg");
+    if isfield(metricVariants, bKey)
+        enabled = logical(metricVariants.(bKey));
+    elseif isfield(metricVariants, aKey)
+        enabled = logical(metricVariants.(aKey));
     else
         enabled = true;
     end

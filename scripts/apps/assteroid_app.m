@@ -4412,10 +4412,12 @@ function previewOptimizeMetric(src, d, fig, ax)
         end
 
         % Ensure derived metric field is present in allData for heatmap & diagnostics
-        if metricVariant == "weighted"
+        if metricVariant == "weighted" || metricVariant == "analyte"
             variantForField = "analyte";
         elseif metricVariant == "laser"
             variantForField = "laser";
+        elseif metricVariant == "broad" || metricVariant == "broadband"
+            variantForField = "broad";
         else
             variantForField = "avg";
         end
@@ -4430,7 +4432,7 @@ function previewOptimizeMetric(src, d, fig, ax)
                     lIdx = 1;
                 end
                 allData.(diagField) = specMat(:, lIdx);
-            elseif variantForField == "avg"
+            elseif variantForField == "avg" || variantForField == "broad"
                 allData.(diagField) = mean(specMat, 2, "omitnan");
             elseif variantForField == "analyte"
                 analyteSpec = [];
@@ -4518,10 +4520,12 @@ function previewOptimizeMetric(src, d, fig, ax)
             numel(gp.pSamples), numel(gp.rSamples), numel(gp.lambdaSamples), spatialRes, stokesRes, lambdaLaser));
 
         % Send diagnostic info to HTML panel
-        if metricVariant == "weighted"
+        if metricVariant == "weighted" || metricVariant == "analyte"
             variantForField = "analyte";
         elseif metricVariant == "laser"
             variantForField = "laser";
+        elseif metricVariant == "broad" || metricVariant == "broadband"
+            variantForField = "broad";
         else
             variantForField = "avg";
         end
@@ -4761,8 +4765,10 @@ function exportOptimizeResults(src, d, fig)
     % Build full metric name for export
     if metricVariant == "laser"
         metricName = baseMetric + "_laser";
-    elseif metricVariant == "weighted"
+    elseif metricVariant == "weighted" || metricVariant == "analyte"
         metricName = baseMetric + "_analyte";
+    elseif metricVariant == "broad" || metricVariant == "broadband"
+        metricName = baseMetric + "_broad";
     else
         metricName = baseMetric + "_avg";
     end
@@ -5396,8 +5402,10 @@ function fieldName = resolveMetricField(baseMetric, variant, allData)
     switch variant
         case "laser"
             varArg = "laser";
-        case "weighted"
+        case {"weighted", "analyte"}
             varArg = "analyte";
+        case {"broad", "broadband"}
+            varArg = "broad";
         case "avg"
             varArg = "avg";
         otherwise
@@ -5449,7 +5457,7 @@ function baseTargets = deriveBaseTargetsFromSelection(selectedFields, simData)
 %   This strips the derived suffixes to get ["EF_vol","Absorptance","EF_surf"]
 %   and cross-checks against actual [N x L] fields in simData.
 
-    derivedSuffixes = ["_laser", "_avg", "_analyte", "_approx"];
+    derivedSuffixes = ["_laser", "_broad", "_avg", "_analyte", "_approx"];
     bases = string.empty;
 
     for i = 1:numel(selectedFields)
@@ -5631,7 +5639,7 @@ function [spec, scal] = localClassifyVisualizeFields(S, n)
             spec(end+1) = f; %#ok<AGROW>
         end
     end
-    isVariant = endsWith(scal, ["_laser", "_avg", "_analyte"]) | startsWith(scal, ["BEE_", "AEE_"]);
+    isVariant = endsWith(scal, ["_laser", "_broad", "_avg", "_analyte"]) | startsWith(scal, ["BEE_", "AEE_"]);
     scal = [scal(isVariant), scal(~isVariant)];
 end
 
@@ -6108,9 +6116,9 @@ end
 function mf = detectMetricFields(allData)
     exc = ["period","radius","lambda","lambda_nm","RamanShift", ...
            "LaserWl","lambda_exc_nm","RamanWindow","RamanWindowEffective", ...
-           "p","r","particle_r","f"];
+           "p","r","particle_r","f","kappa_V","kappa_S","VolCorr","SurfCorr","V_corr","S_corr"];
     flds = string(fieldnames(allData));
-    mf = flds(~contains(flds,"_avg") & ~ismember(flds,exc));
+    mf = flds(~endsWith(flds, ["_broad", "_avg", "_laser", "_analyte", "_approx"]) & ~ismember(flds,exc));
 end
 
 function loadCustomColormap(fig)

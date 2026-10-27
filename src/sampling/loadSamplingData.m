@@ -155,6 +155,7 @@ for pIdx = 1:numel(predFields)
     pVal = double(predictions.(pName));
     if ndims(pVal) == 3
         predData.(pName) = mean(pVal, 3, "omitnan");
+        predData.([pName, '_broad']) = predData.(pName)(:);
         predData.([pName, '_avg']) = predData.(pName)(:);
     elseif ismatrix(pVal) && size(pVal, 1) == numel(period)
         predData.(pName) = pVal;
@@ -348,19 +349,22 @@ for i = 1:numel(candidates)
     if isempty(c), continue; end
     
     altCandidates = { ...
+        [c, '_broad'], ...
         [c, '_avg'], ...
-        regexprep(c, '_(avg|laser|analyte|approx)$', ''), ...
+        regexprep(c, '_(broad|avg|laser|analyte|approx)$', ''), ...
         [c, '_laser'], ...
         [c, '_analyte'] ...
     };
-    if strcmpi(c, 'EF_vol') || strcmpi(c, 'EF_vol_avg')
-        altCandidates = [altCandidates, {'BEE_vol', 'bee_vol'}];
-    elseif strcmpi(c, 'EF_surf') || strcmpi(c, 'EF_surf_avg')
-        altCandidates = [altCandidates, {'BEE_surf', 'bee_surf'}];
+    if any(strcmpi(c, {'EE_V', 'EE_V_broad', 'EE_V_avg', 'EF_vol', 'EF_vol_broad', 'EF_vol_avg'}))
+        altCandidates = [altCandidates, {'EE_V_broad', 'EE_V_avg', 'EF_vol_broad', 'EF_vol_avg', 'EE_V', 'EF_vol', 'BEE_vol', 'bee_vol'}];
+    elseif any(strcmpi(c, {'EE_S', 'EE_S_broad', 'EE_S_avg', 'EF_surf', 'EF_surf_broad', 'EF_surf_avg'}))
+        altCandidates = [altCandidates, {'EE_S_broad', 'EE_S_avg', 'EF_surf_broad', 'EF_surf_avg', 'EE_S', 'EF_surf', 'BEE_surf', 'bee_surf'}];
+    elseif any(strcmpi(c, {'Abs', 'Abs_broad', 'Abs_avg', 'Absorptance', 'Absorptance_broad', 'Absorptance_avg'}))
+        altCandidates = [altCandidates, {'Abs_broad', 'Abs_avg', 'Absorptance_broad', 'Absorptance_avg', 'Abs_laser', 'Absorptance_laser', 'Abs', 'Absorptance'}];
     elseif strcmpi(c, 'BEE_vol')
-        altCandidates = [altCandidates, {'EF_vol_avg', 'EF_vol'}];
+        altCandidates = [altCandidates, {'EE_V_broad', 'EF_vol_avg', 'EE_V', 'EF_vol'}];
     elseif strcmpi(c, 'BEE_surf')
-        altCandidates = [altCandidates, {'EF_surf_avg', 'EF_surf'}];
+        altCandidates = [altCandidates, {'EE_S_broad', 'EF_surf_avg', 'EE_S', 'EF_surf'}];
     end
     
     for j = 1:numel(altCandidates)

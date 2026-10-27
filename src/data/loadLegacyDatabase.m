@@ -44,7 +44,7 @@ function db = loadLegacyDatabase(matFile, options)
 
     allData = normalizeGeometryFields(S.allData);
 
-    % Rename legacy metric fields to canonical suffix-based names
+    % Map legacy metric fields to canonical suffix-based names
     renameMap = struct( ...
         'BEE_vol', 'EF_vol_avg', ...
         'BEE_surf', 'EF_surf_avg', ...
@@ -62,6 +62,33 @@ function db = loadLegacyDatabase(matFile, options)
         if isfield(allData, oldName) && ~isfield(allData, newName)
             allData.(newName) = allData.(oldName);
             allData = rmfield(allData, oldName);
+        end
+    end
+
+    % Synchronize new canonical names (EE_V, EE_S, Abs, *_broad) while keeping
+    % legacy field names present for backward compatibility
+    aliasPairs = {
+        'EF_vol',             'EE_V';
+        'EF_surf',            'EE_S';
+        'Absorptance',        'Abs';
+        'ECCheck',            'ECC';
+        'EF_vol_laser',       'EE_V_laser';
+        'EF_surf_laser',      'EE_S_laser';
+        'Absorptance_laser',  'Abs_laser';
+        'EF_vol_avg',         'EE_V_broad';
+        'EF_surf_avg',        'EE_S_broad';
+        'Absorptance_avg',    'Abs_broad';
+        'EF_vol_analyte',     'EE_V_analyte';
+        'EF_surf_analyte',    'EE_S_analyte';
+        'Absorptance_analyte','Abs_analyte'
+    };
+    for i = 1:size(aliasPairs, 1)
+        src = aliasPairs{i, 1};
+        dst = aliasPairs{i, 2};
+        if isfield(allData, src) && ~isfield(allData, dst)
+            allData.(dst) = allData.(src);
+        elseif isfield(allData, dst) && ~isfield(allData, src)
+            allData.(src) = allData.(dst);
         end
     end
 

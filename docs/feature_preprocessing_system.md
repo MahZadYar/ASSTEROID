@@ -177,7 +177,7 @@ Saved in `.mat` file with:
 ```
 model
 ├── net                          [dlnetwork] trained network
-├── targetNames                  {cell} ["Absorptance", "EF_vol", "EF_surf"]
+├── targetNames                  {cell} ["Abs", "EE_V", "EE_S"]
 ├── normalize                    [function handle] z-score + log
 ├── denormalize                  [function handle] inverse
 ├── featureNames                 [string array] [8 x 1]
@@ -271,7 +271,7 @@ function cfg = trainingConfig(options)
     
     % Network architecture
     options.NumFeatures (1,1) double = 8                    % 5 base or 8 with ratios
-    options.NumTargets (1,1) double = 3                    % Absorptance, EF_vol, EF_surf
+    options.NumTargets (1,1) double = 3                    % Abs, EE_V, EE_S (legacy: Absorptance, EF_vol, EF_surf)
     options.HiddenLayerSize (1,1) double {mustBePositive} = 256
     
     % Training hyperparameters
@@ -540,7 +540,7 @@ Latest training run (8 features, 200 epochs):
   Train time: 44.7 seconds
   Final train loss: 1.3117
   Final val loss: 1.1473
-  Test RMSE: Absorptance=10.96, EF_vol=198.7, EF_surf=1787
+  Test RMSE: Abs=10.96, EE_V=198.7, EE_S=1787
   Features: 8 (5 base + 3 ratios with log transforms)
 ```
 
@@ -662,7 +662,7 @@ end
 
 ### Potential Enhancements
 
-1. **Variable Output Sizes:** Currently 3 targets (Absorptance, EF_vol, EF_surf). Could extend to include analyte-weighted variants.
+1. **Variable Output Sizes:** Currently 3 targets (Abs, EE_V, EE_S; legacy aliases Absorptance, EF_vol, EF_surf). Could extend to include analyte-weighted variants.
 
 2. **Custom Feature Engineering:** Allow users to specify custom ratio features beyond p/λ, r/λ, p/r.
 

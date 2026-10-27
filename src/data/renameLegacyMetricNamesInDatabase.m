@@ -7,19 +7,25 @@ function report = renameLegacyMetricNamesInDatabase(options)
 %   original file.
 %
 %   Canonical naming:
-%       <metric>_avg
-%       <metric>_laser
-%       <metric>_analyte
+%       Spectral base metrics: EE_V, EE_S, EF_max, Abs, ECC
+%       Geometric loading factors: kappa_V, kappa_S
+%       Derived scalar suffixes: <metric>_laser, <metric>_broad, <metric>_analyte
 %
 %   Legacy names handled:
-%       BEE_vol      -> EF_vol_avg
-%       BEE_surf     -> EF_surf_avg
-%       AEE_vol      -> EF_vol_analyte
-%       AEE_surf     -> EF_surf_analyte
-%       EF_vol_approx  -> EF_vol_laser
-%       EF_surf_approx -> EF_surf_laser
-%       Abs_laser    -> Absorptance_laser
-%       Abs_avg      -> Absorptance_avg
+%       EF_vol                     -> EE_V
+%       EF_surf                    -> EE_S
+%       Absorptance                -> Abs
+%       ECCheck                    -> ECC
+%       VolCorr, V_corr            -> kappa_V
+%       SurfCorr, S_corr           -> kappa_S
+%       BEE_vol, EF_vol_avg        -> EE_V_broad
+%       BEE_surf, EF_surf_avg      -> EE_S_broad
+%       AEE_vol, EF_vol_analyte    -> EE_V_analyte
+%       AEE_surf, EF_surf_analyte  -> EE_S_analyte
+%       EF_vol_approx, EF_vol_laser-> EE_V_laser
+%       EF_surf_approx, EF_surf_laser -> EE_S_laser
+%       Absorptance_laser          -> Abs_laser
+%       Abs_avg, Absorptance_avg   -> Abs_broad
 %
 %   Name-Value Arguments:
 %       InputFile   (required) path to source MAT file
@@ -290,24 +296,48 @@ end
 function mapped = mapLegacyFieldName(fieldName)
 f = string(fieldName);
 switch f
-    case "BEE_vol"
-        mapped = "EF_vol_avg";
-    case "BEE_surf"
-        mapped = "EF_surf_avg";
-    case "AEE_vol"
-        mapped = "EF_vol_analyte";
-    case "AEE_surf"
-        mapped = "EF_surf_analyte";
-    case "EF_vol_approx"
-        mapped = "EF_vol_laser";
-    case "EF_surf_approx"
-        mapped = "EF_surf_laser";
-    case "Abs_laser"
-        mapped = "Absorptance_laser";
-    case "Abs_avg"
-        mapped = "Absorptance_avg";
+    case {"EF_vol", "EF_vol_cell"}
+        mapped = "EE_V";
+    case {"EF_surf", "EF_surf_cell"}
+        mapped = "EE_S";
+    case {"BEE_vol", "EF_vol_avg", "EF_vol_broad"}
+        mapped = "EE_V_broad";
+    case {"BEE_surf", "EF_surf_avg", "EF_surf_broad"}
+        mapped = "EE_S_broad";
+    case {"AEE_vol", "EF_vol_analyte"}
+        mapped = "EE_V_analyte";
+    case {"AEE_surf", "EF_surf_analyte"}
+        mapped = "EE_S_analyte";
+    case {"EF_vol_approx", "EF_vol_laser"}
+        mapped = "EE_V_laser";
+    case {"EF_surf_approx", "EF_surf_laser"}
+        mapped = "EE_S_laser";
+    case {"Absorptance"}
+        mapped = "Abs";
+    case {"Abs_approx", "Absorptance_approx", "Absorptance_laser"}
+        mapped = "Abs_laser";
+    case {"Abs_avg", "Absorptance_avg", "Absorptance_broad"}
+        mapped = "Abs_broad";
+    case {"Absorptance_analyte"}
+        mapped = "Abs_analyte";
+    case {"EF_max_approx", "EF_laser_max"}
+        mapped = "EF_max_laser";
+    case {"EF_max_avg"}
+        mapped = "EF_max_broad";
+    case {"ECCheck"}
+        mapped = "ECC";
+    case {"VolCorr", "V_corr"}
+        mapped = "kappa_V";
+    case {"SurfCorr", "S_corr"}
+        mapped = "kappa_S";
     otherwise
-        mapped = f;
+        if endsWith(f, "_avg")
+            mapped = replace(f, "_avg", "_broad");
+        elseif endsWith(f, "_approx")
+            mapped = replace(f, "_approx", "_laser");
+        else
+            mapped = f;
+        end
 end
 end
 
@@ -317,6 +347,8 @@ mapped = mapLegacyFieldName(t);
 
 if endsWith(mapped, "_approx")
     mapped = replace(mapped, "_approx", "_laser");
+elseif endsWith(mapped, "_avg")
+    mapped = replace(mapped, "_avg", "_broad");
 end
 end
 

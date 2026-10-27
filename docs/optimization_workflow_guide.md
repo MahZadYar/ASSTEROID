@@ -61,7 +61,7 @@ flowchart TD
 
 Use this sequence for standard end-to-end optimization of a trained surrogate model:
 1. **Load Surrogate Model:** Ensure a validated ResNet model (`.mat`) and refractive index dispersion file are loaded.
-2. **Select Target Metric:** Choose from canonical metrics (`EF_vol`, `EF_surf`, `Absorptance`) and variants (`avg`, `laser`, or `analyte`).
+2. **Select Target Metric:** Choose from canonical metrics (`EE_V`, `EE_S`, `EF_max`, `Abs`; legacy aliases `EF_vol`, `EF_surf`, `Absorptance`) and variants (`broad` / `avg`, `laser`, or `analyte`).
 3. **Click `Preview Landscape`:** Generates and plots the dense 2D metric landscape across the specified $(P, r)$ domain.
 4. **Click `Detect Basins`:** Executes marker-controlled watershed segmentation with specified sensitivity input (default 0.1% dynamic range). Basins are delineated with colored boundaries and filled with 25% transparent colors matching seed markers. The seed table displays each basin's Area, Depth, Saddle elevation, and summit coordinates.
 5. **Click `Fine-Tune Seeds`:** Dispatches in-basin MultiStart `fmincon` from the active seeds. Converged optima are marked with distinct diamond symbols, optimization paths are drawn, and each basin's structural status (`peak`, `ridge`, etc.) is logged.
@@ -88,13 +88,13 @@ If two adjacent sub-basins represent the same broad physical resonance mode sepa
 
 ### Workflow D: Multi-Metric Modal Tracking with Persistent Basins (`db.Basins`)
 
-To evaluate trade-offs and build a comparative modal matrix (e.g. 10 modes $\times$ 7 optical metrics):
-1. **Define Master Territories:** On a foundational volumetric metric (e.g. `EF_vol_avg`), preview the landscape, detect basins, merge any over-segmented modes, and refine seeds.
+To evaluate trade-offs and build a comparative modal matrix (e.g. 10 modes $\times$ 8 optical metrics):
+1. **Define Master Territories:** On a foundational volumetric metric (e.g. `EE_V_broad`), preview the landscape, detect basins, merge any over-segmented modes, and refine seeds.
 2. **Save Basins to Project DB:** Click **Save Basins**. The full territorial polygons, raster labels, summit locations, and tags are permanently committed to `session.db.Basins`.
-3. **Switch Metric:** Change the metric selector to a secondary target (e.g. `EF_surf_avg`, `Absorptance_laser`, or `EF_vol_analyte`).
+3. **Switch Metric:** Change the metric selector to a secondary target (e.g. `EE_S_broad`, `Abs_laser`, `EF_max_laser`, `EE_S_laser`, `EE_V_laser`, `EE_S_analyte`, or `EE_V_analyte`).
 4. **Load Basins:** Click **Load Basins**. The exact physical modal boundaries and tags are restored over the new metric contour plot.
 5. **Fine-Tune On New Metric:** Click **Fine-Tune Seeds**. The optimizer automatically samples starting points from the top 50% of the *active metric's landscape* within each saved territory and converges to the mode's peak for that specific optical target.
-6. **Save to DB:** Click **Save to DB** under Optima. Repeat across all 7 metrics to build a complete modal catalog.
+6. **Save to DB:** Click **Save to DB** under Optima. Repeat across all 8 metrics to build a complete modal catalog.
 
 ### Workflow E: Model Hot-Reloading
 
@@ -118,8 +118,8 @@ cfg = localizeMaximaConfig( ...
     WorkDir = pwd, ...
     ModelFile = "models/sers_dnn_model.mat", ...
     RiCsvFile = "src/io/DefaultRefractiveIndices.dat", ...
-    Metric = "EF_vol", ...
-    MetricVariant = "avg", ...
+    Metric = "EE_V", ...
+    MetricVariant = "broad", ...
     PLimits = [500, 1400], ...
     RLimits = [50, 650], ...
     Resolution = 1.0, ...            % nm grid step

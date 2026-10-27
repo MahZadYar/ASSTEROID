@@ -82,64 +82,55 @@ end
     title(ax3, "Import Statistics");
     grid(ax3, "on");
 
-    %% 4. EF_vol_avg distribution
+    %% 4. EE_V_broad / EF_vol_avg distribution
     ax4 = nexttile(t);
-    if isfield(allData, "EF_vol_avg") || isfield(allData, "BEE_vol")
-        if isfield(allData, "EF_vol_avg")
-            ev = allData.EF_vol_avg(:);
-        else
-            ev = allData.BEE_vol(:);
-        end
+    evField = resolveDerivedMetricField("EE_V", "broad", allData);
+    if isfield(allData, evField)
+        ev = allData.(evField)(:);
         ev = ev(~isnan(ev) & ev > 0);
         if ~isempty(ev)
             histogram(ax4, log10(ev), 30, "FaceColor", [0.9 0.4 0.2]);
-            xlabel(ax4, "log_{10}(EF_{vol,avg})");
+            xlabel(ax4, "log_{10}(EE_{V,broad})");
             ylabel(ax4, "Count");
-            title(ax4, "EF_{vol} Average Distribution");
+            title(ax4, "EE_V Broadband Distribution");
             grid(ax4, "on");
         end
     end
 
-    %% 5. EF_vol heatmap (period × radius)
+    %% 5. EE_V_broad heatmap (period × radius)
     ax5 = nexttile(t);
-    if (isfield(allData, "EF_vol_avg") || isfield(allData, "BEE_vol")) && ...
-            isfield(allData, "period") && isfield(allData, "radius")
+    if isfield(allData, evField) && isfield(allData, "period") && isfield(allData, "radius")
         p = allData.period(:);
         r = allData.radius(:);
-        if isfield(allData, "EF_vol_avg")
-            ev = allData.EF_vol_avg(:);
-        else
-            ev = allData.BEE_vol(:);
-        end
+        ev = allData.(evField)(:);
         validMask = ~isnan(ev) & ev > 0;
         if nnz(validMask) > 2
             scatter(ax5, p(validMask), r(validMask), 36, log10(ev(validMask)), "filled");
             colorbar(ax5);
             xlabel(ax5, "Period (nm)");
             ylabel(ax5, "Radius (nm)");
-            title(ax5, "log_{10}(EF_{vol,avg}) Map");
+            title(ax5, "log_{10}(EE_{V,broad}) Map");
             grid(ax5, "on");
         end
     end
 
-    %% 6. Absorptance average heatmap
+    %% 6. Absorptance map
     ax6 = nexttile(t);
-    if (isfield(allData, "Absorptance_avg") || isfield(allData, "Abs_avg")) && ...
-            isfield(allData, "period") && isfield(allData, "radius")
+    abField = resolveDerivedMetricField("Abs", "laser", allData);
+    if ~isfield(allData, abField)
+        abField = resolveDerivedMetricField("Abs", "broad", allData);
+    end
+    if isfield(allData, abField) && isfield(allData, "period") && isfield(allData, "radius")
         p = allData.period(:);
         r = allData.radius(:);
-        if isfield(allData, "Absorptance_avg")
-            ab = allData.Absorptance_avg(:);
-        else
-            ab = allData.Abs_avg(:);
-        end
+        ab = allData.(abField)(:);
         validMask = ~isnan(ab);
         if nnz(validMask) > 2
             scatter(ax6, p(validMask), r(validMask), 36, ab(validMask), "filled");
             colorbar(ax6);
             xlabel(ax6, "Period (nm)");
             ylabel(ax6, "Radius (nm)");
-            title(ax6, "Absorptance_{avg} Map");
+            title(ax6, "Abs Map");
             grid(ax6, "on");
         end
     end

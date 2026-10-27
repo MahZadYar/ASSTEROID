@@ -167,7 +167,7 @@ classdef SamplingController < handle
 
             valid = unique(valid, 'stable');
             if isempty(valid)
-                valid = ["EF_vol_avg", "EF_surf_avg", "Absorptance_avg"];
+                valid = ["EE_V_broad", "EE_S_broad", "EF_max_laser", "Abs_laser"];
             end
 
             obj.sendToHTML("DataLoaded", struct( ...
@@ -488,7 +488,9 @@ classdef SamplingController < handle
                 end
                 if isempty(metricNames) && isfield(db, "Sim") && isstruct(db.Sim)
                     simFields = fieldnames(db.Sim);
-                    prefList = {'EF_vol_avg', 'EF_vol', 'BEE_vol', 'EF_surf_avg', 'EF_surf', 'Absorptance_avg', 'Absorptance'};
+                    prefList = {'EE_V_broad', 'EE_V_avg', 'EF_vol_broad', 'EF_vol_avg', 'EE_V', 'EF_vol', 'BEE_vol', ...
+                                'EE_S_broad', 'EE_S_avg', 'EF_surf_broad', 'EF_surf_avg', 'EE_S', 'EF_surf', ...
+                                'EF_max_laser', 'EF_max', 'Abs_laser', 'Abs_broad', 'Absorptance_avg', 'Abs', 'Absorptance'};
                     prefIdx = find(ismember(simFields, prefList), 1);
                     if ~isempty(prefIdx)
                         metricNames = string(simFields{prefIdx});

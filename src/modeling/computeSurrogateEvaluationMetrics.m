@@ -123,7 +123,7 @@ else
 end
 
 %% 2. Identify Target Types (Linear vs Logarithmic)
-logCandidates = ["ef_vol", "ef_surf", "m_vol", "m_surf", "intw_vol", "intw_t"];
+logCandidates = ["ee_v", "ee_s", "ef_max", "ef_vol", "ef_surf", "m_vol", "m_surf", "m2_vol", "m2_surf", "intw_vol", "intw_t"];
 targetLogMask = false(1, numTargets);
 if isstruct(model) && isfield(model, "targetTransform") && isstruct(model.targetTransform) ...
         && isfield(model.targetTransform, "LogMask") && ~isempty(model.targetTransform.LogMask)
@@ -437,12 +437,14 @@ end
 targetHeaders = strings(1, numTargets);
 for k = 1:numTargets
     tName = targetNames(k);
-    if strcmpi(tName, "Absorptance")
-        targetHeaders(k) = "\textbf{Absorptance} $A_L$";
-    elseif strcmpi(tName, "EF_vol")
-        targetHeaders(k) = "\textbf{Volumetric EF} $\text{EF}_V^{\text{cell}}$";
-    elseif strcmpi(tName, "EF_surf")
-        targetHeaders(k) = "\textbf{Surface EF} $\text{EF}_S^{\text{cell}}$";
+    if any(strcmpi(tName, ["Abs", "Absorptance"]))
+        targetHeaders(k) = "\textbf{Absorptance} $\mathrm{Abs}$";
+    elseif strcmpi(tName, "EF_max")
+        targetHeaders(k) = "\textbf{Max Hotspot EF} $\mathrm{EF}_{\max}$";
+    elseif any(strcmpi(tName, ["EE_V", "EF_vol"]))
+        targetHeaders(k) = "\textbf{Volumetric EE} $\mathrm{EE}_V$";
+    elseif any(strcmpi(tName, ["EE_S", "EF_surf"]))
+        targetHeaders(k) = "\textbf{Surface EE} $\mathrm{EE}_S$";
     else
         targetHeaders(k) = "\textbf{" + strrep(tName, "_", "\_") + "}";
     end

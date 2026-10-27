@@ -14,7 +14,8 @@ if isempty(newLambda)
     return;
 end
 
-baseFields = {'EF_vol','EF_surf','E_vol','E_surf','M_vol','M_surf', ...
+baseFields = {'EE_V','EE_S','EF_max','Abs','ECC', ...
+    'EF_vol','EF_surf','E_vol','E_surf','M_vol','M_surf', ...
     'M2_vol','M2_surf','intW_vol','intW_t','Absorptance','Reflectance', ...
     'Transmittance','ECCheck','SkinDepth','ResistiveLoss'};
 
@@ -81,7 +82,6 @@ if isempty(laserWl_nm) || ~isfinite(laserWl_nm)
     laserWl_nm = getFieldSafe(newEntry, 'LaserWl');
 end
 if isempty(laserWl_nm) || ~isfinite(laserWl_nm)
-    % Legacy files stored LaserWl in meters — detect and convert
     laserWl_nm = getFieldSafe(oldEntry, 'lambda_exc_nm');
     if isempty(laserWl_nm) || ~isfinite(laserWl_nm)
         warning('mergeEntryWithNewWavelengths:NoLaserWl', ...
@@ -98,6 +98,34 @@ end
 
 RamanShift_cm = (1./(laserWl_nm * 1e-9) - 1./(lambdaSorted * 1e-9)) / 100;
 [~, laserIdx] = min(abs(RamanShift_cm));
+
+% Synchronize EE_V <-> EF_vol, EE_S <-> EF_surf, Abs <-> Absorptance, ECC <-> ECCheck
+if all(isnan(combinedData.EE_V)) && ~all(isnan(combinedData.EF_vol))
+    combinedData.EE_V = combinedData.EF_vol;
+elseif all(isnan(combinedData.EF_vol)) && ~all(isnan(combinedData.EE_V))
+    combinedData.EF_vol = combinedData.EE_V;
+end
+if all(isnan(combinedData.EE_S)) && ~all(isnan(combinedData.EF_surf))
+    combinedData.EE_S = combinedData.EF_surf;
+elseif all(isnan(combinedData.EF_surf)) && ~all(isnan(combinedData.EE_S))
+    combinedData.EF_surf = combinedData.EE_S;
+end
+if all(isnan(combinedData.Abs)) && ~all(isnan(combinedData.Absorptance))
+    combinedData.Abs = combinedData.Absorptance;
+elseif all(isnan(combinedData.Absorptance)) && ~all(isnan(combinedData.Abs))
+    combinedData.Absorptance = combinedData.Abs;
+end
+if all(isnan(combinedData.ECC)) && ~all(isnan(combinedData.ECCheck))
+    combinedData.ECC = combinedData.ECCheck;
+elseif all(isnan(combinedData.ECCheck)) && ~all(isnan(combinedData.ECC))
+    combinedData.ECCheck = combinedData.ECC;
+end
+
+EE_V_sorted = combinedData.EE_V;
+EE_S_sorted = combinedData.EE_S;
+EF_max_sorted = combinedData.EF_max;
+Abs_sorted = combinedData.Abs;
+ECC_sorted = combinedData.ECC;
 
 EF_vol_sorted = combinedData.EF_vol;
 EF_surf_sorted = combinedData.EF_surf;
@@ -135,6 +163,7 @@ end
 
 EF_vol_avg = NaN;
 EF_surf_avg = NaN;
+EF_max_avg = NaN;
 Absorptance_avg = NaN;
 EF_vol_M_avg = NaN;
 EF_surf_M_avg = NaN;
@@ -147,29 +176,44 @@ if nnz(stokesWindowMask) >= 2 && (shiftMax - shiftMin) > 0
 
     ev = EF_vol_sorted(stokesWindowMask); ev = ev(rsOrd);
     es = EF_surf_sorted(stokesWindowMask); es = es(rsOrd);
+    em = EF_max_sorted(stokesWindowMask); em = em(rsOrd);
     ab = absorptance_sorted(stokesWindowMask); ab = ab(rsOrd);
     evm = EF_vol_M_sorted(stokesWindowMask); evm = evm(rsOrd);
     esm = EF_surf_M_sorted(stokesWindowMask); esm = esm(rsOrd);
     eab = EF_Abs_sorted(stokesWindowMask); eab = eab(rsOrd);
 
-    ev_dense = pchip(rs, ev, shiftDense);
-    es_dense = pchip(rs, es, shiftDense);
-    EF_vol_avg = trapz(shiftDense, ev_dense) / (shiftDense(end) - shiftDense(1));
-    EF_surf_avg = trapz(shiftDense, es_dense) / (shiftDense(end) - shiftDense(1));
-
-    abs_dense = pchip(rs, ab, shiftDense);
-    Absorptance_avg = trapz(shiftDense, abs_dense) / (shiftDense(end) - shiftDense(1));
-
-    evm_dense = pchip(rs, evm, shiftDense);
-    esm_dense = pchip(rs, esm, shiftDense);
-    eabs_dense = pchip(rs, eab, shiftDense);
-    EF_vol_M_avg = trapz(shiftDense, evm_dense) / (shiftDense(end) - shiftDense(1));
-    EF_surf_M_avg = trapz(shiftDense, esm_dense) / (shiftDense(end) - shiftDense(1));
-    EF_Abs_avg = trapz(shiftDense, eabs_dense) / (shiftDense(end) - shiftDense(1));
+    if ~all(isnan(ev))
+        ev_dense = pchip(rs, ev, shiftDense);
+        EF_vol_avg = trapz(shiftDense, ev_dense) / (shiftDense(end) - shiftDense(1));
+    end
+    if ~all(isnan(es))
+        es_dense = pchip(rs, es, shiftDense);
+        EF_surf_avg = trapz(shiftDense, es_dense) / (shiftDense(end) - shiftDense(1));
+    end
+    if ~all(isnan(em))
+        em_dense = pchip(rs, em, shiftDense);
+        EF_max_avg = trapz(shiftDense, em_dense) / (shiftDense(end) - shiftDense(1));
+    end
+    if ~all(isnan(ab))
+        abs_dense = pchip(rs, ab, shiftDense);
+        Absorptance_avg = trapz(shiftDense, abs_dense) / (shiftDense(end) - shiftDense(1));
+    end
+    if ~all(isnan(evm))
+        evm_dense = pchip(rs, evm, shiftDense);
+        EF_vol_M_avg = trapz(shiftDense, evm_dense) / (shiftDense(end) - shiftDense(1));
+    end
+    if ~all(isnan(esm))
+        esm_dense = pchip(rs, esm, shiftDense);
+        EF_surf_M_avg = trapz(shiftDense, esm_dense) / (shiftDense(end) - shiftDense(1));
+    end
+    if ~all(isnan(eab))
+        eabs_dense = pchip(rs, eab, shiftDense);
+        EF_Abs_avg = trapz(shiftDense, eabs_dense) / (shiftDense(end) - shiftDense(1));
+    end
 end
 
 mergedEntry = oldEntry;
-scalarFieldsFromNew = {'period','radius'};
+scalarFieldsFromNew = {'period','radius','kappa_V','kappa_S'};
 for k = 1:numel(scalarFieldsFromNew)
     fn = scalarFieldsFromNew{k};
     if isfield(newEntry, fn)
@@ -182,6 +226,11 @@ mergedEntry.RamanShift = RamanShift_cm(:)';
 mergedEntry.LaserWl = laserWl_nm;
 mergedEntry.RamanWindow = ramanWindow;
 mergedEntry.RamanWindowEffective = [shiftMin, shiftMax];
+mergedEntry.EE_V = EE_V_sorted(:)';
+mergedEntry.EE_S = EE_S_sorted(:)';
+mergedEntry.EF_max = EF_max_sorted(:)';
+mergedEntry.Abs = Abs_sorted(:)';
+mergedEntry.ECC = ECC_sorted(:)';
 mergedEntry.EF_vol = EF_vol_sorted(:)';
 mergedEntry.EF_surf = EF_surf_sorted(:)';
 mergedEntry.E_vol = E_vol_sorted(:)';
@@ -198,6 +247,10 @@ mergedEntry.Transmittance = transmittance_sorted(:)';
 mergedEntry.ECCheck = ECCheck_sorted(:)';
 mergedEntry.SkinDepth = skinDepth_sorted(:)';
 mergedEntry.ResistiveLoss = resistiveLoss_sorted(:)';
+mergedEntry.EE_V_laser = EE_V_sorted(laserIdx);
+mergedEntry.EE_S_laser = EE_S_sorted(laserIdx);
+mergedEntry.EF_max_laser = EF_max_sorted(laserIdx);
+mergedEntry.Abs_laser = Abs_sorted(laserIdx);
 mergedEntry.EF_vol_laser = EF_vol_sorted(laserIdx);
 mergedEntry.EF_surf_laser = EF_surf_sorted(laserIdx);
 mergedEntry.M_vol_laser = M_vol_laser;
@@ -206,6 +259,10 @@ mergedEntry.Absorptance_laser = Absorptance_laser;
 mergedEntry.EF_vol_M = EF_vol_M_sorted;
 mergedEntry.EF_surf_M = EF_surf_M_sorted;
 mergedEntry.EF_Abs = EF_Abs_sorted;
+mergedEntry.EE_V_broad = EF_vol_avg;
+mergedEntry.EE_S_broad = EF_surf_avg;
+mergedEntry.EF_max_broad = EF_max_avg;
+mergedEntry.Abs_broad = Absorptance_avg;
 mergedEntry.Absorptance_avg = Absorptance_avg;
 mergedEntry.EF_vol_avg = EF_vol_avg;
 mergedEntry.EF_surf_avg = EF_surf_avg;

@@ -15,7 +15,7 @@ function [isValid, issues] = validateSoAStructure(allData, varargin)
 %   'RequiredFields' - cell array of required field names
 %                      (default: {'period', 'radius', 'lambda'})
 %   'MetricFields'   - cell array of expected metric fields
-%                      (default: {'EF_vol', 'M_vol', 'Absorptance'})
+%                      (default: {'EE_V', 'EE_S', 'EF_max', 'Abs', 'EF_vol', 'M_vol', 'Absorptance'})
 %   'Strict'         - true/false, error on issues vs return warnings (default: false)
 %   'Verbose'        - true/false, print validation details (default: true)
 %
@@ -24,13 +24,15 @@ function [isValid, issues] = validateSoAStructure(allData, varargin)
 %   issues  - cell array of issue descriptions (empty if valid)
 %
 % SoA Format Requirements:
-%   - period:    [N × 1] geometry periods
-%   - radius:    [N × 1] geometry radii
-%   - lambda:    [N × L] wavelength matrix (same L for all rows)
-%   - <metric>:  [N × L] spectral data (e.g., EF_vol, M_vol)
-%   - <metric>_avg: [N × 1] spectral averages (optional)
-%   - LaserWl:   [N × 1] laser wavelength (optional)
-%   - RamanShift: [N × L] Raman shift values (optional)
+%   - period:        [N × 1] geometry periods
+%   - radius:        [N × 1] geometry radii
+%   - lambda:        [N × L] wavelength matrix (same L for all rows)
+%   - <metric>:      [N × L] spectral data (e.g., EE_V, EE_S, EF_max, Abs)
+%   - <metric>_broad:[N × 1] broadband spectral averages (optional)
+%   - <metric>_laser:[N × 1] laser-line values (optional)
+%   - <metric>_analyte:[N × 1] analyte-weighted averages (optional)
+%   - LaserWl:       [N × 1] laser wavelength (optional)
+%   - RamanShift:    [N × L] Raman shift values (optional)
 %
 % Example:
 %   [valid, issues] = validateSoAStructure(allData, 'Strict', true);
@@ -48,7 +50,7 @@ function [isValid, issues] = validateSoAStructure(allData, varargin)
     % Parse options
     opts = struct( ...
         'RequiredFields', {{'period', 'radius', 'lambda'}}, ...
-        'MetricFields', {{'EF_vol', 'M_vol', 'Absorptance'}}, ...
+        'MetricFields', {{'EE_V', 'EE_S', 'EF_max', 'Abs', 'EF_vol', 'EF_surf', 'M_vol', 'Absorptance'}}, ...
         'Strict', false, ...
         'Verbose', true ...
     );
@@ -149,7 +151,8 @@ function [isValid, issues] = validateSoAStructure(allData, varargin)
         % Skip known non-metric fields
         if ismember(fn, {'period', 'radius', 'lambda', 'lambda_nm', 'RamanShift', ...
                 'LaserWl', 'lambda_exc_nm', 'RamanWindow', 'RamanWindowEffective', ...
-                'p', 'r', 'particle_r', 'f'})
+                'p', 'r', 'particle_r', 'f', 'kappa_V', 'kappa_S', ...
+                'VolCorr', 'SurfCorr', 'V_corr', 'S_corr'})
             continue;
         end
 
@@ -162,9 +165,11 @@ function [isValid, issues] = validateSoAStructure(allData, varargin)
         % Check if it's a spectral field [N × L]
         if ismatrix(val) && size(val, 1) == N && L > 0 && size(val, 2) == L
             spectralFields{end+1} = fn; %#ok<AGROW>
-        % Check if it's an averaged field [N × 1]
+        % Check if it's an averaged/derived scalar field [N × 1]
         elseif isvector(val) && numel(val) == N
-            if endsWith(fn, '_avg') || startsWith(fn, 'BEE_') || startsWith(fn, 'AEE_') || endsWith(fn, '_laser')
+            if endsWith(fn, '_broad') || endsWith(fn, '_avg') || ...
+               endsWith(fn, '_analyte') || endsWith(fn, '_laser') || ...
+               endsWith(fn, '_approx') || startsWith(fn, 'BEE_') || startsWith(fn, 'AEE_')
                 avgFields{end+1} = fn; %#ok<AGROW>
             end
         % Check for dimension mismatch

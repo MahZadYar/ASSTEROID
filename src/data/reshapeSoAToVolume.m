@@ -62,8 +62,16 @@ function [volume, pGrid, rGrid, lambdaGrid] = reshapeSoAToVolume(allData, metric
         error('reshapeSoAToVolume:MissingLambda', 'allData must contain ''lambda'' field.');
     end
     if ~isfield(allData, metricName)
-        error('reshapeSoAToVolume:MissingMetric', ...
-            'allData does not contain metric field ''%s''.', metricName);
+        aliasMap = struct('EE_V','EF_vol', 'EF_vol','EE_V', ...
+                          'EE_S','EF_surf', 'EF_surf','EE_S', ...
+                          'Abs','Absorptance', 'Absorptance','Abs', ...
+                          'ECC','ECCheck', 'ECCheck','ECC');
+        if isfield(aliasMap, char(metricName)) && isfield(allData, aliasMap.(char(metricName)))
+            metricName = string(aliasMap.(char(metricName)));
+        else
+            error('reshapeSoAToVolume:MissingMetric', ...
+                'allData does not contain metric field ''%s''.', metricName);
+        end
     end
 
     % Extract data

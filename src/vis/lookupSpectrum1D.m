@@ -164,15 +164,24 @@ function lamRow = localLambdaRow(S, idx)
 end
 
 function [present, missing] = localSplitMetrics(S, metrics, N, L)
-%localSplitMetrics  Keep metrics that exist as numeric [N x L] spectral fields.
+%localSplitMetrics  Keep metrics that exist as numeric [N x L] spectral fields (with alias resolution).
+    aliasMap = struct('EE_V','EF_vol', 'EF_vol','EE_V', ...
+                      'EE_S','EF_surf', 'EF_surf','EE_S', ...
+                      'Abs','Absorptance', 'Absorptance','Abs', ...
+                      'ECC','ECCheck', 'ECCheck','ECC');
     keep = false(size(metrics));
+    resolvedMetrics = metrics;
     for m = 1:numel(metrics)
         f = char(metrics(m));
+        if ~isfield(S, f) && isfield(aliasMap, f) && isfield(S, aliasMap.(f))
+            f = aliasMap.(f);
+            resolvedMetrics(m) = string(f);
+        end
         if isfield(S, f)
             v = S.(f);
             keep(m) = isnumeric(v) && size(v, 1) == N && size(v, 2) == L && L > 1;
         end
     end
-    present = metrics(keep);
+    present = resolvedMetrics(keep);
     missing = metrics(~keep);
 end

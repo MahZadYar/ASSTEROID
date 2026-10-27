@@ -1441,10 +1441,12 @@ classdef OptimizeController < handle
             laserWl = obj.safeNum(d, "laserWavelength", 785);
             allData = obj.ensureDerivedMetricSlice(allData, baseMetric, metricVariant, laserWl);
 
-            if metricVariant == "weighted"
+            if metricVariant == "weighted" || metricVariant == "analyte"
                 variantForField = "analyte";
             elseif metricVariant == "laser"
                 variantForField = "laser";
+            elseif metricVariant == "broad" || metricVariant == "broadband"
+                variantForField = "broad";
             else
                 variantForField = "avg";
             end
@@ -1518,18 +1520,31 @@ classdef OptimizeController < handle
                 laserWl = 785;
             end
 
-            if metricVariant == "weighted"
+            if metricVariant == "weighted" || metricVariant == "analyte"
                 variantForField = "analyte";
             elseif metricVariant == "laser"
                 variantForField = "laser";
+            elseif metricVariant == "broad" || metricVariant == "broadband"
+                variantForField = "broad";
             else
                 variantForField = "avg";
             end
 
             avgFieldName = resolveDerivedMetricField(baseMetric, variantForField, allData);
 
-            if ~isfield(allData, avgFieldName) && isfield(allData, baseMetric)
-                specMat = double(allData.(baseMetric));
+            specField = baseMetric;
+            if ~isfield(allData, specField)
+                aliasMap = struct("EE_V","EF_vol", "EF_vol","EE_V", ...
+                                  "EE_S","EF_surf", "EF_surf","EE_S", ...
+                                  "Abs","Absorptance", "Absorptance","Abs", ...
+                                  "ECC","ECCheck", "ECCheck","ECC");
+                if isfield(aliasMap, char(baseMetric)) && isfield(allData, aliasMap.(char(baseMetric)))
+                    specField = string(aliasMap.(char(baseMetric)));
+                end
+            end
+
+            if ~isfield(allData, avgFieldName) && isfield(allData, specField)
+                specMat = double(allData.(specField));
                 if variantForField == "laser"
                     if isfield(allData, "LaserWl") && isscalar(allData.LaserWl)
                         laserWl = double(allData.LaserWl);
@@ -1544,7 +1559,7 @@ classdef OptimizeController < handle
                         lIdx = 1;
                     end
                     allData.(avgFieldName) = specMat(:, lIdx);
-                elseif variantForField == "avg"
+                elseif variantForField == "avg" || variantForField == "broad"
                     allData.(avgFieldName) = mean(specMat, 2, "omitnan");
                 elseif variantForField == "analyte"
                     analyteSpec = [];

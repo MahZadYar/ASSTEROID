@@ -13,8 +13,8 @@ function allData = convertGridToSoA(input1, varargin)
 %       PGrid       [1 × Np] period grid (micrometers)
 %       RGrid       [1 × Nr] radius grid (micrometers)
 %       Lambda      [1 × Nlambda] wavelength grid (micrometers)
-%       <metric>    [Nr × Np × Nlambda] metric volume (e.g., EF_vol, M_vol)
-%       <metric>_avg [Nr × Np] spectral average (optional)
+%       <metric>    [Nr × Np × Nlambda] metric volume (e.g., EE_V, EE_S, EF_max, Abs)
+%       <metric>_broad [Nr × Np] broadband spectral average (optional)
 %
 % Name-Value Arguments:
 %   'UnitConversion'  - 'um_to_nm' (default) | 'none' | 'm_to_nm'
@@ -32,22 +32,17 @@ function allData = convertGridToSoA(input1, varargin)
 %       lambda      [N × L] wavelengths in nanometers
 %       RamanShift  [N × L] Raman shift in cm^-1
 %       LaserWl     [N × 1] laser wavelength in nanometers
-%       lambda_exc_nm [N × 1] laser wavelength (nm, for compatibility)
 %       RamanWindow [N × 2] Raman window [min, max] in cm^-1
-%       <metric>    [N × L] metric spectra (e.g., EF_vol, M_vol)
-%       *_avg       [N × 1] broadband/spectral averages
+%       <metric>    [N × L] metric spectra (e.g., EE_V, EE_S, EF_max, Abs)
+%       *_broad     [N × 1] broadband spectral averages (and *_avg alias)
 %       *_analyte   [N × 1] analyte-weighted averages (if AnalyteSpectrum provided)
-%       EF_*_laser  [N × 1] value at laser wavelength (EF_vol_laser, EF_surf_laser)
-%       Absorptance_laser [N × 1] absorptance at laser wavelength
+%       *_laser     [N × 1] value at laser wavelength
 %
 % Example:
-%   % Load grid predictions and convert to SoA
 %   loaded = load('predictions.mat');
 %   allData = convertGridToSoA(loaded.predictions, 'LaserWavelength', 532);
 %   save('predictions_soa.mat', 'allData');
 
-    % Support both struct input: convertGridToSoA(predictions, [Name, Value]...)
-    % and numeric grid input: convertGridToSoA(gridData, rVec, pVec, lambdaVec, [Name, Value]...)
     if isstruct(input1)
         predictions = input1;
         nvArgs = varargin;
@@ -209,6 +204,7 @@ function allData = convertGridToSoA(input1, varargin)
     % Find metric fields (exclude grid and lambda fields)
     excludeFields = {'PGrid', 'RGrid', 'Lambda', 'Lambda_um', 'Lambda_nm'};
     allFields = fieldnames(predictions);
+    extractedVolumeFields = {};
 
     % Process each metric field
     for i = 1:numel(allFields)
@@ -232,6 +228,7 @@ function allData = convertGridToSoA(input1, varargin)
                 metricMat(:, k) = slice(validMask);
             end
             allData.(fn) = metricMat;
+            extractedVolumeFields{end+1} = fn; %#ok<AGROW>
 
         % Check if it's a 2D averaged field [Nr × Np]
         elseif isnumeric(val) && ismatrix(val) && ...
@@ -243,11 +240,10 @@ function allData = convertGridToSoA(input1, varargin)
         end
     end
 
-    % Compute _laser, _avg, and _analyte derived metrics using RamanShift.
-    % _laser: value at nearest column to shift=0 (laser wavelength).
-    % _avg:   dense interpolation over Stokes window then trapz in shift space.
-    % _analyte: analyte-weighted average (computed separately below).
-    metricFields = {'EF_vol', 'EF_surf', 'M_vol', 'M_surf', 'Absorptance'};
+    % Compute _laser, _broad (_avg), and _analyte derived metrics using RamanShift.
+    defaultMetricFields = {'EE_V', 'EE_S', 'EF_max', 'Abs', 'ECC', ...
+                           'EF_vol', 'EF_surf', 'M_vol', 'M_surf', 'Absorptance'};
+    metricFields = unique([defaultMetricFields, extractedVolumeFields], 'stable');
     ramanWindow = opts.RamanWindow;
     if isscalar(ramanWindow)
         ramanWindow = [0, ramanWindow];
@@ -274,11 +270,12 @@ function allData = convertGridToSoA(input1, varargin)
         mf = metricFields{i};
         if ~isfield(allData, mf), continue; end
         metricData = allData.(mf);  % [N × L]
+        if size(metricData, 2) < 2, continue; end
 
         % _laser: extract at nearest-to-laser column
         allData.([mf, '_laser']) = metricData(:, laserIdx);
 
-        % _avg: dense interpolation over Stokes window
+        % _broad (and _avg alias): dense interpolation over Stokes window
         if canAvg
             avgVal = NaN(N, 1);
             for row = 1:N
@@ -291,9 +288,11 @@ function allData = convertGridToSoA(input1, varargin)
                 end
                 avgVal(row) = trapz(shiftDense, mvDense) / (shiftDense(end) - shiftDense(1));
             end
-            allData.([mf, '_avg']) = avgVal;
+            allData.([mf, '_broad']) = avgVal;
+            allData.([mf, '_avg'])   = avgVal;
         else
-            allData.([mf, '_avg']) = metricData(:, laserIdx);
+            allData.([mf, '_broad']) = metricData(:, laserIdx);
+            allData.([mf, '_avg'])   = metricData(:, laserIdx);
         end
     end
 
@@ -305,23 +304,27 @@ function allData = convertGridToSoA(input1, varargin)
     if hasAnalyte
         ramanWindow = opts.RamanWindow;
         interpRes = opts.InterpResolution;
-        analyteFieldNames = {'EF_vol_analyte', 'EF_surf_analyte', 'M_vol_analyte', 'M_surf_analyte', 'Absorptance_analyte'};
 
         for i = 1:numel(metricFields)
             mf = metricFields{i};
-            analyteField = analyteFieldNames{i};
+            analyteField = [mf, '_analyte'];
 
             if ~isfield(allData, mf)
                 continue;
             end
 
             metricData = allData.(mf);  % [N × L]
-            ramanShifts = allData.RamanShift;  % [N × L]
+            if size(metricData, 2) < 2, continue; end
+            ramanShifts = allData.RamanShift;  % [N × L] or [1 × L]
             analyteVals = NaN(N, 1);
 
             % Compute analyte-weighted metric for each geometry
             for row = 1:N
-                shiftRow = ramanShifts(row, :);
+                if size(ramanShifts, 1) == 1
+                    shiftRow = ramanShifts(1, :);
+                else
+                    shiftRow = ramanShifts(row, :);
+                end
                 metricRow = metricData(row, :);
 
                 % Filter to Stokes range within Raman window

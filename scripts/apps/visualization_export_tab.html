@@ -754,50 +754,57 @@ document.addEventListener("DOMContentLoaded", function() {
                                     <tr>
                                         <th style="text-align:left;padding:4px 6px;color:var(--text-secondary);">Metric</th>
                                         <th style="text-align:center;padding:4px 6px;color:var(--text-secondary);">Spectral</th>
-                                        <th style="text-align:center;padding:4px 6px;color:var(--text-secondary);">Laser</th>
-                                        <th style="text-align:center;padding:4px 6px;color:var(--text-secondary);">Avg</th>
-                                        <th style="text-align:center;padding:4px 6px;color:var(--text-secondary);">Analyte</th>
+                                        <th style="text-align:center;padding:4px 6px;color:var(--text-secondary);">Laser (_laser)</th>
+                                        <th style="text-align:center;padding:4px 6px;color:var(--text-secondary);">Broad (_broad)</th>
+                                        <th style="text-align:center;padding:4px 6px;color:var(--text-secondary);">Analyte (_analyte)</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td style="padding:4px 6px;">Absorptance</td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="Absorptance" checked></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="Absorptance_laser" checked></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="Absorptance_avg"></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="Absorptance_analyte"></td>
+                                        <td style="padding:4px 6px;">Abs (Absorptance)</td>
+                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="Abs" checked></td>
+                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="Abs_laser" checked></td>
+                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="Abs_broad"></td>
+                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="Abs_analyte"></td>
                                     </tr>
                                     <tr>
-                                        <td style="padding:4px 6px;">EF_vol</td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EF_vol" checked></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EF_vol_laser" checked></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EF_vol_avg" checked></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EF_vol_analyte" checked></td>
+                                        <td style="padding:4px 6px;">EF_max</td>
+                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EF_max"></td>
+                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EF_max_laser"></td>
+                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EF_max_broad"></td>
+                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EF_max_analyte"></td>
                                     </tr>
                                     <tr>
-                                        <td style="padding:4px 6px;">EF_surf</td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EF_surf" checked></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EF_surf_laser" checked></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EF_surf_avg" checked></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EF_surf_analyte" checked></td>
+                                        <td style="padding:4px 6px;">EE_V (EF_vol)</td>
+                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EE_V" checked></td>
+                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EE_V_laser" checked></td>
+                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EE_V_broad" checked></td>
+                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EE_V_analyte" checked></td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding:4px 6px;">EE_S (EF_surf)</td>
+                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EE_S" checked></td>
+                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EE_S_laser" checked></td>
+                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EE_S_broad" checked></td>
+                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EE_S_analyte" checked></td>
                                     </tr>
                                     <tr>
                                         <td style="padding:4px 6px;">M_vol</td>
                                         <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="M_vol"></td>
                                         <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="M_vol_laser"></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="M_vol_avg"></td>
+                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="M_vol_broad"></td>
                                         <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="M_vol_analyte"></td>
                                     </tr>
                                     <tr>
                                         <td style="padding:4px 6px;">M_surf</td>
                                         <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="M_surf"></td>
                                         <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="M_surf_laser"></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="M_surf_avg"></td>
+                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="M_surf_broad"></td>
                                         <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="M_surf_analyte"></td>
                                     </tr>
                                 </tbody>
                             </table>
-                            <p class="hint">Default selection: spectral + laser for Absorptance, EF_vol, EF_surf; plus avg + analyte for EF_vol and EF_surf.</p>
+                            <p class="hint">Default selection: spectral + _laser for Abs, EE_V, EE_S; plus _broad + _analyte for EE_V and EE_S.</p>
                             <div class="btn-row">
                                 <button id="btnPredict" class="btn-primary" onclick="predictInterpolate()">Predict / Interpolate (Populate DB)</button>
                             </div>

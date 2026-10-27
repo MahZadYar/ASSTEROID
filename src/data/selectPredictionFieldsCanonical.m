@@ -21,7 +21,11 @@ function [filtered, includedFields] = selectPredictionFieldsCanonical(allData, s
 
     if isempty(selectedFields)
         selectedFields = [ ...
-            "Absorptance", "Absorptance_laser", ...
+            "Abs", "Abs_laser", "Abs_broad", "Abs_analyte", ...
+            "EF_max", "EF_max_laser", "EF_max_broad", "EF_max_analyte", ...
+            "EE_V", "EE_V_laser", "EE_V_broad", "EE_V_analyte", ...
+            "EE_S", "EE_S_laser", "EE_S_broad", "EE_S_analyte", ...
+            "Absorptance", "Absorptance_laser", "Absorptance_avg", ...
             "EF_vol", "EF_vol_laser", "EF_vol_avg", "EF_vol_analyte", ...
             "EF_surf", "EF_surf_laser", "EF_surf_avg", "EF_surf_analyte"];
     end
@@ -33,7 +37,8 @@ function [filtered, includedFields] = selectPredictionFieldsCanonical(allData, s
     % lambda / RamanShift ([N×L]) are added only if at least one selected
     % field is itself spectral — skipped when only scalar variants are selected.
     scalarBaseFields  = ["period", "radius", "LaserWl", "lambda_exc_nm", ...
-                         "RamanWindow", "RamanWindowEffective"];
+                         "RamanWindow", "RamanWindowEffective", ...
+                         "kappa_V", "kappa_S"];
     spectralBaseFields = ["lambda", "RamanShift"];
 
     for i = 1:numel(scalarBaseFields)
@@ -45,18 +50,9 @@ function [filtered, includedFields] = selectPredictionFieldsCanonical(allData, s
 
     for i = 1:numel(selectedFields)
         req = string(selectedFields(i));
-        srcName = req;
-        if isfield(allData, char(req))
-            srcName = req;
-        elseif endsWith(req, "_laser")
-            approxName = replace(req, "_laser", "_approx");
-            if isfield(allData, char(approxName))
-                srcName = approxName;
-            else
-                continue
-            end
-        else
-            continue
+        srcName = resolveFieldInData(allData, req);
+        if srcName == ""
+            continue;
         end
 
         filtered.(req) = allData.(srcName);
@@ -83,5 +79,58 @@ function [filtered, includedFields] = selectPredictionFieldsCanonical(allData, s
                 filtered.(fn) = allData.(fn);
             end
         end
+    end
+end
+
+function srcName = resolveFieldInData(allData, req)
+    if isfield(allData, char(req))
+        srcName = req;
+        return;
+    end
+    candidates = string.empty;
+    if endsWith(req, "_broad")
+        candidates(end+1) = replace(req, "_broad", "_avg");
+    elseif endsWith(req, "_avg")
+        candidates(end+1) = replace(req, "_avg", "_broad");
+    elseif endsWith(req, "_laser")
+        candidates(end+1) = replace(req, "_laser", "_approx");
+    end
+
+    % Cross-base aliases (EE_V <-> EF_vol, EE_S <-> EF_surf, Abs <-> Absorptance)
+    altReq = swapBaseAlias(req);
+    if altReq ~= req
+        candidates(end+1) = altReq;
+        if endsWith(altReq, "_broad")
+            candidates(end+1) = replace(altReq, "_broad", "_avg");
+        elseif endsWith(altReq, "_avg")
+            candidates(end+1) = replace(altReq, "_avg", "_broad");
+        elseif endsWith(altReq, "_laser")
+            candidates(end+1) = replace(altReq, "_laser", "_approx");
+        end
+    end
+
+    srcName = "";
+    for k = 1:numel(candidates)
+        if isfield(allData, char(candidates(k)))
+            srcName = candidates(k);
+            return;
+        end
+    end
+end
+
+function alt = swapBaseAlias(name)
+    alt = name;
+    if startsWith(name, "EE_V")
+        alt = replaceBetween(name, 1, 4, "EF_vol");
+    elseif startsWith(name, "EF_vol")
+        alt = replaceBetween(name, 1, 6, "EE_V");
+    elseif startsWith(name, "EE_S")
+        alt = replaceBetween(name, 1, 4, "EF_surf");
+    elseif startsWith(name, "EF_surf")
+        alt = replaceBetween(name, 1, 7, "EE_S");
+    elseif startsWith(name, "Absorptance")
+        alt = replaceBetween(name, 1, 11, "Abs");
+    elseif name == "Abs" || startsWith(name, "Abs_")
+        alt = replaceBetween(name, 1, 3, "Absorptance");
     end
 end

@@ -38,6 +38,14 @@ model.TargetLogTransform = targetLogTransform;
 model.inputPreprocessing = inputPreprocessing;
 model.normalizeIncludesRatios = normalizeIncludesRatios;
 
+if isfield(model, "targetLogMask") && ~isempty(model.targetLogMask)
+    if ~isfield(model, "denormalize") || isempty(model.denormalize) || ...
+       contains(func2str(model.denormalize), "denormalizeTargetsLocal")
+        tMask = logical(model.targetLogMask(:)');
+        model.denormalize = @(Y) legacyDenormalizeTargets(Y, tMask);
+    end
+end
+
 model.flags = struct( ...
     "FeatureLogTransform", featureLogTransform, ...
     "IncludeRatios", includeRatios, ...
@@ -148,5 +156,15 @@ if inputSize > 5
     mode = "normalize";
 else
     mode = "network";
+end
+end
+
+function Y = legacyDenormalizeTargets(Y, logMask)
+Y = double(Y);
+nCols = min(size(Y, 2), numel(logMask));
+for c = 1:nCols
+    if logMask(c)
+        Y(:, c) = max(0, exp(Y(:, c)) - 1);
+    end
 end
 end

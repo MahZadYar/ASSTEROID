@@ -116,7 +116,9 @@ end
 
 % Validate metrics
 if isfield(config, 'metricsToTrain')
-    validMetrics = {'Absorptance', 'M_vol', 'M_surf', 'EF_vol', 'EF_surf'};
+    validMetrics = {'EE_V', 'EE_S', 'EF_max', 'Abs', 'ECC', ...
+                    'Absorptance', 'M_vol', 'M_surf', 'EF_vol', 'EF_surf', ...
+                    'M2_vol', 'M2_surf'};
     metrics = string(config.metricsToTrain);
     if isempty(metrics)
         errors{end+1} = 'config.metricsToTrain cannot be empty'; %#ok<AGROW>
