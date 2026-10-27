@@ -4,9 +4,9 @@ This document extracts the **rationale** and **methodology** of the study (see `
 
 ## 1) Goal and High-Level Idea
 
-**Scientific goal:** optimize Nanoparticle-on-Mirror (NPoM) array geometry for gas-phase and surface-adsorbed SERS by maximizing a generalized, multi-dimensional **Enhancement Efficacy (EE)** objective functional ($\eta$) across spatial, spectral, polarizational, and chemical dimensions, rather than relying on far-field absorptance or single-frequency scalar approximations.
+**Scientific goal:** optimize Nanoparticle-on-Mirror (NPoM) array geometry for gas-phase and surface-adsorbed SERS by maximizing a generalized, multi-dimensional **Enhancement Efficacy ($\mathrm{EE}$)** objective functional ($\mathrm{EE}(\mathbf{g})$) across spatial, spectral, polarizational, and chemical dimensions, systematically benchmarking the four rigorous two-frequency $\mathrm{EE}$ metrics ($\mathrm{EE}_S^{\text{broad}}, \mathrm{EE}_V^{\text{broad}}, \mathrm{EE}_S^{\text{analyte}}, \mathrm{EE}_V^{\text{analyte}}$) against four single-wavelength ($\lambda_L = 785\text{ nm}$) proxy/benchmark metrics ($\mathrm{Abs}^L, \mathrm{EF}_{\max}^L, \mathrm{EE}_S^L, \mathrm{EE}_V^L$).
 
-**Engineering goal:** pair adaptive multi-wavelength FEM sweeps in COMSOL (`6,144` unique geometries $\times 25$ wavelengths $= 153{,}600$ single-wavelength FEM solutions) with a physics-informed deep residual neural network (DNN) surrogate that serves as a **high-speed landscape exploration shortcut/proxy tool** for watershed basin localization, followed by full-wave FEM verification of every proposed refined optimum:
+**Engineering goal:** pair adaptive multi-wavelength FEM sweeps in COMSOL (`6,144` unique geometries across the extended Raman shift window $\Delta\widetilde{\nu} \in [100, 4200]\text{ cm}^{-1}$, spanning $1\text{ laser} + 29\text{ Stokes shifts} = 30\text{ wavelengths}$) with a physics-informed deep residual neural network (DNN) surrogate that serves as a **high-speed landscape exploration shortcut/proxy tool** for watershed basin localization, followed by full-wave FEM verification of every proposed refined optimum:
 
 - 💾 Stage 0 (Database): Manage master database state, tree hierarchy, and multi-gigabyte (~4GB) caching via `src/data/DatabaseEngine.m`
 - 📥 Stage 1 (Import): Ingest and normalize COMSOL sweep data into a canonical database (SoA)
@@ -30,18 +30,30 @@ The repo enforces the orchestration pattern **Config → Workflow → (Visualize
 
 ## 2) Core Physics / Metrics (paper definitions)
 
-### 2.1 Pointwise Reciprocity-Derived Two-Frequency EF (Paper Eqs. 2–5)
+### 2.1 Pointwise Reciprocity-Derived Two-Frequency $\mathrm{EF}$ and Single-Wavelength Proxies (Paper Eqs. 2–8)
 
 For freely rotating gas-phase molecules with an arbitrary anisotropic Raman polarizability tensor $\boldsymbol{\alpha}_R$ characterized by depolarization ratio $\rho$, analytical rotational averaging over all molecular Euler angles ($\Omega$) yields the general three-invariant bilinear quadratic form (Eq. 3):
 
 $$
-\langle \mathrm{EF}(\mathbf{r}, \lambda_L, \lambda_R) \rangle_{\Omega} = \frac{1}{|E_{0,L}|^2 |E_{0,R}|^2} \left[ c_1(\rho) \left|\widetilde{\mathbf{E}}_L(\mathbf{r}) \cdot \widetilde{\mathbf{E}}_R^{\mathrm{rec}}(\mathbf{r})\right|^2 + c_2(\rho) \left\|\widetilde{\mathbf{E}}_L(\mathbf{r})\right\|^2 \left\|\widetilde{\mathbf{E}}_R^{\mathrm{rec}}(\mathbf{r})\right\|^2 + c_3(\rho) \left|\widetilde{\mathbf{E}}_L(\mathbf{r}) \cdot \left(\widetilde{\mathbf{E}}_R^{\mathrm{rec}}(\mathbf{r})\right)^*\right|^2 \right]
+\langle \mathrm{EF}(\mathbf{r}; \omega_L, \omega_R) \rangle_{\Omega} = \frac{1}{|E_{0,L}|^2 |E_{0,R}|^2} \left[ c_1(\rho) \left|\widetilde{\mathbf{E}}_L(\mathbf{r}) \cdot \widetilde{\mathbf{E}}_R^{\mathrm{rec}}(\mathbf{r})\right|^2 + c_2(\rho) \left\|\widetilde{\mathbf{E}}_L(\mathbf{r})\right\|^2 \left\|\widetilde{\mathbf{E}}_R^{\mathrm{rec}}(\mathbf{r})\right\|^2 + c_3(\rho) \left|\widetilde{\mathbf{E}}_L(\mathbf{r}) \cdot \left(\widetilde{\mathbf{E}}_R^{\mathrm{rec}}(\mathbf{r})\right)^*\right|^2 \right]
 $$
 
 In the fundamental benchmark limit of an isotropic scalar Raman polarizability tensor ($\boldsymbol{\alpha}_R = \alpha_R \mathbf{I}$, $\rho = 0 \implies c_1 = 1, c_2 = c_3 = 0$), the pointwise two-frequency Enhancement Factor reduces to the unconjugated bilinear dot product (Eq. 5):
 
 $$
-\mathrm{EF}(\mathbf{r}, \lambda_L, \lambda_R) = \frac{\left|\widetilde{\mathbf{E}}_L(\mathbf{r}) \cdot \widetilde{\mathbf{E}}_R^{\mathrm{rec}}(\mathbf{r})\right|^2}{|E_{0,L}|^2 |E_{0,R}|^2}
+\mathrm{EF}(\mathbf{r}; \omega_L, \omega_R) = \frac{\left|\widetilde{\mathbf{E}}_L(\mathbf{r}) \cdot \widetilde{\mathbf{E}}_R^{\mathrm{rec}}(\mathbf{r})\right|^2}{|E_{0,L}|^2 |E_{0,R}|^2}
+$$
+
+In the conventional zero-Stokes-shift ($\omega_R \to \omega_L$) scalar limit, the local enhancement factor reduces to the single-wavelength fourth-power proxy:
+
+$$
+\mathrm{EF}^L(\mathbf{r}) \equiv \mathrm{EF}(\mathbf{r}; \omega_L, \omega_L) \approx M(\mathbf{r}, \omega_L)^2 = \frac{\left\|\widetilde{\mathbf{E}}(\mathbf{r}, \omega_L)\right\|^4}{|E_{0,L}|^4}
+$$
+
+Evaluating the spatial maximum of $\mathrm{EF}^L(\mathbf{r})$ across the accessible dielectric domain yields the literature's most common single-point hotspot benchmark:
+
+$$
+\mathrm{EF}_{\max}^L = \max_{\mathbf{r} \in \Omega_{\text{acc}}} \mathrm{EF}^L(\mathbf{r}) = \max_{\mathbf{r} \in \Omega_{\text{acc}}} \frac{\left\|\widetilde{\mathbf{E}}(\mathbf{r}, \omega_L)\right\|^4}{|E_{0,L}|^4}
 $$
 
 Key properties:
@@ -52,67 +64,91 @@ Key properties:
 
 Important implementation note:
 
-- This repository **treats** the spectral arrays `EF_vol` / `EF_surf` as the rigorous two-frequency EF outputs (as evaluated via COMSOL `withsol` and imported into the SoA database).
+- This repository **treats** the spectral arrays `EF_vol` ($\mathrm{EE}_V(\Delta\widetilde{\nu})$) and `EF_surf` ($\mathrm{EE}_S(\Delta\widetilde{\nu})$) as the rigorous two-frequency unit-cell Enhancement Efficacy outputs (as evaluated via COMSOL `withsol` and scaled by $\kappa_V, \kappa_S$ upon import into the SoA database).
 - The function [src/physics/compute_raman_ef.m](src/physics/compute_raman_ef.m) computes a **two-channel scalar product** from intensity volumes: $\mathrm{EF}(\omega_R)=M(\omega_R)\,M(\omega_L)$ where $M=|\mathbf{E}|^2$. This is useful for voxel-based post-processing and correlation diagnostics, but it is **not the full vector ORT dot-product** unless the upstream $M$ already encodes that physics.
 
-### 2.2 Spatially-Aware Design Continuum & Unit-Cell Normalization (Paper Eqs. 9–13)
+### 2.2 Spatially-Aware Design Continuum & Unit-Cell Enhancement Efficacy $\mathrm{EE}_D(\Delta\widetilde{\nu})$ (Paper Eqs. 9–13)
 
-The paper formulates spatial integration via a normalized molecular concentration profile $\rho(\mathbf{r})$ defining a unified **spatially-aware design continuum**:
-1. **Uniform 3D open-volume integration ($\mathrm{EF}_V^{\text{cell}}, \eta_V$):** Non-adsorbing gas sensing in bare open cavities.
-2. **Weighted 3D volume integration ($\rho(\mathbf{r})$):** Porous 3D capture matrices (e.g., MOFs or aerogels) where gas density varies spatially across the pore volume.
-3. **2D surface integration ($\mathrm{EF}_S^{\text{cell}}, \eta_S$):** Extreme limit of strong surface adsorption or ultra-thin 2D functional capture overlayers (such as monolayer graphene or graphitic shells acting as SERS gas-adsorption enablers/enhancers).
+We introduce **Enhancement Efficacy ($\mathrm{EE}$)** right at the unit-cell-normalized spatial integration stage. The paper formulates spatial integration via a normalized molecular concentration profile $\rho(\mathbf{r})$ defining a unified **spatially-aware design continuum** ($\mathrm{EE}_{\rho}(\omega_L, \omega_R)$):
+1. **Uniform 3D open-volume integration ($\mathrm{EE}_V(\Delta\widetilde{\nu}), \mathrm{EE}_V^{\text{broad}}, \mathrm{EE}_V^{\text{analyte}}$):** Non-adsorbing gas sensing in bare open cavities.
+2. **Weighted 3D volume integration ($\mathrm{EE}_{\rho}$):** Porous 3D capture matrices (e.g., MOFs or aerogels) where gas density varies spatially across the pore volume.
+3. **2D surface integration ($\mathrm{EE}_S(\Delta\widetilde{\nu}), \mathrm{EE}_S^{\text{broad}}, \mathrm{EE}_S^{\text{analyte}}$):** Extreme limit of strong surface adsorption or ultra-thin 2D functional capture overlayers (such as monolayer graphene or graphitic shells acting as SERS gas-adsorption enablers/enhancers).
 
-To reflect **total signal per unit substrate footprint** (loading capacity), surface and volume averages are scaled by $S_{\text{corr}} = A_{\text{acc}} / A_{\text{cell}}$ and $V_{\text{corr}} = V_{\text{acc}} / V_{\text{cell}}$:
-
-$$
-\mathrm{EF}_S^{\text{cell}}(\lambda_L, \lambda_R) = S_{\text{corr}} \langle \mathrm{EF} \rangle_{\text{surf}} = \frac{1}{A_{\text{cell}}} \iint_{A_{\text{acc}}} \mathrm{EF}(\mathbf{r}, \lambda_L, \lambda_R)\, \mathrm{d}A
-$$
+To reflect **total signal per unit substrate footprint** (loading capacity), surface and volume domain averages $\langle \mathrm{EF} \rangle_S$ and $\langle \mathrm{EF} \rangle_V$ are multiplied by the dimensionless **geometric loading capacity factors** $\kappa_S = A_{\text{acc}} / A_{\text{cell}}$ and $\kappa_V = V_{\text{acc}} / V_{\text{cell}}$:
 
 $$
-\mathrm{EF}_V^{\text{cell}}(\lambda_L, \lambda_R) = V_{\text{corr}} \langle \mathrm{EF} \rangle_{\text{vol}} = \frac{1}{V_{\text{cell}}} \iiint_{V_{\text{acc}}} \mathrm{EF}(\mathbf{r}, \lambda_L, \lambda_R)\, \mathrm{d}V
+\kappa_S = \frac{A_{\text{acc}}}{A_{\text{cell}}} = 1 + \frac{2\pi}{\sqrt{3}}\left(\frac{D}{P}\right)^2, \qquad \kappa_V = \frac{V_{\text{acc}}}{V_{\text{cell}}} = 1 - \frac{\pi D^3}{3\sqrt{3} h_{\text{sup}} P^2}
+$$
+
+yielding the un-integrated spectrally resolved **unit-cell Enhancement Efficacy curves**:
+
+$$
+\mathrm{EE}_S(\Delta\widetilde{\nu}) \equiv \mathrm{EE}_S(\omega_L, \omega_R) = \kappa_S \langle \mathrm{EF}(\mathbf{r}; \omega_L, \omega_R) \rangle_S = \frac{1}{A_{\text{cell}}} \iint_{\partial\Omega_M} \mathrm{EF}(\mathbf{r}; \omega_L, \omega_R)\, \mathrm{d}A
+$$
+
+$$
+\mathrm{EE}_V(\Delta\widetilde{\nu}) \equiv \mathrm{EE}_V(\omega_L, \omega_R) = \kappa_V \langle \mathrm{EF}(\mathbf{r}; \omega_L, \omega_R) \rangle_V = \frac{1}{V_{\text{cell}}} \iiint_{\Omega_V} \mathrm{EF}(\mathbf{r}; \omega_L, \omega_R)\, \mathrm{d}V
 $$
 
 where the hexagonal unit-cell footprint is $A_{\text{cell}}=\tfrac{\sqrt{3}}{2}P^2$ and the reference empty unit-cell sensing volume is $V_{\text{cell}} = H_{\text{cell}} A_{\text{cell}}$ (with $H_{\text{cell}} = h_{\text{sup}}/2 = 1500\text{ nm}$).
 
-**Code mapping:** these appear in the SoA as spectral arrays:
+Evaluating $\mathrm{EE}_D(\Delta\widetilde{\nu})$ at zero Stokes shift ($\Delta\widetilde{\nu} = 0 \iff \omega_R = \omega_L$) yields the **single-wavelength spatially integrated Enhancement Efficacy benchmarks** $\mathrm{EE}_S^L$ and $\mathrm{EE}_V^L$:
 
-- `EF_surf` (surface-loading spectral EF, $\mathrm{EF}_S^{\text{cell}}$)
-- `EF_vol` (volume-loading spectral EF, $\mathrm{EF}_V^{\text{cell}}$)
+$$
+\mathrm{EE}_S^L = \kappa_S \langle \mathrm{EF}^L(\mathbf{r}) \rangle_S, \qquad \mathrm{EE}_V^L = \kappa_V \langle \mathrm{EF}^L(\mathbf{r}) \rangle_V
+$$
+
+**Code mapping:** these appear in the SoA database as:
+
+- `EF_surf` (unit-cell surface Enhancement Efficacy spectrum, $\mathrm{EE}_S(\Delta\widetilde{\nu})$)
+- `EF_vol` (unit-cell volumetric Enhancement Efficacy spectrum, $\mathrm{EE}_V(\Delta\widetilde{\nu})$)
+- `EF_surf_laser` / `EF_surf_approx` (single-wavelength surface Enhancement Efficacy benchmark, $\mathrm{EE}_S^L$)
+- `EF_vol_laser` / `EF_vol_approx` (single-wavelength volumetric Enhancement Efficacy benchmark, $\mathrm{EE}_V^L$)
 
 See import pipeline extraction in [src/orchestration/runImportSweepWorkflow.m](src/orchestration/runImportSweepWorkflow.m).
 
-### 2.3 Generalized Enhancement Efficacy (EE, $\eta$) vs. Enhancement Factor ($\mathrm{EF}$) (Paper Eqs. 14–16)
+### 2.3 Generalized Enhancement Efficacy ($\mathrm{EE}$) Master Functional & The 8-Metric Hierarchy (Paper Eqs. 14–16)
 
-Whereas **Enhancement Factor ($\mathrm{EF}$)** denotes a local, single-state physical ratio, **Enhancement Efficacy ($\mathrm{EE}$)**—specialized in the present context to **Raman Enhancement Efficacy (Raman $\mathrm{EE}$)**—is coined as the generalized, multi-dimensional design functional integrating local $\mathrm{EF}$ across spatial ($\rho(\mathbf{r})$), spectral ($w_{\text{spec}}(\Delta\widetilde{\nu})$), polarizational/rotational ($\langle \cdot \rangle_{\Omega, \text{pol}}$), and chemical affinity ($w_{\text{chem}}(\mathbf{r})$) dimensions (Eq. 14). **Nomenclature Convention**: Never use bare *"efficacy"* alone (e.g., never write *"broadband surface efficacy"*); always use the full coined term **"Enhancement Efficacy"** or **"$\mathrm{EE}$"** (e.g., *Broadband surface Enhancement Efficacy*, *Analyte-weighted volumetric Enhancement Efficacy*, *Raman Enhancement Efficacy*), which establishes a universal paradigm generalizable beyond SERS to SEIRA $\mathrm{EE}$, PEF/SEF $\mathrm{EE}$, and TERS $\mathrm{EE}$:
-
-$$
-\eta(\mathbf{g}) = \mathcal{N}_{\text{cell}}(\mathbf{g}) \int_{\Delta\widetilde{\nu}_1}^{\Delta\widetilde{\nu}_2} w_{\text{spec}}(\Delta\widetilde{\nu}) \left[ \int_{\Omega_{\text{acc}}} \rho(\mathbf{r})\, w_{\text{chem}}(\mathbf{r})\, \left\langle \mathrm{EF}\big(\mathbf{r}, \lambda_L, \lambda_R(\Delta\widetilde{\nu})\big) \right\rangle_{\Omega, \text{pol}} \mathrm{d}\Omega_{\mathbf{r}} \right] \mathrm{d}\Delta\widetilde{\nu}
-$$
-
-To maintain seamless notation continuity across figures, tables, and codebase variables, the symbols Enhancement Efficacy is denoted by $\eta_D^{\text{broad}}$ and $\eta_D^{\text{analyte}}$ ($D \in \{S, V\}$):
-
-Broadband Enhancement Efficacy (uniform spectral weight):
+Whereas **Enhancement Factor ($\mathrm{EF}$)** denotes a local/pointwise physical ratio, **Enhancement Efficacy ($\mathrm{EE}$)**—specialized in the present context to **Raman Enhancement Efficacy (Raman $\mathrm{EE}$)**—is coined as the generalized, multi-dimensional design functional integrating local $\mathrm{EF}$ across spatial ($\rho(\mathbf{r})$), spectral ($w_{\text{spec}}(\Delta\widetilde{\nu})$), polarizational/rotational ($\langle \cdot \rangle_{\Omega, \text{pol}}$), and chemical affinity ($w_{\text{chem}}(\mathbf{r})$) dimensions (Eq. 14). **Nomenclature Convention**: Never use bare *"efficacy"* alone (e.g., never write *"broadband surface efficacy"*); always use the full coined term **"Enhancement Efficacy"** or **"$\mathrm{EE}$"**, which establishes a universal paradigm generalizable beyond SERS to SEIRA $\mathrm{EE}$, PEF/SEF $\mathrm{EE}$, and TERS $\mathrm{EE}$:
 
 $$
-\eta_D^{\text{broad}} = \frac{1}{\Delta\widetilde{\nu}_2 - \Delta\widetilde{\nu}_1} \int_{\Delta\widetilde{\nu}_1}^{\Delta\widetilde{\nu}_2} \mathrm{EF}_D^{\text{cell}}(\lambda_L, \Delta\widetilde{\nu})\,\mathrm{d}\Delta\widetilde{\nu}
+\mathrm{EE}(\mathbf{g}) = \mathcal{N}_{\text{cell}}(\mathbf{g}) \int_{\Delta\widetilde{\nu}_1}^{\Delta\widetilde{\nu}_2} w_{\text{spec}}(\Delta\widetilde{\nu}) \left[ \int_{\Omega_{\text{acc}}} \rho(\mathbf{r})\, w_{\text{chem}}(\mathbf{r})\, \left\langle \mathrm{EF}\big(\mathbf{r}; \omega_L, \omega_R(\Delta\widetilde{\nu})\big) \right\rangle_{\Omega, \text{pol}} \mathrm{d}\Omega_{\mathbf{r}} \right] \mathrm{d}\Delta\widetilde{\nu}
 $$
 
-Analyte-Specific Enhancement Efficacy (weighted by normalized vibrational fingerprint $I_{\text{analyte, norm}}$):
+Spectrally integrated Enhancement Efficacies ($D \in \{S, V\}$):
 
-$$
-\eta_D^{\text{analyte}} = \int_{\Delta\widetilde{\nu}_1}^{\Delta\widetilde{\nu}_2} \mathrm{EF}_D^{\text{cell}}(\lambda_L, \Delta\widetilde{\nu})\,I_{\text{analyte, norm}}(\Delta\widetilde{\nu})\,\mathrm{d}\Delta\widetilde{\nu}
-$$
+- **Broadband Enhancement Efficacy** (uniform spectral weight across $[\Delta\widetilde{\nu}_1, \Delta\widetilde{\nu}_2] = [100, 4200]\text{ cm}^{-1}$):
+  $$
+  \mathrm{EE}_D^{\text{broad}} = \frac{1}{\Delta\widetilde{\nu}_2 - \Delta\widetilde{\nu}_1} \int_{\Delta\widetilde{\nu}_1}^{\Delta\widetilde{\nu}_2} \mathrm{EE}_D(\Delta\widetilde{\nu})\,\mathrm{d}\Delta\widetilde{\nu}
+  $$
+- **Analyte-Weighted Enhancement Efficacy** (weighted by normalized vibrational fingerprint $I_{\text{analyte, norm}}(\Delta\widetilde{\nu})$):
+  $$
+  \mathrm{EE}_D^{\text{analyte}} = \int_{\Delta\widetilde{\nu}_1}^{\Delta\widetilde{\nu}_2} \mathrm{EE}_D(\Delta\widetilde{\nu})\,I_{\text{analyte, norm}}(\Delta\widetilde{\nu})\,\mathrm{d}\Delta\widetilde{\nu}
+  $$
+
+**Summary of the 8 Comparative Metrics (4 Single-Wavelength $\lambda_L$ Benchmarks vs. 4 Two-Frequency $\mathrm{EE}$ Metrics):**
+
+| # | Symbol | Codebase Field | Regime | Physical Meaning |
+| :-: | :--- | :--- | :--- | :--- |
+| 1 | $\mathrm{Abs}^L$ | `Absorptance_laser` | Far-field at $\lambda_L$ | Conventional far-field optical absorptance $1 - R(\omega_L)$ proxy |
+| 2 | $\mathrm{EF}_{\max}^L$ | `EF_max` | 0D point at $\lambda_L$ | Conventional single-point hotspot peak $\max \|\widetilde{\mathbf{E}}_L\|^4/|E_{0,L}|^4$ proxy |
+| 3 | $\mathrm{EE}_S^L$ | `EF_surf_laser` | 2D surface at $\lambda_L$ | Single-wavelength unit-cell surface Enhancement Efficacy $\kappa_S \langle \mathrm{EF}^L \rangle_S$ |
+| 4 | $\mathrm{EE}_V^L$ | `EF_vol_laser` | 3D volume at $\lambda_L$ | Single-wavelength unit-cell volumetric Enhancement Efficacy $\kappa_V \langle \mathrm{EF}^L \rangle_V$ |
+| 5 | $\mathrm{EE}_S^{\text{broad}}$ | `EF_surf_avg` (`BEE_surf`) | 2D surface, broadband | Two-frequency broadband surface Enhancement Efficacy |
+| 6 | $\mathrm{EE}_V^{\text{broad}}$ | `EF_vol_avg` (`BEE_vol`) | 3D volume, broadband | Two-frequency broadband volumetric Enhancement Efficacy |
+| 7 | $\mathrm{EE}_S^{\text{analyte}}$ | `EF_surf_analyte` (`AEE_surf`) | 2D surface, fingerprint | Two-frequency analyte-weighted surface Enhancement Efficacy |
+| 8 | $\mathrm{EE}_V^{\text{analyte}}$ | `EF_vol_analyte` (`AEE_vol`) | 3D volume, fingerprint | Two-frequency analyte-weighted volumetric Enhancement Efficacy |
 
 **Code mapping:**
 
 - Raman shift axis: `RamanShift` ($\text{cm}^{-1}$)
 - Broadband averages (stored per geometry):
-  - `EF_vol_avg` ($\eta_V^{\text{broad}}$), `EF_surf_avg` ($\eta_S^{\text{broad}}$)
+  - `EF_vol_avg` ($\mathrm{EE}_V^{\text{broad}}$), `EF_surf_avg` ($\mathrm{EE}_S^{\text{broad}}$)
 - Analyte-weighted scalars:
-  - `EF_vol_analyte` ($\eta_V^{\text{analyte}}$), `EF_surf_analyte` ($\eta_S^{\text{analyte}}$)
+  - `EF_vol_analyte` ($\mathrm{EE}_V^{\text{analyte}}$), `EF_surf_analyte` ($\mathrm{EE}_S^{\text{analyte}}$)
 - Weighting implementation: [src/physics/computeAnalyteWeightedMetric.m](src/physics/computeAnalyteWeightedMetric.m)
 
-The import workflow densifies 25-point FEM spectra using **makima** interpolation solely for adaptive sampling density estimation, whereas the trained DNN surrogate evaluates continuous spectral grids directly without intermediate spline interpolation.
+The import workflow densifies discrete FEM spectra using **makima** interpolation solely for adaptive sampling density estimation, whereas the trained DNN surrogate evaluates continuous spectral grids directly without intermediate spline interpolation.
 
 ## 3) Where the data comes from (COMSOL → canonical columns)
 
@@ -125,32 +161,32 @@ Header normalization uses default aliases from:
 - [src/utils/defaultComsolVarNames.m](src/utils/defaultComsolVarNames.m)
 - [src/utils/mapHeadersToDefaults.m](src/utils/mapHeadersToDefaults.m)
 
-Canonical spectral columns expected in the sweep table include:
+Canonical columns expected in the sweep table include:
 
 - geometry: `period`, `radius`, `lambda`
 - far-field: `Absorptance`, `Reflectance`, `Transmittance`
-- spectral EF metrics: `EF_vol`, `EF_surf`
+- spectral Enhancement Efficacy & hotspot metrics: `EF_vol`, `EF_surf`, `EF_max`
 - auxiliary (optional): `M_vol`, `M_surf`, `M2_vol`, `M2_surf`, `E_vol`, `E_surf`, etc.
 
 These are extracted in [src/orchestration/runImportSweepWorkflow.m](src/orchestration/runImportSweepWorkflow.m) by `extractAllColumns()`.
 
-## 4) “Space correction” (loading-capacity correction in code)
+## 4) “Space correction” (geometric loading capacity factors $\kappa_S, \kappa_V$ in code)
 
-To reflect the paper’s footprint-normalized definitions, the import pipeline applies a geometric correction that accounts for geometry-dependent accessible volume / surface.
+To reflect the paper’s footprint-normalized Enhancement Efficacy definitions, the import pipeline applies geometric loading capacity factors ($\kappa_S, \kappa_V$) that account for geometry-dependent accessible surface area and open gas volume.
 
 In [src/orchestration/runImportSweepWorkflow.m](src/orchestration/runImportSweepWorkflow.m), inside `processGeometryGroup()`:
 
-- Surface correction factor:
-  $$\mathrm{SurfCorr} = S_{\text{corr}} = \frac{A_{\text{cell}}+4\pi r^2}{A_{\text{cell}}}$$
-- Volume correction factor:
-  $$\mathrm{VolCorr} = V_{\text{corr}} = \frac{H_{\text{cell}}\,A_{\text{cell}}-\tfrac{4}{3}\pi r^3}{H_{\text{cell}}\,A_{\text{cell}}}$$
+- Surface loading capacity factor ($\kappa_S$):
+  $$\mathrm{SurfCorr} = \kappa_S = \frac{A_{\text{cell}}+4\pi r^2}{A_{\text{cell}}} = 1 + \frac{2\pi}{\sqrt{3}}\left(\frac{D}{P}\right)^2$$
+- Volumetric loading / exclusion factor ($\kappa_V$):
+  $$\mathrm{VolCorr} = \kappa_V = \frac{H_{\text{cell}}\,A_{\text{cell}}-\tfrac{4}{3}\pi r^3}{H_{\text{cell}}\,A_{\text{cell}}} = 1 - \frac{\pi D^3}{3\sqrt{3} h_{\text{sup}} P^2}$$
 
 and then:
 
-- `EF_surf = EF_surf * SurfCorr`
-- `EF_vol  = EF_vol  * VolCorr`
+- `EF_surf = EF_surf * SurfCorr` (yielding $\mathrm{EE}_S(\Delta\widetilde{\nu})$)
+- `EF_vol  = EF_vol  * VolCorr` (yielding $\mathrm{EE}_V(\Delta\widetilde{\nu})$)
 
-This enforces the “unit-cell reference” normalization described in the paper.
+This enforces the unit-cell reference normalization described in the paper.
 
 ## 5) Spectral processing (Raman shift grid, averaging, analyte weighting)
 
@@ -190,7 +226,7 @@ Implementation details:
 
 - the analyte spectrum is interpolated onto the same `shiftDense`
 - it is re-normalized on that grid so $\int I_{\text{analyte, norm}}(\Delta\widetilde\nu)\,\mathrm{d}(\Delta\widetilde\nu)=1$
-- metric is computed as $\int \mathrm{EF}_D^{\text{cell}}(\Delta\widetilde\nu)\,I_{\text{analyte, norm}}(\Delta\widetilde\nu)\,\mathrm{d}(\Delta\widetilde\nu)$
+- metric is computed as $\int \mathrm{EE}_D(\Delta\widetilde\nu)\,I_{\text{analyte, norm}}(\Delta\widetilde\nu)\,\mathrm{d}(\Delta\widetilde\nu)$
 
 ## 6) Canonical data model (SoA) used across the pipeline
 
@@ -198,9 +234,9 @@ All workflows exchange data in Structure-of-Arrays (SoA) format (see also [docs/
 
 Key conventions:
 
-- `period`, `radius`: $[N\times 1]$ (nm), with $N = 6{,}144$ unique geometries in the baseline dataset
-- spectral fields (`lambda`, `EF_vol`, …): $[N\times L]$ (nm for `lambda`, $L = 25$ wavelengths, totaling $153{,}600$ single-wavelength FEM solutions)
-- scalar “averaged” metrics (`*_avg`, `*_analyte`, …): $[N\times 1]$
+- `period`, `radius`: $[N\times 1]$ (nm), with $N = 6{,}144$ unique geometries in the dataset
+- spectral fields (`lambda`, `EF_vol`, `EF_surf`, `Absorptance`, …): $[N\times L]$ (nm for `lambda`; $L = 25$ wavelengths in the `[100, 3600] cm^-1` sweep and $L = 30$ wavelengths in the extended `[100, 4200] cm^-1` sweep)
+- scalar integrated/benchmark metrics (`*_avg`, `*_analyte`, `*_laser`, `EF_max`): $[N\times 1]$
 
 SoA utilities:
 
@@ -229,7 +265,7 @@ Practical notes for development:
   - `"tensor_resnet"` (Low-Rank Tensor-Product ResNet, default): Replaces Block 2 with a rank-$R$ (`tensorRank = 512`, `fc1a = 256`, `fc1b = 512`, `fc2a = 1024`, `fc2b = 512`, `headHiddenSizes = 512`) Bilinear/Tucker Hadamard tensor contraction (`tt_core_a` from `concat_mid` $\odot$ `tt_core_b` from `input` via `multiplicationLayer(2, 'Name', 'tt_mult')` $\to$ `fc2b`), explicitly modeling multiplicative coupling across $(P, r, \lambda)$ while preserving exact analytical automatic differentiation (`dlgradient`) in `find_local_maxima`.
 - **Peak-Weighted Loss (`"peak_mse"`) & Duan Smearing Calibration**:
   - `"peak_mse"` weights squared residuals by $w_{\text{peak}}(T) = 1 + 0.5\max(T, 0)^2$ in standardized target space to prevent resonance peak shaving.
-  - Post-training calibration (`localCalibrateLogTargetBias`) computes Duan's log-normal smearing factor $\alpha_c = \mathbb{E}[10^{e_c}]$ on the active resonance regime and adjusts the output head bias so $10^{\hat{Z}_c} - 1$ recovers the unbiased arithmetic expectation $\mathbb{E}[\text{EF}]$ rather than the geometric mean.
+  - Post-training calibration (`localCalibrateLogTargetBias`) computes Duan's log-normal smearing factor $\alpha_c = \mathbb{E}[10^{e_c}]$ on the active resonance regime and adjusts the output head bias so $10^{\hat{Z}_c} - 1$ recovers the unbiased arithmetic expectation $\mathbb{E}[\mathrm{EE}_D]$ rather than the geometric mean.
 
 ## 8) Topology-aware optimization (multi-mode maxima localization)
 

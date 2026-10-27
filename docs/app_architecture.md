@@ -144,7 +144,7 @@ The continuous colormap used in 2D/3D surface plots ([`src/vis/AuroraAustralis.t
 ### Stage 1: Ingestion & Sweep QA
 - **HTML View:** [`scripts/apps/import_tab.html`](../scripts/apps/import_tab.html)
 - **Controller:** [`src/app/controllers/ImportController.m`](../src/app/controllers/ImportController.m)
-- **Features:** Multi-file COMSOL sweep parsing, electromagnetic passivity check ($0 \leq A \leq 1$), unit normalization, SoA deduplication, and QA plot generation.
+- **Features:** Multi-file COMSOL sweep parsing, electromagnetic passivity check ($0 \leq \mathrm{Abs} \leq 1$), unit normalization, SoA deduplication, and QA plot generation.
 - **Key Events:** `ScanDirectory`, `RunImport`, `BrowseImportPath`.
 
 ### Stage 2: Adaptive Parameter Sampling
