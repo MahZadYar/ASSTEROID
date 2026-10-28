@@ -24,7 +24,7 @@ While ASSTEROID is demonstrated on the rational geometric design of Nanoparticle
 7. 🌌 **Multi-Dimensional 3D Visualization & Export**: Rendering 1D spectra, 2D scattered/contour maps, 3D volume slices, and exporting to HDF5, ONNX, and relational MAT tables.
 
 > **Associated Publication:**  
-> Maziar Moussavi, Sigitas Tamulevičius, *"Rational Design of Plasmonic Gas Sensors by Optimizing Spectrally-Resolved Volumetric Raman Enhancement Factor"*, 2026. [DOI: 10.1021/acsnano.XXXXXXX (Tentative)](#citation).
+> Maziar Moussavi, Sigitas Tamulevičius, *"Raman Enhancement Efficacy: A Spatially and Spectrally Aware Design Metric for Plasmonic SERS Metasurfaces"*, 2026. [DOI: 10.1021/acsnano.XXXXXXX (Tentative)](#citation).
 
 ---
 
@@ -375,7 +375,7 @@ If you use ASSTEROID or its surrogate-assisted inverse design methodology in you
 ```bibtex
 @article{Moussavi2026_RationalDesign,
   author    = {Moussavi, Maziar and Tamulevi{\v{c}}ius, Sigitas},
-  title     = {Rational Design of Plasmonic Gas Sensors by Optimizing Spectrally-Resolved Volumetric Raman Enhancement Factor},
+  title     = {Raman Enhancement Efficacy: A Spatially and Spectrally Aware Design Metric for Plasmonic SERS Metasurfaces},
   journal   = {ACS Nano},
   year      = {2026},
   volume    = {XX},
