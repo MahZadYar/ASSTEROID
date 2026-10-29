@@ -1,0 +1,185 @@
+/* =============================================================================
+   ASSTEROID Scientific Color Palette System
+   Source: Codebase/ASSTEROID/docs/Pallette.svg
+   Color Model: OKHSL Lightness Architecture (10% to 98% Brightness)
+   ============================================================================= */
+
+:root {
+  /* ===========================================================================
+     1. PURE EXTREMES (Base)
+     =========================================================================== */
+  --color-w: #ffffff;
+  --color-k: #000000;
+  --color-white: var(--color-w);
+  --color-black: var(--color-k);
+
+  /* ===========================================================================
+     2. PRIMARY ANCHOR COLORS (The 4 Main Colors)
+     Calibrated at staggered OKHSL lightness levels (40%, 50%, 60%, 70%)
+     =========================================================================== */
+  --color-a-main: #241ec3; /* A40 - Blue   (OKHSL Lightness 40%) */
+  --color-b-main: #7f00e0; /* B50 - Purple (OKHSL Lightness 50%) */
+  --color-c-main: #27928d; /* C60 - Teal   (OKHSL Lightness 60%) */
+  --color-d-main: #c9942c; /* D70 - Gold   (OKHSL Lightness 70%) */
+
+  /* Semantic Aliases for Main Colors */
+  --color-blue: var(--color-a-main);
+  --color-purple: var(--color-b-main);
+  --color-teal: var(--color-c-main);
+  --color-gold: var(--color-d-main);
+
+  /* Intermediate Blend (Purple B & Teal C at 55% Lightness) */
+  --color-bc55: #725ec1;
+  --color-blend-bc: var(--color-bc55);
+
+  /* ===========================================================================
+     3. SEQUENTIAL HEATMAP COLORMAP (0 to 100 Ramp)
+     13 Nodes: A10 -> A15 -> A20 -> B30 -> B40 -> B50 -> BC55 -> C60 -> C70 -> C80 -> D90 -> D95 -> D98
+     =========================================================================== */
+  --cmap-0:   #000117; /* A10  (0%)  */
+  --cmap-8:   #030033; /* A15  (8%)  */
+  --cmap-16:  #080050; /* A20  (16%) */
+  --cmap-24:  #3d0070; /* B30  (24%) */
+  --cmap-32:  #5d00a6; /* B40  (32%) */
+  --cmap-41:  #7f00e0; /* B50  (41%) */
+  --cmap-50:  #725ec1; /* BC55 (50%) */
+  --cmap-59:  #27928d; /* C60  (59%) */
+  --cmap-68:  #48b2ac; /* C70  (68%) */
+  --cmap-76:  #6bd1cb; /* C80  (76%) */
+  --cmap-84:  #fcd99f; /* D90  (84%) */
+  --cmap-92:  #ffeccd; /* D95  (92%) */
+  --cmap-100: #fff8eb; /* D98  (100%)*/
+
+  --gradient-heatmap: linear-gradient(
+    to right,
+    var(--cmap-0)    0%,
+    var(--cmap-8)    8%,
+    var(--cmap-16)  16%,
+    var(--cmap-24)  24%,
+    var(--cmap-32)  32%,
+    var(--cmap-41)  41%,
+    var(--cmap-50)  50%,
+    var(--cmap-59)  59%,
+    var(--cmap-68)  68%,
+    var(--cmap-76)  76%,
+    var(--cmap-84)  84%,
+    var(--cmap-92)  92%,
+    var(--cmap-100) 100%
+  );
+  --gradient-cmap: var(--gradient-heatmap);
+
+  /* ===========================================================================
+     4. SERIES A: BLUE (OKHSL Hue ~242°, 11 Tones)
+     Primary Anchor: A40
+     =========================================================================== */
+  --color-a10: #000117;
+  --color-a12: #020023;
+  --color-a15: #030033;
+  --color-a20: #080050;
+  --color-a30: #16008e;
+  --color-a40: #241ec3; /* Anchor */
+  --color-a50: #384ae0;
+  --color-a60: #5d78da;
+  --color-a70: #809aec;
+  --color-a80: #a7bbf9;
+  --color-a90: #d1ddff;
+
+  /* ===========================================================================
+     5. SERIES B: PURPLE (OKHSL Hue ~274°, 12 Tones)
+     Primary Anchor: B50
+     =========================================================================== */
+  --color-b10: #060011;
+  --color-b12: #0a0019;
+  --color-b15: #120026;
+  --color-b20: #1f003e;
+  --color-b30: #3d0070;
+  --color-b40: #5d00a6;
+  --color-b50: #7f00e0; /* Anchor */
+  --color-b60: #994ef3;
+  --color-b70: #ad87ed;
+  --color-b80: #c8aef9;
+  --color-b90: #e3d6ff;
+  --color-b95: #f1ebff;
+
+  /* ===========================================================================
+     6. SERIES C: TEAL (OKHSL Hue ~177°, 12 Tones)
+     Primary Anchor: C60
+     =========================================================================== */
+  --color-c12: #000808;
+  --color-c15: #000e0e;
+  --color-c20: #001b1a;
+  --color-c30: #003634;
+  --color-c40: #005350;
+  --color-c50: #00736e;
+  --color-c60: #27928d; /* Anchor */
+  --color-c70: #48b2ac;
+  --color-c80: #6bd1cb;
+  --color-c90: #a0efe9;
+  --color-c95: #c2fcf7;
+  --color-c98: #e4fffc;
+
+  /* ===========================================================================
+     7. SERIES D: GOLD (OKHSL Hue ~40°, 11 Tones)
+     Primary Anchor: D70
+     =========================================================================== */
+  --color-d15: #110a00;
+  --color-d20: #201300;
+  --color-d30: #3e2900;
+  --color-d40: #5f4100;
+  --color-d50: #825b00;
+  --color-d60: #a77600;
+  --color-d70: #c9942c; /* Anchor */
+  --color-d80: #ebb34f;
+  --color-d90: #fcd99f;
+  --color-d95: #ffeccd;
+  --color-d98: #fff8eb;
+
+  /* ===========================================================================
+     8. SERIES G: NEUTRAL GRAYS (13 Tones)
+     Ideal for dark/light theme UI structure, borders, and typography
+     =========================================================================== */
+  --color-g10: #030303;
+  --color-g12: #060606;
+  --color-g15: #0b0b0b;
+  --color-g20: #161616;
+  --color-g30: #2e2e2e;
+  --color-g40: #484848;
+  --color-g50: #636363;
+  --color-g60: #808080;
+  --color-g70: #9e9e9e;
+  --color-g80: #bebebe;
+  --color-g90: #dedede;
+  --color-g95: #eeeeee;
+  --color-g98: #f8f8f8;
+
+  /* ===========================================================================
+     9. SEMANTIC UI TOKENS (Dark Mode Default for ASSTEROID App)
+     =========================================================================== */
+  --ui-bg-root: var(--color-g10);
+  --ui-bg-panel: var(--color-g15);
+  --ui-bg-card: var(--color-g20);
+  --ui-bg-hover: var(--color-g30);
+
+  --ui-border-subtle: var(--color-g30);
+  --ui-border-strong: var(--color-g50);
+
+  --ui-text-primary: var(--color-g98);
+  --ui-text-secondary: var(--color-g80);
+  --ui-text-muted: var(--color-g60);
+  --ui-text-disabled: var(--color-g40);
+
+  --ui-accent-blue: var(--color-a-main);
+  --ui-accent-purple: var(--color-b-main);
+  --ui-accent-teal: var(--color-c-main);
+  --ui-accent-gold: var(--color-d-main);
+}
+
+/* =============================================================================
+   Utility Classes
+   ============================================================================= */
+.heatmap-bar {
+  background: var(--gradient-heatmap);
+  height: 24px;
+  width: 100%;
+  border-radius: 4px;
+}

@@ -25,20 +25,21 @@
      inkscape:deskcolor="#505050"
      inkscape:document-units="mm"
      showgrid="true"
-     inkscape:zoom="0.1673724"
-     inkscape:cx="-50.784956"
-     inkscape:cy="307.69709"
+     inkscape:zoom="0.3347448"
+     inkscape:cx="1260.6619"
+     inkscape:cy="616.88785"
      inkscape:window-width="1920"
      inkscape:window-height="1009"
-     inkscape:window-x="1272"
-     inkscape:window-y="338"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
      inkscape:window-maximized="1"
      inkscape:current-layer="layer1" />
   <defs
      id="defs1">
     <linearGradient
        id="swatch86"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="G10">
       <stop
          style="stop-color:#030303;stop-opacity:1;"
          offset="0"
@@ -46,7 +47,8 @@
     </linearGradient>
     <linearGradient
        id="swatch85"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="G12">
       <stop
          style="stop-color:#060606;stop-opacity:1;"
          offset="0"
@@ -54,7 +56,8 @@
     </linearGradient>
     <linearGradient
        id="swatch84"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="G15">
       <stop
          style="stop-color:#0b0b0b;stop-opacity:1;"
          offset="0"
@@ -62,7 +65,8 @@
     </linearGradient>
     <linearGradient
        id="swatch83"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="G20">
       <stop
          style="stop-color:#161616;stop-opacity:1;"
          offset="0"
@@ -70,7 +74,8 @@
     </linearGradient>
     <linearGradient
        id="swatch82"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="G30">
       <stop
          style="stop-color:#2e2e2e;stop-opacity:1;"
          offset="0"
@@ -78,7 +83,8 @@
     </linearGradient>
     <linearGradient
        id="swatch81"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="G40">
       <stop
          style="stop-color:#484848;stop-opacity:1;"
          offset="0"
@@ -86,7 +92,8 @@
     </linearGradient>
     <linearGradient
        id="swatch80"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="G50">
       <stop
          style="stop-color:#636363;stop-opacity:1;"
          offset="0"
@@ -94,7 +101,8 @@
     </linearGradient>
     <linearGradient
        id="swatch79"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="G60">
       <stop
          style="stop-color:#808080;stop-opacity:1;"
          offset="0"
@@ -102,7 +110,8 @@
     </linearGradient>
     <linearGradient
        id="swatch78"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="G70">
       <stop
          style="stop-color:#9e9e9e;stop-opacity:1;"
          offset="0"
@@ -110,7 +119,8 @@
     </linearGradient>
     <linearGradient
        id="swatch77"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="G80">
       <stop
          style="stop-color:#bebebe;stop-opacity:1;"
          offset="0"
@@ -118,7 +128,8 @@
     </linearGradient>
     <linearGradient
        id="swatch76"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="G90">
       <stop
          style="stop-color:#dedede;stop-opacity:1;"
          offset="0"
@@ -126,7 +137,8 @@
     </linearGradient>
     <linearGradient
        id="swatch75"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="G95">
       <stop
          style="stop-color:#eeeeee;stop-opacity:1;"
          offset="0"
@@ -134,7 +146,8 @@
     </linearGradient>
     <linearGradient
        id="swatch74"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="G98">
       <stop
          style="stop-color:#f8f8f8;stop-opacity:1;"
          offset="0"
@@ -142,7 +155,8 @@
     </linearGradient>
     <linearGradient
        id="swatch59"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="C98">
       <stop
          style="stop-color:#e4fffc;stop-opacity:1;"
          offset="0"
@@ -150,7 +164,8 @@
     </linearGradient>
     <linearGradient
        id="swatch58"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="C95">
       <stop
          style="stop-color:#c2fcf7;stop-opacity:1;"
          offset="0"
@@ -158,7 +173,8 @@
     </linearGradient>
     <linearGradient
        id="swatch57"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="C90">
       <stop
          style="stop-color:#a0efe9;stop-opacity:1;"
          offset="0"
@@ -166,7 +182,8 @@
     </linearGradient>
     <linearGradient
        id="swatch56"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="C80">
       <stop
          style="stop-color:#6bd1cb;stop-opacity:1;"
          offset="0"
@@ -174,7 +191,8 @@
     </linearGradient>
     <linearGradient
        id="swatch55"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="C70">
       <stop
          style="stop-color:#48b2ac;stop-opacity:1;"
          offset="0"
@@ -182,7 +200,8 @@
     </linearGradient>
     <linearGradient
        id="swatch54"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="C60">
       <stop
          style="stop-color:#27928d;stop-opacity:1;"
          offset="0"
@@ -190,7 +209,8 @@
     </linearGradient>
     <linearGradient
        id="swatch53"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="C50">
       <stop
          style="stop-color:#00736e;stop-opacity:1;"
          offset="0"
@@ -198,7 +218,8 @@
     </linearGradient>
     <linearGradient
        id="swatch52"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="C40">
       <stop
          style="stop-color:#005350;stop-opacity:1;"
          offset="0"
@@ -206,7 +227,8 @@
     </linearGradient>
     <linearGradient
        id="swatch51"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="C30">
       <stop
          style="stop-color:#003634;stop-opacity:1;"
          offset="0"
@@ -214,7 +236,8 @@
     </linearGradient>
     <linearGradient
        id="swatch50"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="C20">
       <stop
          style="stop-color:#001b1a;stop-opacity:1;"
          offset="0"
@@ -222,7 +245,8 @@
     </linearGradient>
     <linearGradient
        id="swatch49"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="C15">
       <stop
          style="stop-color:#000e0e;stop-opacity:1;"
          offset="0"
@@ -230,7 +254,8 @@
     </linearGradient>
     <linearGradient
        id="swatch48"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="C12">
       <stop
          style="stop-color:#000808;stop-opacity:1;"
          offset="0"
@@ -238,7 +263,8 @@
     </linearGradient>
     <linearGradient
        id="swatch47"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="B95">
       <stop
          style="stop-color:#f1ebff;stop-opacity:1;"
          offset="0"
@@ -246,7 +272,8 @@
     </linearGradient>
     <linearGradient
        id="swatch46"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="B90">
       <stop
          style="stop-color:#e3d6ff;stop-opacity:1;"
          offset="0"
@@ -254,7 +281,8 @@
     </linearGradient>
     <linearGradient
        id="swatch45"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="B80">
       <stop
          style="stop-color:#c8aef9;stop-opacity:1;"
          offset="0"
@@ -262,15 +290,17 @@
     </linearGradient>
     <linearGradient
        id="swatch44"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="B70">
       <stop
-         style="stop-color:#af8aed;stop-opacity:1;"
+         style="stop-color:#ad87ed;stop-opacity:1;"
          offset="0"
          id="stop44" />
     </linearGradient>
     <linearGradient
        id="swatch43"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="B60">
       <stop
          style="stop-color:#994ef3;stop-opacity:1;"
          offset="0"
@@ -278,7 +308,8 @@
     </linearGradient>
     <linearGradient
        id="swatch42"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="B50">
       <stop
          style="stop-color:#7f00e0;stop-opacity:1;"
          offset="0"
@@ -286,7 +317,8 @@
     </linearGradient>
     <linearGradient
        id="swatch41"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="B40">
       <stop
          style="stop-color:#5d00a6;stop-opacity:1;"
          offset="0"
@@ -294,7 +326,8 @@
     </linearGradient>
     <linearGradient
        id="swatch40"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="B30">
       <stop
          style="stop-color:#3d0070;stop-opacity:1;"
          offset="0"
@@ -302,7 +335,8 @@
     </linearGradient>
     <linearGradient
        id="swatch39"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="B20">
       <stop
          style="stop-color:#1f003e;stop-opacity:1;"
          offset="0"
@@ -310,7 +344,8 @@
     </linearGradient>
     <linearGradient
        id="swatch38"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="B15">
       <stop
          style="stop-color:#120026;stop-opacity:1;"
          offset="0"
@@ -318,7 +353,8 @@
     </linearGradient>
     <linearGradient
        id="swatch37"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="B12">
       <stop
          style="stop-color:#0a0019;stop-opacity:1;"
          offset="0"
@@ -326,7 +362,8 @@
     </linearGradient>
     <linearGradient
        id="swatch36"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="B10">
       <stop
          style="stop-color:#060011;stop-opacity:1;"
          offset="0"
@@ -334,7 +371,8 @@
     </linearGradient>
     <linearGradient
        id="swatch35"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="D98">
       <stop
          style="stop-color:#fff8eb;stop-opacity:1;"
          offset="0"
@@ -342,7 +380,8 @@
     </linearGradient>
     <linearGradient
        id="swatch34"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="D95">
       <stop
          style="stop-color:#ffeccd;stop-opacity:1;"
          offset="0"
@@ -350,7 +389,8 @@
     </linearGradient>
     <linearGradient
        id="swatch33"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="D90">
       <stop
          style="stop-color:#fcd99f;stop-opacity:1;"
          offset="0"
@@ -358,7 +398,8 @@
     </linearGradient>
     <linearGradient
        id="swatch32"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="D80">
       <stop
          style="stop-color:#ebb34f;stop-opacity:1;"
          offset="0"
@@ -366,7 +407,8 @@
     </linearGradient>
     <linearGradient
        id="swatch31"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="D70">
       <stop
          style="stop-color:#c9942c;stop-opacity:1;"
          offset="0"
@@ -374,7 +416,8 @@
     </linearGradient>
     <linearGradient
        id="swatch30"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="D60">
       <stop
          style="stop-color:#a77600;stop-opacity:1;"
          offset="0"
@@ -382,7 +425,8 @@
     </linearGradient>
     <linearGradient
        id="swatch29"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="D50">
       <stop
          style="stop-color:#825b00;stop-opacity:1;"
          offset="0"
@@ -390,7 +434,8 @@
     </linearGradient>
     <linearGradient
        id="swatch28"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="D40">
       <stop
          style="stop-color:#5f4100;stop-opacity:1;"
          offset="0"
@@ -398,7 +443,8 @@
     </linearGradient>
     <linearGradient
        id="swatch27"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="D30">
       <stop
          style="stop-color:#3e2900;stop-opacity:1;"
          offset="0"
@@ -406,7 +452,8 @@
     </linearGradient>
     <linearGradient
        id="swatch26"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="D20">
       <stop
          style="stop-color:#201300;stop-opacity:1;"
          offset="0"
@@ -414,7 +461,8 @@
     </linearGradient>
     <linearGradient
        id="swatch25"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="D15">
       <stop
          style="stop-color:#110a00;stop-opacity:1;"
          offset="0"
@@ -422,7 +470,8 @@
     </linearGradient>
     <linearGradient
        id="swatch24"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="A90">
       <stop
          style="stop-color:#d1ddff;stop-opacity:1;"
          offset="0"
@@ -430,7 +479,8 @@
     </linearGradient>
     <linearGradient
        id="swatch23"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="A80">
       <stop
          style="stop-color:#a7bbf9;stop-opacity:1;"
          offset="0"
@@ -438,7 +488,8 @@
     </linearGradient>
     <linearGradient
        id="swatch22"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="A70">
       <stop
          style="stop-color:#809aec;stop-opacity:1;"
          offset="0"
@@ -446,7 +497,8 @@
     </linearGradient>
     <linearGradient
        id="swatch21"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="A60">
       <stop
          style="stop-color:#5d78da;stop-opacity:1;"
          offset="0"
@@ -454,7 +506,8 @@
     </linearGradient>
     <linearGradient
        id="swatch20"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="A50">
       <stop
          style="stop-color:#384ae0;stop-opacity:1;"
          offset="0"
@@ -462,7 +515,8 @@
     </linearGradient>
     <linearGradient
        id="swatch19"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="A40">
       <stop
          style="stop-color:#241ec3;stop-opacity:1;"
          offset="0"
@@ -470,7 +524,8 @@
     </linearGradient>
     <linearGradient
        id="swatch18"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="A30">
       <stop
          style="stop-color:#16008e;stop-opacity:1;"
          offset="0"
@@ -478,7 +533,8 @@
     </linearGradient>
     <linearGradient
        id="swatch17"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="A20">
       <stop
          style="stop-color:#080050;stop-opacity:1;"
          offset="0"
@@ -486,7 +542,8 @@
     </linearGradient>
     <linearGradient
        id="swatch16"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="A15">
       <stop
          style="stop-color:#030033;stop-opacity:1;"
          offset="0"
@@ -494,7 +551,8 @@
     </linearGradient>
     <linearGradient
        id="swatch15"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="A12">
       <stop
          style="stop-color:#020023;stop-opacity:1;"
          offset="0"
@@ -502,7 +560,8 @@
     </linearGradient>
     <linearGradient
        id="swatch14"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="A10">
       <stop
          style="stop-color:#000117;stop-opacity:1;"
          offset="0"
@@ -510,7 +569,8 @@
     </linearGradient>
     <linearGradient
        id="swatch13"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="W">
       <stop
          style="stop-color:#ffffff;stop-opacity:1;"
          offset="0"
@@ -518,7 +578,8 @@
     </linearGradient>
     <linearGradient
        id="swatch12"
-       inkscape:swatch="solid">
+       inkscape:swatch="solid"
+       inkscape:label="K">
       <stop
          style="stop-color:#000000;stop-opacity:1;"
          offset="0"
@@ -528,51 +589,55 @@
        id="linearGradient1"
        inkscape:collect="always">
       <stop
-         style="stop-color:#080050;stop-opacity:1;"
+         style="stop-color:#000117;stop-opacity:1;"
          offset="0"
          id="stop1" />
       <stop
-         style="stop-color:#16008e;stop-opacity:1;"
-         offset="0.09848485"
+         style="stop-color:#030034;stop-opacity:1;"
+         offset="0.08"
          id="stop3" />
       <stop
-         style="stop-color:#241ec3;stop-opacity:1;"
-         offset="0.19507575"
+         style="stop-color:#080050;stop-opacity:1;"
+         offset="0.16"
          id="stop4" />
       <stop
-         style="stop-color:#6700cb;stop-opacity:1;"
-         offset="0.30000001"
+         style="stop-color:#3d0070;stop-opacity:1;"
+         offset="0.23999999"
          id="stop5" />
       <stop
-         style="stop-color:#7f00e0;stop-opacity:1;"
-         offset="0.39772728"
+         style="stop-color:#5d00a6;stop-opacity:1;"
+         offset="0.31999999"
          id="stop6" />
       <stop
-         style="stop-color:#6c62d7;stop-opacity:1;"
-         offset="0.5"
+         style="stop-color:#8000e0;stop-opacity:1;"
+         offset="0.41"
          id="stop7" />
       <stop
-         style="stop-color:#4a7e97;stop-opacity:1;"
-         offset="0.55000001"
-         id="stop60" />
+         style="stop-color:#725ec1;stop-opacity:1;"
+         offset="0.5"
+         id="stop61" />
       <stop
          style="stop-color:#27928d;stop-opacity:1;"
-         offset="0.60000002"
-         id="stop8" />
+         offset="0.58999997"
+         id="stop60" />
       <stop
          style="stop-color:#48b2ac;stop-opacity:1;"
-         offset="0.69999999"
+         offset="0.68000001"
+         id="stop8" />
+      <stop
+         style="stop-color:#6bd1cb;stop-opacity:1;"
+         offset="0.75999999"
          id="stop9" />
       <stop
-         style="stop-color:#6bd2cc;stop-opacity:1;"
-         offset="0.80000001"
+         style="stop-color:#fcd99f;stop-opacity:1;"
+         offset="0.83999997"
          id="stop10" />
       <stop
-         style="stop-color:#f9ddb0;stop-opacity:1;"
-         offset="0.89999998"
+         style="stop-color:#ffeccd;stop-opacity:1;"
+         offset="0.92000002"
          id="stop11" />
       <stop
-         style="stop-color:#fff4e1;stop-opacity:1;"
+         style="stop-color:#fff8eb;stop-opacity:1;"
          offset="1"
          id="stop2" />
     </linearGradient>
@@ -609,9 +674,9 @@
        xlink:href="#swatch15"
        id="linearGradient15"
        x1="-150.00005"
-       y1="25.000009"
+       y1="25.00001"
        x2="-100.00005"
-       y2="25.000009"
+       y2="25.00001"
        gradientUnits="userSpaceOnUse" />
     <linearGradient
        inkscape:collect="always"
@@ -1008,7 +1073,8 @@
        x1="-50.000015"
        y1="25.000008"
        x2="-1.5258789e-05"
-       y2="25.000008" />
+       y2="25.000008"
+       gradientTransform="translate(-0.52916667)" />
     <linearGradient
        inkscape:collect="always"
        xlink:href="#swatch74"
@@ -1699,7 +1765,7 @@
        id="rect1-7-61-3-7-1-1"
        width="50"
        height="50"
-       x="-50.000015"
+       x="-50.529182"
        y="8.1062317e-06"
        transform="scale(-1,1)"
        inkscape:label="K" />

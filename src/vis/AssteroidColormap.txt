@@ -1,0 +1,29 @@
+% ASSTEROID Scientific Sequential Colormap (13 nodes: A10 -> D98)
+% Normalized RGB [0, 1] values for loadColormap.m
+% Node 01: A10  (offset 0.00)
+0.0000 0.0039 0.0902
+% Node 02: A15  (offset 0.08)
+0.0118 0.0000 0.2000
+% Node 03: A20  (offset 0.16)
+0.0314 0.0000 0.3137
+% Node 04: B30  (offset 0.24)
+0.2392 0.0000 0.4392
+% Node 05: B40  (offset 0.32)
+0.3647 0.0000 0.6510
+% Node 06: B50  (offset 0.41)
+0.4980 0.0000 0.8784
+% Node 07: BC55 (offset 0.50, #725ec1 blend)
+0.4471 0.3686 0.7569
+% Node 08: C60  (offset 0.59)
+0.1529 0.5725 0.5529
+% Node 09: C70  (offset 0.68)
+0.2824 0.6980 0.6745
+% Node 10: C80  (offset 0.76)
+0.4196 0.8196 0.7961
+% Node 11: D90  (offset 0.84)
+0.9882 0.8510 0.6235
+% Node 12: D95  (offset 0.92)
+1.0000 0.9255 0.8039
+% Node 13: D98  (offset 1.00)
+1.0000 0.9725 0.9216
+

@@ -1,0 +1,124 @@
+{
+  "system": "OKHSL",
+  "source": "Codebase/ASSTEROID/docs/Pallette.svg",
+  "anchors": {
+    "A40": { "name": "Blue", "hex": "#241ec3", "rgb": [36, 30, 195], "lightness": 40 },
+    "B50": { "name": "Purple", "hex": "#7f00e0", "rgb": [127, 0, 224], "lightness": 50 },
+    "C60": { "name": "Teal", "hex": "#27928d", "rgb": [39, 146, 141], "lightness": 60 },
+    "D70": { "name": "Gold", "hex": "#c9942c", "rgb": [201, 148, 44], "lightness": 70 }
+  },
+  "base": {
+    "W": { "name": "White", "hex": "#ffffff", "rgb": [255, 255, 255], "lightness": 100 },
+    "K": { "name": "Black", "hex": "#000000", "rgb": [0, 0, 0], "lightness": 0 }
+  },
+  "colormap": {
+    "name": "ASSTEROID Heatmap Colormap",
+    "description": "Perceptually monotonic sequential colormap (0 to 100) spanning Blue -> Purple -> Blend -> Teal -> Gold",
+    "gradient_css": "linear-gradient(to right, #000117 0%, #030033 8%, #080050 16%, #3d0070 24%, #5d00a6 32%, #7f00e0 41%, #725ec1 50%, #27928d 59%, #48b2ac 68%, #6bd1cb 76%, #fcd99f 84%, #ffeccd 92%, #fff8eb 100%)",
+    "stops": [
+      { "offset": 0.00, "percent": 0, "node": "A10", "hex": "#000117", "rgb": [0, 1, 23], "normalized": [0.000, 0.004, 0.090], "lightness": 10 },
+      { "offset": 0.08, "percent": 8, "node": "A15", "hex": "#030033", "rgb": [3, 0, 51], "normalized": [0.012, 0.000, 0.200], "lightness": 15 },
+      { "offset": 0.16, "percent": 16, "node": "A20", "hex": "#080050", "rgb": [8, 0, 80], "normalized": [0.031, 0.000, 0.314], "lightness": 20 },
+      { "offset": 0.24, "percent": 24, "node": "B30", "hex": "#3d0070", "rgb": [61, 0, 112], "normalized": [0.239, 0.000, 0.439], "lightness": 30 },
+      { "offset": 0.32, "percent": 32, "node": "B40", "hex": "#5d00a6", "rgb": [93, 0, 166], "normalized": [0.365, 0.000, 0.651], "lightness": 40 },
+      { "offset": 0.41, "percent": 41, "node": "B50", "hex": "#7f00e0", "rgb": [127, 0, 224], "normalized": [0.498, 0.000, 0.878], "lightness": 50 },
+      { "offset": 0.50, "percent": 50, "node": "BC55", "hex": "#725ec1", "rgb": [114, 94, 193], "normalized": [0.447, 0.369, 0.757], "lightness": 55, "description": "Intermediate blend of B and C at 55 brightness" },
+      { "offset": 0.59, "percent": 59, "node": "C60", "hex": "#27928d", "rgb": [39, 146, 141], "normalized": [0.153, 0.573, 0.553], "lightness": 60 },
+      { "offset": 0.68, "percent": 68, "node": "C70", "hex": "#48b2ac", "rgb": [72, 178, 172], "normalized": [0.282, 0.698, 0.675], "lightness": 70 },
+      { "offset": 0.76, "percent": 76, "node": "C80", "hex": "#6bd1cb", "rgb": [107, 209, 203], "normalized": [0.420, 0.820, 0.796], "lightness": 80 },
+      { "offset": 0.84, "percent": 84, "node": "D90", "hex": "#fcd99f", "rgb": [252, 217, 159], "normalized": [0.988, 0.851, 0.624], "lightness": 90 },
+      { "offset": 0.92, "percent": 92, "node": "D95", "hex": "#ffeccd", "rgb": [255, 236, 205], "normalized": [1.000, 0.925, 0.804], "lightness": 95 },
+      { "offset": 1.00, "percent": 100, "node": "D98", "hex": "#fff8eb", "rgb": [255, 248, 235], "normalized": [1.000, 0.973, 0.922], "lightness": 98 }
+    ]
+  },
+  "series": {
+    "A": {
+      "name": "Blue",
+      "anchor": "A40",
+      "shades": {
+        "A10": { "hex": "#000117", "rgb": [0, 1, 23], "lightness": 10 },
+        "A12": { "hex": "#020023", "rgb": [2, 0, 35], "lightness": 12 },
+        "A15": { "hex": "#030033", "rgb": [3, 0, 51], "lightness": 15 },
+        "A20": { "hex": "#080050", "rgb": [8, 0, 80], "lightness": 20 },
+        "A30": { "hex": "#16008e", "rgb": [22, 0, 142], "lightness": 30 },
+        "A40": { "hex": "#241ec3", "rgb": [36, 30, 195], "lightness": 40, "isAnchor": true },
+        "A50": { "hex": "#384ae0", "rgb": [56, 74, 224], "lightness": 50 },
+        "A60": { "hex": "#5d78da", "rgb": [93, 120, 218], "lightness": 60 },
+        "A70": { "hex": "#809aec", "rgb": [128, 154, 236], "lightness": 70 },
+        "A80": { "hex": "#a7bbf9", "rgb": [167, 187, 249], "lightness": 80 },
+        "A90": { "hex": "#d1ddff", "rgb": [209, 221, 255], "lightness": 90 }
+      }
+    },
+    "B": {
+      "name": "Purple",
+      "anchor": "B50",
+      "shades": {
+        "B10": { "hex": "#060011", "rgb": [6, 0, 17], "lightness": 10 },
+        "B12": { "hex": "#0a0019", "rgb": [10, 0, 25], "lightness": 12 },
+        "B15": { "hex": "#120026", "rgb": [18, 0, 38], "lightness": 15 },
+        "B20": { "hex": "#1f003e", "rgb": [31, 0, 62], "lightness": 20 },
+        "B30": { "hex": "#3d0070", "rgb": [61, 0, 112], "lightness": 30 },
+        "B40": { "hex": "#5d00a6", "rgb": [93, 0, 166], "lightness": 40 },
+        "B50": { "hex": "#7f00e0", "rgb": [127, 0, 224], "lightness": 50, "isAnchor": true },
+        "B60": { "hex": "#994ef3", "rgb": [153, 78, 243], "lightness": 60 },
+        "B70": { "hex": "#ad87ed", "rgb": [173, 135, 237], "lightness": 70 },
+        "B80": { "hex": "#c8aef9", "rgb": [200, 174, 249], "lightness": 80 },
+        "B90": { "hex": "#e3d6ff", "rgb": [227, 214, 255], "lightness": 90 },
+        "B95": { "hex": "#f1ebff", "rgb": [241, 235, 255], "lightness": 95 }
+      }
+    },
+    "C": {
+      "name": "Teal",
+      "anchor": "C60",
+      "shades": {
+        "C12": { "hex": "#000808", "rgb": [0, 8, 8], "lightness": 12 },
+        "C15": { "hex": "#000e0e", "rgb": [0, 14, 14], "lightness": 15 },
+        "C20": { "hex": "#001b1a", "rgb": [0, 27, 26], "lightness": 20 },
+        "C30": { "hex": "#003634", "rgb": [0, 54, 52], "lightness": 30 },
+        "C40": { "hex": "#005350", "rgb": [0, 83, 80], "lightness": 40 },
+        "C50": { "hex": "#00736e", "rgb": [0, 115, 110], "lightness": 50 },
+        "C60": { "hex": "#27928d", "rgb": [39, 146, 141], "lightness": 60, "isAnchor": true },
+        "C70": { "hex": "#48b2ac", "rgb": [72, 178, 172], "lightness": 70 },
+        "C80": { "hex": "#6bd1cb", "rgb": [107, 209, 203], "lightness": 80 },
+        "C90": { "hex": "#a0efe9", "rgb": [160, 239, 233], "lightness": 90 },
+        "C95": { "hex": "#c2fcf7", "rgb": [194, 252, 247], "lightness": 95 },
+        "C98": { "hex": "#e4fffc", "rgb": [228, 255, 252], "lightness": 98 }
+      }
+    },
+    "D": {
+      "name": "Gold",
+      "anchor": "D70",
+      "shades": {
+        "D15": { "hex": "#110a00", "rgb": [17, 10, 0], "lightness": 15 },
+        "D20": { "hex": "#201300", "rgb": [32, 19, 0], "lightness": 20 },
+        "D30": { "hex": "#3e2900", "rgb": [62, 41, 0], "lightness": 30 },
+        "D40": { "hex": "#5f4100", "rgb": [95, 65, 0], "lightness": 40 },
+        "D50": { "hex": "#825b00", "rgb": [130, 91, 0], "lightness": 50 },
+        "D60": { "hex": "#a77600", "rgb": [167, 118, 0], "lightness": 60 },
+        "D70": { "hex": "#c9942c", "rgb": [201, 148, 44], "lightness": 70, "isAnchor": true },
+        "D80": { "hex": "#ebb34f", "rgb": [235, 179, 79], "lightness": 80 },
+        "D90": { "hex": "#fcd99f", "rgb": [252, 217, 159], "lightness": 90 },
+        "D95": { "hex": "#ffeccd", "rgb": [255, 236, 205], "lightness": 95 },
+        "D98": { "hex": "#fff8eb", "rgb": [255, 248, 235], "lightness": 98 }
+      }
+    },
+    "G": {
+      "name": "Gray",
+      "shades": {
+        "G10": { "hex": "#030303", "rgb": [3, 3, 3], "lightness": 10 },
+        "G12": { "hex": "#060606", "rgb": [6, 6, 6], "lightness": 12 },
+        "G15": { "hex": "#0b0b0b", "rgb": [11, 11, 11], "lightness": 15 },
+        "G20": { "hex": "#161616", "rgb": [22, 22, 22], "lightness": 20 },
+        "G30": { "hex": "#2e2e2e", "rgb": [46, 46, 46], "lightness": 30 },
+        "G40": { "hex": "#484848", "rgb": [72, 72, 72], "lightness": 40 },
+        "G50": { "hex": "#636363", "rgb": [99, 99, 99], "lightness": 50 },
+        "G60": { "hex": "#808080", "rgb": [128, 128, 128], "lightness": 60 },
+        "G70": { "hex": "#9e9e9e", "rgb": [158, 158, 158], "lightness": 70 },
+        "G80": { "hex": "#bebebe", "rgb": [190, 190, 190], "lightness": 80 },
+        "G90": { "hex": "#dedede", "rgb": [222, 222, 222], "lightness": 90 },
+        "G95": { "hex": "#eeeeee", "rgb": [238, 238, 238], "lightness": 95 },
+        "G98": { "hex": "#f8f8f8", "rgb": [248, 248, 248], "lightness": 98 }
+      }
+    }
+  }
+}
