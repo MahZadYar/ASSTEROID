@@ -151,16 +151,9 @@ classdef TrainingController < handle
                 metricsList = string(d.metricsToTrain);
             end
 
-            networkConfig = struct( ...
-                "architecture", obj.safeStr(d, "architecture", "tensor_resnet"), ...
-                "tensorRank", obj.safeNum(d, "tensorRank", 512), ...
-                "useMultiHead", obj.safeBool(d, "useMultiHead", true), ...
-                "fc1a", obj.safeNum(d, "fc1a", 256), ...
-                "fc1b", obj.safeNum(d, "fc1b", 512), ...
-                "proj1", obj.safeNum(d, "proj1", 512), ...
-                "fc2a", obj.safeNum(d, "fc2a", 1024), ...
-                "fc2b", obj.safeNum(d, "fc2b", 512), ...
-                "headHiddenSizes", parseNumberList(obj.safeStr(d, "headHiddenSizes", "512"), 512));
+            % Architecture + layer sizes (gs_tensor default; legacy resnet /
+            % tensor_resnet remain selectable). Shared with assteroid_app.
+            networkConfig = networkConfigFromUI(d);
 
             targetLossWeights = parseNumberList(obj.safeStr(d, "targetLossWeights", ""), []);
             extraTrainingOptions = parseNameValuePairs(obj.safeStr(d, "extraTrainingOptions", ""));
@@ -195,9 +188,9 @@ classdef TrainingController < handle
             plotsMode = obj.safeStr(d, "plots", "none");
             if useAppProgressPanel, plotsMode = "none"; end
 
-            featureSchema = obj.safeStr(d, "featureSchema", "v2_physics");
+            featureSchema = obj.safeStr(d, "featureSchema", "v3_physics");
             splitMode     = obj.safeStr(d, "splitMode", "geometry");
-            incVertGap    = obj.safeBool(d, "includeVerticalGap", true);
+            incVertGap    = obj.safeBool(d, "includeVerticalGap", false) && featureSchema == "v2_physics";
             gapHeightUm   = obj.safeNum(d, "gapHeightUm", 0.005);
 
             defaultCpPath = fullfile(workDir, "DNNCheckpoints");

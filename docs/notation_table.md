@@ -83,7 +83,12 @@ This table maps the canonical mathematical notation used in the manuscript (`Doc
 | `EF_vol_M` / `EF_surf_M` | $M(\omega_L) \times M(\omega_R)$ scalar intensity product (mixed diagnostic metric) | `src/orchestration/runImportSweepWorkflow.m` |
 | `EF_Abs` | $\mathrm{Abs}(\omega_L) \times \mathrm{Abs}(\omega_R)$ product | `src/orchestration/runImportSweepWorkflow.m` |
 | `SpCr` | Spatial correlation (corrcoef of $\|\mathbf{E}\|^2$ field across voxels) | `src/physics/compute_raman_ef.m` |
-| `p_um`, `r_um`, `lambda_um` | Log-transformed DNN input features (µm) | `src/modeling/prepare_training_dataset.m` |
+| `p_um`, `r_um`, `lambda_um` | Raw DNN base inputs (µm), together with `n`, `k` | `src/modeling/prepare_training_dataset.m` |
+| `log_p`, `log_r`, `log_lambda`, `eps1`, `eps2`, `p_over_lambda`, `r_over_lambda`, `log_g_norm` | `v3_physics` DNN features $\ln P, \ln r, \ln \lambda, \varepsilon_1, \varepsilon_2, P/\lambda, r/\lambda, \ln g_{\text{norm}}$ with $g_{\text{norm}} = (P - 2r)/P$ (default since v6.3; `v2_physics` uses linear `g_norm` and optional `h_over_lambda`) | `src/modeling/buildPhysicsFeatures.m` |
+| `geo_slice` → `geo_act<k>` ($\mathbf{g}$) | λ-blind geometry encoding $G(P, r)$ of the `gs_tensor` surrogate | `src/modeling/buildSurrogateNetwork.m` |
+| `b<k>_gate` ($\mathbf{s}_k$), `b<k>_act_a` ($\mathbf{a}_k$), `b<k>_fc_o` ($\mathbf{W}_{o,k}$) | Geometric gate, spectral factor and rank-contraction matrix of residual block $k$: $\mathbf{h}_k = \mathbf{h}_{k-1} + \mathbf{W}_{o,k}(\mathbf{a}_k \odot \mathbf{s}_k)$ | `src/modeling/buildSurrogateNetwork.m` |
+| `head_<m>_bound`, `head_<m>_zscore` | Bounding activation (sigmoid for $\mathrm{Abs}$, softplus for $\log_{10}(1+\mathrm{EE}_D)$) and fixed standardization of output channel $m$ ($\widetilde{Z}_m$) | `src/modeling/buildSurrogateNetwork.m`, `src/modeling/surrogateHeadSpecs.m` |
+| `SmearingFactor` ($\alpha_m$) | Duan log-normal smearing factor applied in de-standardization, $\widehat{\mathrm{EE}}_D = \alpha_m(10^{\hat{Z}_m} - 1)$ | `src/modeling/train_surrogate_dnn.m`, `src/modeling/denormalizeModelTargets.m` |
 
 ## 4. Bidirectional Legacy Alias Resolution
 

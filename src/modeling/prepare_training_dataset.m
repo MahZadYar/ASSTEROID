@@ -13,13 +13,25 @@ function dataset = prepare_training_dataset(allData, ri, options)
 %   Shuffle         (default true) - shuffle entries before splitting
 %   RatioLimit      (default []) - optional [min max] allowed for r./p
 %   TargetFields    (default ["Absorptance","M_vol","M_surf","EF_vol","EF_surf"])
-%   FeatureSchema   (default "v2_physics") - "v2_physics" | "v1_legacy"
+%   FeatureSchema   (default "v3_physics") - "v3_physics" | "v2_physics" | "v1_legacy"
+%                   v3_physics: 8 features [log P, log r, log lambda, eps1, eps2,
+%                   P/lambda, r/lambda, log g_norm] (no h_gap/lambda, which is
+%                   redundant for a fixed gap). v2_physics: legacy 8/9 features.
 %   SplitMode       (default "geometry") - "geometry" keeps every wavelength
 %                   of a (P, r) pair in one split; "row" is the legacy
 %                   per-sample split (leaks geometries across splits).
 %   IncludeVerticalGap (default false) - v2 only: add h_gap/lambda feature
+%                   (ignored with a warning for v3_physics)
 %   GapHeightUm     (default 0.005) - v2 only: vertical gap height [µm]
 %   Seed            (default 0) - RNG seed for the split
+%
+% Physics-schema datasets also record per-channel physical bounds in
+% dataset.targetTransform (LowerBound, UpperBound, BoundKind), used by the
+% bounded output heads of the "gs_tensor" / "lean_resnet" architectures:
+%   - log-transformed channels (EE/EF/M):  BoundKind "softplus" (log10(1+y) >= 0)
+%   - absorptance (Abs / Absorptance):     BoundKind "sigmoid", [0, 100] if the
+%                                           data are in percent, else [0, 1]
+%   - any other linear channel:            BoundKind "none"
 
 arguments
     allData struct {mustBeAllDataStruct(allData)}
@@ -32,7 +44,7 @@ arguments
     options.FeatureLogTransform (1,1) logical = true
     options.IncludeRatios (1,1) logical = true
     options.TargetLogTransform (1,1) logical = true
-    options.FeatureSchema (1,1) string {mustBeMember(options.FeatureSchema, ["v2_physics", "v1_legacy"])} = "v2_physics"
+    options.FeatureSchema (1,1) string {mustBeMember(options.FeatureSchema, ["v3_physics", "v2_physics", "v1_legacy"])} = "v3_physics"
     options.SplitMode (1,1) string {mustBeMember(options.SplitMode, ["geometry", "row"])} = "geometry"
     options.IncludeVerticalGap (1,1) logical = false
     options.GapHeightUm (1,1) double {mustBePositive} = 0.005
@@ -53,7 +65,13 @@ opts.SplitMode = options.SplitMode;
 opts.IncludeVerticalGap = options.IncludeVerticalGap;
 opts.GapHeightUm = options.GapHeightUm;
 opts.Seed = options.Seed;
-isV2 = opts.FeatureSchema == "v2_physics";
+isV2 = ismember(opts.FeatureSchema, ["v2_physics", "v3_physics"]);   % any physics schema
+if opts.FeatureSchema == "v3_physics" && opts.IncludeVerticalGap
+    warning('prepare_training_dataset:VerticalGapIgnored', ...
+        ['IncludeVerticalGap is ignored for FeatureSchema="v3_physics": with a fixed ', ...
+         'gap, h_gap/lambda is a constant multiple of 1/lambda and adds no information.']);
+    opts.IncludeVerticalGap = false;
+end
 if isV2
     % Ratios are generated inside buildPhysicsFeatures; X stores raw inputs only.
     opts.IncludeRatios = false;
@@ -537,11 +555,11 @@ end
 end
 
 function dataset = localApplyPhysicsSchema(dataset, opts, targetLogActive) %#ok<INUSD>
-% v2: physics features + z-scoring (features and targets), train-split stats only.
+% v2/v3: physics features + z-scoring (features and targets), train-split stats only.
 schema = struct();
-schema.Name = "v2_physics";
+schema.Name = opts.FeatureSchema;
 schema.BaseInputs = ["p_um", "r_um", "lambda_um", "n", "k"];
-schema.IncludeVerticalGap = opts.IncludeVerticalGap;
+schema.IncludeVerticalGap = opts.IncludeVerticalGap && opts.FeatureSchema == "v2_physics";
 schema.GapHeightUm = opts.GapHeightUm;
 [Ftrain, names] = buildPhysicsFeatures(dataset.XTrain, schema);
 mu = mean(Ftrain, 1);
@@ -560,11 +578,14 @@ tt = struct('Name', "target_specific_zscore", ...
             'Log1p', dataset.targetLogMask, ...
             'Mean', muZ, ...
             'Std', sdZ);
+% Physical bounds per channel (consumed by bounded output heads).
+[tt.BoundKind, tt.LowerBound, tt.UpperBound] = localTargetBounds( ...
+    dataset.targetNames, dataset.targetLogMask, dataset.YTrainRaw);
 dataset.YTrain      = (dataset.YTrain - muZ) ./ sdZ;
 dataset.YValidation = (dataset.YValidation - muZ) ./ sdZ;
 dataset.YTest       = (dataset.YTest - muZ) ./ sdZ;
 
-fprintf('  v2 target standardisation (target-specific log10/linear space): mean = [%s], std = [%s]\n', ...
+fprintf('  Physics-schema target standardisation (target-specific log10/linear space): mean = [%s], std = [%s]\n', ...
     strjoin(compose('%.3f', muZ), ', '), strjoin(compose('%.3f', sdZ), ', '));
 
 dataset.featureSchema = schema;
@@ -579,13 +600,40 @@ dataset.inputScale = sd;
 dataset.featureLogMask = false(1, numel(names));
 dataset.scale.featureMean = mu;
 dataset.scale.featureStd = sd;
-dataset.scale.featureTransform = 'v2_physics_zscore';
+dataset.scale.featureTransform = char(opts.FeatureSchema + "_zscore");
 dataset.scale.featureLogMask = dataset.featureLogMask;
 dataset.scale.targetMean = muZ;
 dataset.scale.targetStd = sdZ;
 dataset.FeatureLogTransform = true;
 dataset.IncludeRatios = false;
 dataset.InputSize = numel(names);
+end
+
+function [kind, lower, upper] = localTargetBounds(targetNames, logMask, YRaw)
+% Physical range of each target channel in its *transformed* (pre-z-score)
+% space. Log channels store log10(1 + y) >= 0; absorptance is bounded by
+% passivity, in percent if the raw data exceed 1.5, else as a fraction.
+names = string(targetNames);
+nT = numel(names);
+kind = repmat("none", 1, nT);
+lower = -inf(1, nT);
+upper = inf(1, nT);
+logMask = reshape(logical(logMask), 1, []);
+for c = 1:nT
+    if c <= numel(logMask) && logMask(c)
+        kind(c) = "softplus";
+        lower(c) = 0;
+    elseif any(strcmpi(names(c), ["Abs", "Absorptance"]))
+        kind(c) = "sigmoid";
+        lower(c) = 0;
+        rawMax = max(YRaw(:, c), [], 'omitnan');
+        if isfinite(rawMax) && rawMax > 1.5
+            upper(c) = 100;   % stored in percent
+        else
+            upper(c) = 1;     % stored as a fraction
+        end
+    end
+end
 end
 
 function Xnorm = normalizeFeatures(Xraw, center, scale, featureLogMask) %#ok<INUSL>

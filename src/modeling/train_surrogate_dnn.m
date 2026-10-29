@@ -9,13 +9,25 @@ function model = train_surrogate_dnn(dataset, options)
 %   MiniBatchSize   (default 512) - samples per mini-batch
 %   LearningRate    (default 1e-3) - initial learning rate
 %   Layers          (default []) - custom network (dlnetwork or layer array)
-%   NetworkConfig   (default struct()) - override default layer widths
+%   NetworkConfig   (default struct()) - architecture and layer sizes, see
+%                   buildSurrogateNetwork. Default architecture (v6.3) is
+%                   "gs_tensor" (Geometry-Spectrum Factorized Tensor Network);
+%                   "lean_resnet", "tensor_resnet" and "resnet" remain available.
 %   TargetLossWeights (default []) - per-target loss weights
 %   Verbose         (default true) - display training progress
 %
 % NetworkConfig.normalization (default "layer") selects the per-layer
 % normalisation in trunk and heads: "layer" (layerNormalizationLayer,
 % per-sample, identical in training and inference) or "batch" (legacy).
+%
+% Bounded heads (gs_tensor / lean_resnet, NetworkConfig.boundedHeads=true):
+% absorptance heads end in sigmoid and log10(1+EE) heads in softplus,
+% followed by a fixed scalingLayer into the standardised training space, so
+% predictions respect 0 <= Abs <= Abs_max and EE >= 0 by construction.
+% Absorptance training targets are clipped to the open interval of the
+% sigmoid, and the Duan log-normal smearing factor is stored in
+% targetTransform.SmearingFactor (applied by denormalizeModelTargets)
+% instead of being folded into the head bias.
 %
 % Metrics: trainnet monitors RMSE in the training target space (log1p, or
 % standardised log1p for v2_physics datasets). After training, validation
@@ -223,15 +235,48 @@ else
     validationData = {XValidation, YValidation};
 end
 
+targetTransformForNet = struct();
+if isfield(dataset, 'targetTransform') && isstruct(dataset.targetTransform)
+    targetTransformForNet = dataset.targetTransform;
+end
+netInfo = struct();
 if isempty(opts.Layers)
-    netCandidate = localBuildDefaultNetwork(numFeatures, numTargets, opts.NetworkConfig);
+    [netCandidate, netInfo] = buildSurrogateNetwork(numFeatures, numTargets, opts.NetworkConfig, ...
+        FeatureNames=string(dataset.featureNames), TargetTransform=targetTransformForNet);
+    opts.NetworkConfig = netInfo.Config;
 else
     netCandidate = opts.Layers;
 end
 netArchitecture = localEnsureDlnetwork(netCandidate);
 
+% Bounded heads: keep the fixed z-scoring layers consistent with the current
+% dataset (matters when fine-tuning a pretrained network on new statistics)
+% and clip bounded training targets into the open range of the activation.
+headSpecs = surrogateHeadSpecs(targetTransformForNet, numTargets);
+[netArchitecture, boundKinds] = localSyncBoundedHeads(netArchitecture, headSpecs, numTargets);
+usesBoundedHeads = any(boundKinds ~= "none");
+for c = find(boundKinds == "sigmoid")
+    s = headSpecs(c);
+    zLo = (s.Lower - s.Mean) / s.Std;
+    zHi = (s.Upper - s.Mean) / s.Std;
+    margin = 1e-4 * (zHi - zLo);
+    nClip = nnz(YTrain(:, c) < zLo + margin | YTrain(:, c) > zHi - margin);
+    YTrain(:, c) = min(max(YTrain(:, c), zLo + margin), zHi - margin);
+    if opts.Verbose && nClip > 0
+        fprintf('  Bounded head %d: clipped %d training targets into the sigmoid range [%g, %g].\n', ...
+            c, nClip, s.Lower, s.Upper);
+    end
+end
+
 if opts.Verbose
-    fprintf('  Network architecture: %d → %d targets\n', numFeatures, numTargets);
+    fprintf('  Network architecture: %d → %d targets', numFeatures, numTargets);
+    if isfield(netInfo, 'Config')
+        fprintf(' | %s | %d learnables', netInfo.Config.architecture, netInfo.NumLearnables);
+    end
+    if usesBoundedHeads
+        fprintf(' | bounded heads [%s]', strjoin(boundKinds, ', '));
+    end
+    fprintf('\n');
 end
 
 % Determine solver type
@@ -498,9 +543,19 @@ end
 
 % Calibrate output-head biases for log-transformed enhancement factors to
 % correct Jensen's inequality (log-retransformation) underestimation on peaks.
-[net, biasCalibInfo] = localCalibrateLogTargetBias(net, XValidation, YValidation, XTrain, YTrain, dataset, opts.Verbose);
+% Bounded heads (softplus before the fixed z-scoring) are not shifted: the
+% smearing factor alpha is stored in targetTransform.SmearingFactor and
+% applied in denormalizeModelTargets as alpha * (10^Z - 1).
+[net, biasCalibInfo] = localCalibrateLogTargetBias(net, XValidation, YValidation, XTrain, YTrain, ...
+    dataset, opts.Verbose, ~usesBoundedHeads);
 if isfield(dataset, 'targetTransform') && isstruct(dataset.targetTransform)
     dataset.targetTransform.BiasCalibration = biasCalibInfo;
+    if usesBoundedHeads && biasCalibInfo.applied
+        dataset.targetTransform.SmearingFactor = biasCalibInfo.smearingFactor;
+        ttCal = dataset.targetTransform;
+        dataset.denormalize = @(Z) denormalizeModelTargets(Z, ttCal.LogMask, ttCal.Mean, ...
+            ttCal.Std, 10, ttCal.SmearingFactor);
+    end
 end
 
 % Copy checkpoints from temp directory to original path if needed
@@ -557,6 +612,17 @@ end
 
 model = struct();
 model.net = net;
+% Architecture metadata (self-describing model; see buildSurrogateNetwork)
+model.architecture = localInferArchitecture(net);
+if isfield(opts.NetworkConfig, 'architecture') && isempty(opts.Layers)
+    model.architecture = string(opts.NetworkConfig.architecture);
+end
+model.networkInfo = struct( ...
+    'Architecture', model.architecture, ...
+    'NumLearnables', sum(cellfun(@numel, net.Learnables.Value)), ...
+    'BoundedHeads', usesBoundedHeads, ...
+    'BoundKinds', boundKinds, ...
+    'LayerTypes', unique(arrayfun(@(L) string(class(L)), net.Layers))');
 if isfield(dataset, "scale")
     model.scale = dataset.scale;
 else
@@ -660,253 +726,67 @@ r2 = 1 - ssRes ./ max(ssTot, eps);
 r2(ssTot <= eps) = NaN;
 end
 
-function netArchitecture = localBuildDefaultNetwork(numFeatures, numTargets, config)
-config = localNormalizeNetworkConfig(config, numTargets);
-netArchitecture = dlnetwork;
-netArchitecture = addLayers(netArchitecture, featureInputLayer(numFeatures, 'Name', 'input'));
-
-% --- Block 1 ---
-block1 = [
-    fullyConnectedLayer(config.fc1a, 'Name', 'fc1a')
-    localNormLayer('bn1a', config.normalization)
-    geluLayer('Name', 'gelu1a')
-    fullyConnectedLayer(config.fc1b, 'Name', 'fc1b')
-    localNormLayer('bn1b', config.normalization)
-    geluLayer('Name', 'gelu1b')];
-netArchitecture = addLayers(netArchitecture, block1);
-netArchitecture = addLayers(netArchitecture, fullyConnectedLayer(config.proj1, 'Name', 'proj1'));
-netArchitecture = addLayers(netArchitecture, additionLayer(2, 'Name', 'add1'));
-
-netArchitecture = connectLayers(netArchitecture, 'input', 'fc1a');
-netArchitecture = connectLayers(netArchitecture, 'gelu1b', 'add1/in1');
-netArchitecture = connectLayers(netArchitecture, 'input', 'proj1');
-netArchitecture = connectLayers(netArchitecture, 'proj1', 'add1/in2');
-
-% --- Injection 1 (Mid): Concatenate Block 1 Output + Input Payload ---
-netArchitecture = addLayers(netArchitecture, concatenationLayer(1, 2, 'Name', 'concat_mid'));
-netArchitecture = connectLayers(netArchitecture, 'add1', 'concat_mid/in1');
-netArchitecture = connectLayers(netArchitecture, 'input', 'concat_mid/in2');
-
-% --- Block 2 ---
-if strcmpi(config.architecture, "tensor_resnet")
-    % Low-Rank Tensor-Product Residual Core (Bilinear / Tucker Contraction):
-    % Contracts multi-scale latent factor U^(A) from concat_mid with direct
-    % spectral/coordinate factor U^(B) from input via Hadamard tensor product
-    % in rank-R latent space before projecting to fc2b.
-    branchA = [
-        fullyConnectedLayer(config.fc2a, 'Name', 'fc2a')
-        localNormLayer('bn2a', config.normalization)
-        geluLayer('Name', 'gelu2a')
-        fullyConnectedLayer(config.tensorRank, 'Name', 'tt_core_a')
-        localNormLayer('tt_bn_a', config.normalization)
-        geluLayer('Name', 'tt_gelu_a')];
-    branchB = [
-        fullyConnectedLayer(config.tensorRank, 'Name', 'tt_core_b')
-        localNormLayer('tt_bn_b', config.normalization)
-        geluLayer('Name', 'tt_gelu_b')];
-    postMult = [
-        multiplicationLayer(2, 'Name', 'tt_mult')
-        fullyConnectedLayer(config.fc2b, 'Name', 'fc2b')
-        localNormLayer('bn2b', config.normalization)
-        geluLayer('Name', 'gelu2b')];
-
-    netArchitecture = addLayers(netArchitecture, branchA);
-    netArchitecture = addLayers(netArchitecture, branchB);
-    netArchitecture = addLayers(netArchitecture, postMult);
-    netArchitecture = addLayers(netArchitecture, additionLayer(2, 'Name', 'add2'));
-    netArchitecture = addLayers(netArchitecture, fullyConnectedLayer(config.fc2b, 'Name', 'proj2'));
-
-    netArchitecture = connectLayers(netArchitecture, 'concat_mid', 'fc2a');
-    netArchitecture = connectLayers(netArchitecture, 'input', 'tt_core_b');
-    netArchitecture = connectLayers(netArchitecture, 'tt_gelu_a', 'tt_mult/in1');
-    netArchitecture = connectLayers(netArchitecture, 'tt_gelu_b', 'tt_mult/in2');
-    netArchitecture = connectLayers(netArchitecture, 'gelu2b', 'add2/in1');
-    netArchitecture = connectLayers(netArchitecture, 'concat_mid', 'proj2');
-    netArchitecture = connectLayers(netArchitecture, 'proj2', 'add2/in2');
-else
-    block2 = [
-        fullyConnectedLayer(config.fc2a, 'Name', 'fc2a')
-        localNormLayer('bn2a', config.normalization)
-        geluLayer('Name', 'gelu2a')
-        fullyConnectedLayer(config.fc2b, 'Name', 'fc2b')
-        localNormLayer('bn2b', config.normalization)
-        geluLayer('Name', 'gelu2b')];
-    netArchitecture = addLayers(netArchitecture, block2);
-    netArchitecture = addLayers(netArchitecture, additionLayer(2, 'Name', 'add2'));
-
-    % Residual conn: proj2 projects concat_mid to match fc2b
-    netArchitecture = addLayers(netArchitecture, fullyConnectedLayer(config.fc2b, 'Name', 'proj2'));
-
-    netArchitecture = connectLayers(netArchitecture, 'concat_mid', 'fc2a');
-    netArchitecture = connectLayers(netArchitecture, 'gelu2b', 'add2/in1');
-    netArchitecture = connectLayers(netArchitecture, 'concat_mid', 'proj2');
-    netArchitecture = connectLayers(netArchitecture, 'proj2', 'add2/in2');
-end
-
-% --- Injection 2 (Head): Concatenate Block 2 Output + Input Payload ---
-netArchitecture = addLayers(netArchitecture, concatenationLayer(1, 2, 'Name', 'concat_head'));
-netArchitecture = connectLayers(netArchitecture, 'add2', 'concat_head/in1');
-netArchitecture = connectLayers(netArchitecture, 'input', 'concat_head/in2');
-
-% --- Output Heads ---
-if config.useMultiHead
-    headInputNames = cell(1, numTargets);
-    for i = 1:numTargets
-        headName = sprintf('head_%d', i);
-        headLayers = localBuildHeadLayers(headName, config.headHiddenSizes, 1, config.normalization);
-        netArchitecture = addLayers(netArchitecture, headLayers);
-        netArchitecture = connectLayers(netArchitecture, 'concat_head', [headName '_fc1']);
-        headInputNames{i} = [headName '_out'];
-    end
-
-    netArchitecture = addLayers(netArchitecture, concatenationLayer(1, numTargets, 'Name', 'concatOut'));
-    for i = 1:numTargets
-        netArchitecture = connectLayers(netArchitecture, headInputNames{i}, sprintf('concatOut/in%d', i));
-    end
-
-    netArchitecture = addLayers(netArchitecture, localRegressionIdentityLayer('regression'));
-    netArchitecture = connectLayers(netArchitecture, 'concatOut', 'regression');
-else
-    outLayers = localBuildHeadLayers('out', config.headHiddenSizes, numTargets, config.normalization);
-    netArchitecture = addLayers(netArchitecture, outLayers);
-    netArchitecture = connectLayers(netArchitecture, 'concat_head', 'out_fc1');
-    netArchitecture = addLayers(netArchitecture, localRegressionIdentityLayer('regression'));
-    netArchitecture = connectLayers(netArchitecture, 'out_out', 'regression');
-end
-
-if ~netArchitecture.Initialized
-    netArchitecture = initialize(netArchitecture);
-end
-end
-
-function config = localNormalizeNetworkConfig(configIn, numTargets)
-config = struct();
-config.architecture = "tensor_resnet"; % "tensor_resnet" (default) | "resnet"
-config.tensorRank = 512;               % Rank R of bilinear tensor core when architecture="tensor_resnet"
-config.useMultiHead = true;
-config.fc1a = 256;
-config.fc1b = 512;
-config.proj1 = 512;  % Auto-determined: must equal fc1b
-config.fc2a = 1024;
-config.fc2b = 512;   % Auto-determined: must equal fc1b
-config.headHiddenSizes = 512;          % Used for both single and multi-head
-config.normalization = "layer";        % "layer" (default) | "batch" (legacy)
-
-if nargin < 1 || isempty(configIn)
-    config = localValidateNetworkConfig(config, numTargets);
+function arch = localInferArchitecture(net)
+% Identify a (possibly pretrained) network from its canonical layer names.
+arch = "custom";
+try
+    names = string(arrayfun(@(L) L.Name, net.Layers, 'UniformOutput', false));
+catch
     return;
 end
-
-fields = fieldnames(configIn);
-for k = 1:numel(fields)
-    key = fields{k};
-    config.(key) = configIn.(key);
-end
-
-config = localValidateNetworkConfig(config, numTargets);
-end
-
-function config = localValidateNetworkConfig(config, numTargets)
-if ~isfield(config, 'architecture') || isempty(config.architecture)
-    config.architecture = "tensor_resnet";
-end
-config.architecture = lower(string(config.architecture));
-if ~ismember(config.architecture, ["resnet", "tensor_resnet"])
-    error('train_sers_dnn:NetworkConfig', ...
-        'Network config architecture must be "resnet" or "tensor_resnet" (got "%s").', config.architecture);
-end
-if ~isfield(config, 'tensorRank') || isempty(config.tensorRank)
-    config.tensorRank = 128;
-end
-config.tensorRank = localPosInt(config.tensorRank, 'tensorRank');
-config.useMultiHead = logical(config.useMultiHead);
-config.fc1a = localPosInt(config.fc1a, 'fc1a');
-config.fc1b = localPosInt(config.fc1b, 'fc1b');
-config.proj1 = localPosInt(config.proj1, 'proj1');
-config.fc2a = localPosInt(config.fc2a, 'fc2a');
-config.fc2b = localPosInt(config.fc2b, 'fc2b');
-config.headHiddenSizes = localPosIntVec(config.headHiddenSizes, 'headHiddenSizes');
-config.normalization = lower(string(config.normalization));
-if ~ismember(config.normalization, ["layer", "batch"])
-    error('train_sers_dnn:NetworkConfig', ...
-        'Network config normalization must be "layer" or "batch" (got "%s").', config.normalization);
-end
-
-if numTargets < 1
-    error('train_sers_dnn:Targets', 'Number of targets must be >= 1.');
-end
-
-% Auto-enforce residual connection constraints
-% The network has two residual paths:
-% 1. input → proj1 → add1/in2  (must match fc1b → add1/in1)
-% 2. add1 → add2/in2  (must match fc2b → add2/in1)
-% Therefore: proj1 must equal fc1b, and fc2b must equal proj1 (=fc1b)
-if config.proj1 ~= config.fc1b
-    warning('train_sers_dnn:ArchitectureConstraint', ...
-        'proj1 (%d) auto-corrected to fc1b (%d) for residual connection.', ...
-        config.proj1, config.fc1b);
-    config.proj1 = config.fc1b;
-end
-if config.fc2b ~= config.fc1b
-    warning('train_sers_dnn:ArchitectureConstraint', ...
-        'fc2b (%d) auto-corrected to fc1b (%d) for residual connection.', ...
-        config.fc2b, config.fc1b);
-    config.fc2b = config.fc1b;
+if any(names == "geo_slice") && any(names == "b1_gate")
+    arch = "gs_tensor";
+elseif any(names == "b1_fc_a")
+    arch = "lean_resnet";
+elseif any(names == "tt_mult")
+    arch = "tensor_resnet";
+elseif any(names == "fc2a") && any(names == "concat_mid")
+    arch = "resnet";
 end
 end
 
-function value = localPosInt(value, name)
-if ~isscalar(value) || ~isfinite(value) || value < 1
-    error('train_sers_dnn:NetworkConfig', 'Network config %s must be a positive integer.', name);
+function [net, kinds] = localSyncBoundedHeads(net, specs, numTargets)
+%localSyncBoundedHeads Detect bounded heads and align their fixed z-scoring.
+%   Bounded heads end in "<prefix>_bound" (sigmoidLayer / softplusLayer)
+%   followed by "<prefix>_zscore" (scalingLayer), with prefix head_<c>
+%   (multi-head) or out_ch<c> (shared head). The scaling hyperparameters
+%   are reset from the current dataset statistics so a pretrained network
+%   fine-tuned on a re-standardised dataset stays consistent.
+kinds = repmat("none", 1, numTargets);
+if ~isa(net, 'dlnetwork')
+    return;
 end
-value = round(double(value));
+names = string(arrayfun(@(L) L.Name, net.Layers, 'UniformOutput', false));
+changed = false;
+for c = 1:numTargets
+    for prefix = [sprintf("head_%d", c), sprintf("out_ch%d", c)]
+        bIdx = find(names == prefix + "_bound", 1);
+        zIdx = find(names == prefix + "_zscore", 1);
+        if isempty(bIdx) || isempty(zIdx)
+            continue;
+        end
+        if isa(net.Layers(bIdx), 'nnet.cnn.layer.SigmoidLayer')
+            kinds(c) = "sigmoid";
+        else
+            kinds(c) = "softplus";
+        end
+        if c <= numel(specs) && specs(c).Kind == kinds(c)
+            zLayer = net.Layers(zIdx);
+            if abs(zLayer.Scale - specs(c).Scale) > 1e-12 || abs(zLayer.Offset - specs(c).Offset) > 1e-12
+                net = replaceLayer(net, char(prefix + "_zscore"), ...
+                    scalingLayer(Scale=specs(c).Scale, Offset=specs(c).Offset, Name=prefix + "_zscore"));
+                changed = true;
+            end
+        elseif c <= numel(specs) && specs(c).Kind ~= "none"
+            warning('train_sers_dnn:BoundedHeadMismatch', ...
+                'Head %d bound (%s) differs from the dataset bound (%s); keeping the network layer.', ...
+                c, kinds(c), specs(c).Kind);
+        end
+    end
 end
-
-function values = localPosIntVec(values, name)
-if isempty(values)
-    error('train_sers_dnn:NetworkConfig', 'Network config %s cannot be empty.', name);
+if changed
+    net = initialize(net);   % learnables are preserved; only fixed scalings change
 end
-values = double(values(:)');
-if any(~isfinite(values)) || any(values < 1)
-    error('train_sers_dnn:NetworkConfig', 'Network config %s must be positive integers.', name);
-end
-values = round(values);
-end
-
-function layer = localNormLayer(name, kind)
-% Per-layer normalisation. LayerNorm normalises each sample over its
-% channels, so its behaviour does not depend on mini-batch composition.
-if nargin < 2 || isempty(kind)
-    kind = "layer";
-end
-switch lower(string(kind))
-    case "batch"
-        layer = batchNormalizationLayer('Name', name);
-    otherwise
-        layer = layerNormalizationLayer('Name', name);
-end
-end
-
-function layers = localBuildHeadLayers(prefix, hiddenSizes, outSize, normKind)
-if nargin < 3 || isempty(outSize)
-    outSize = 1;
-end
-if nargin < 4
-    normKind = "layer";
-end
-hiddenSizes = localPosIntVec(hiddenSizes, 'headHiddenSizes');
-layers = [];
-for idx = 1:numel(hiddenSizes)
-    fcName = sprintf('%s_fc%d', prefix, idx);
-    bnName = sprintf('%s_bn%d', prefix, idx);
-    geluName = sprintf('%s_gelu%d', prefix, idx);
-    layers = [layers
-        fullyConnectedLayer(hiddenSizes(idx), 'Name', fcName)
-        localNormLayer(bnName, normKind)
-        geluLayer('Name', geluName)]; %#ok<AGROW>
-end
-layers = [layers
-    fullyConnectedLayer(outSize, 'Name', sprintf('%s_out', prefix))];
 end
 
 function weights = localValidateLossWeights(weights, numTargets)
@@ -992,11 +872,16 @@ else
 end
 end
 
-function [net, calibInfo] = localCalibrateLogTargetBias(net, XVal, YVal, XTrain, YTrain, dataset, verbose)
+function [net, calibInfo] = localCalibrateLogTargetBias(net, XVal, YVal, XTrain, YTrain, dataset, verbose, applyToBias)
 %localCalibrateLogTargetBias Correct Jensen's inequality (log-normal smearing)
 %   and resonance peak underestimation by calibrating the final linear layer
 %   Bias of log-transformed target channels when the model has converged.
-calibInfo = struct('applied', false, 'deltaBiasNorm', [], 'smearingFactor', []);
+%   With applyToBias=false (bounded heads) the network is left untouched and
+%   only the smearing factors are returned (calibInfo.smearingFactor).
+if nargin < 8
+    applyToBias = true;
+end
+calibInfo = struct('applied', false, 'deltaBiasNorm', [], 'smearingFactor', [], 'mode', "none");
 try
     if ~isa(net, 'dlnetwork') || ~isprop(net, 'Learnables')
         return;
@@ -1051,6 +936,12 @@ try
             alphaC = min(alphaC, 1.25);
             smearing(c) = alphaC;
             deltaBias(c) = log10(alphaC) / max(sdZ(c), eps);
+            if ~applyToBias
+                % Bounded heads: alpha is applied post-network by
+                % denormalizeModelTargets (targetTransform.SmearingFactor).
+                calibInfo.applied = true;
+                continue;
+            end
             % Update bias in net.Learnables
             headLayerName = sprintf('head_%d_out', c);
             rowIdx = find(strcmp(string(learnables.Layer), headLayerName) & ...
@@ -1073,10 +964,15 @@ try
     end
 
     if calibInfo.applied
-        net.Learnables = learnables;
+        if applyToBias
+            net.Learnables = learnables;
+            calibInfo.mode = "head_bias";
+        else
+            calibInfo.mode = "smearing_factor";
+        end
         if verbose
-            fprintf('  ✓ Applied log-target Duan smearing bias calibration: alpha = [%s]\n', ...
-                strjoin(compose('%.4f', smearing), ', '));
+            fprintf('  ✓ Applied log-target Duan smearing calibration (%s): alpha = [%s]\n', ...
+                calibInfo.mode, strjoin(compose('%.4f', smearing), ', '));
         end
     end
     calibInfo.deltaBiasNorm = deltaBias;

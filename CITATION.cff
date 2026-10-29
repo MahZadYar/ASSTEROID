@@ -8,8 +8,8 @@ authors:
     given-names: "Sigitas"
     affiliation: "Institute of Materials Science, Kaunas University of Technology, Kaunas, Lithuania"
 title: "ASSTEROID: Adaptive Sampling, Surrogate Training, Exploration and Refinement for Optimal Inverse Design"
-version: 6.0.0
-date-released: 2026-10-23
+version: 6.3.0
+date-released: 2026-10-29
 url: "https://github.com/MahZadYar/ASSTEROID"
 repository-code: "https://github.com/MahZadYar/ASSTEROID"
 keywords:

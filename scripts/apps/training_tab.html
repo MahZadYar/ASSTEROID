@@ -376,7 +376,7 @@ function setup(htmlComponent) {
 }
 
 function toggleFeatureSchema() {
-    var schema = val("featureSchema");
+    var schema = val("featureSchema") || "v3_physics";
     var v2Box = document.getElementById("v2PhysicsContainer");
     var v1Box = document.getElementById("v1LegacyContainer");
     if (schema === "v1_legacy") {
@@ -386,6 +386,17 @@ function toggleFeatureSchema() {
         if (v2Box) v2Box.style.display = "block";
         if (v1Box) v1Box.style.display = "none";
     }
+    // v3: log lateral gap, no vertical-gap column; v2: linear gap + optional h/lambda
+    var isV3 = (schema === "v3_physics");
+    var badge = document.getElementById("physicsSchemaBadge");
+    if (badge) badge.textContent = schema + " active";
+    var gLog = document.getElementById("gapFeatureLog");
+    var gLin = document.getElementById("gapFeatureLinear");
+    if (gLog) gLog.style.display = isV3 ? "inline" : "none";
+    if (gLin) gLin.style.display = isV3 ? "none" : "inline";
+    var vgCard = document.getElementById("verticalGapCard");
+    if (vgCard) vgCard.style.display = (schema === "v2_physics") ? "block" : "none";
+    updateParamEstimate();
 }
 
 function toggleVerticalGapInput() {
@@ -394,6 +405,7 @@ function toggleVerticalGapInput() {
     if (row) {
         row.style.display = (cb && cb.checked) ? "block" : "none";
     }
+    updateParamEstimate();
 }
 
 function togglePretrainedSource() {
@@ -513,13 +525,22 @@ function collectConfig() {
         valSplit: num("valSplit"),
         splitMode: val("splitMode") || "geometry",
         saveArtifacts: chk("saveArtifacts"),
-        featureSchema: val("featureSchema") || "v2_physics",
-        includeVerticalGap: chk("includeVerticalGap"),
+        featureSchema: val("featureSchema") || "v3_physics",
+        includeVerticalGap: (val("featureSchema") === "v2_physics") ? chk("includeVerticalGap") : false,
         gapHeightUm: num("gapHeightUm") || 0.005,
         featureLogTransform: chk("featureLogTransform"),
         includeRatios: (val("featureSchema") === "v1_legacy") ? chk("includeRatios") : false,
         targetLogTransform: chk("targetLogTransform"),
-        architecture: val("architecture") || "tensor_resnet",
+        architecture: val("architecture") || "gs_tensor",
+        // gs_tensor / lean_resnet sizes
+        modelWidth: num("modelWidth") || 256,
+        numBlocks: isNaN(parseInt(val("numBlocks"), 10)) ? 2 : parseInt(val("numBlocks"), 10),
+        geoWidth: num("geoWidth") || 128,
+        geoDepth: isNaN(parseInt(val("geoDepth"), 10)) ? 2 : parseInt(val("geoDepth"), 10),
+        hiddenActivation: val("hiddenActivation") || "gelu",
+        boundedHeads: chk("boundedHeads"),
+        zeroInitResidualOut: chk("zeroInitResidualOut"),
+        // legacy resnet / tensor_resnet sizes
         tensorRank: num("tensorRank") || 512,
         useMultiHead: chk("useMultiHead"),
         fc1a: num("fc1a") || 256,
@@ -527,16 +548,98 @@ function collectConfig() {
         proj1: fc1b || 512,  // Auto-determined
         fc2a: num("fc2a") || 1024,
         fc2b: fc1b || 512,   // Auto-determined
-        headHiddenSizes: headSizes || "512",
+        headHiddenSizes: headSizes || (isLegacyArch(val("architecture")) ? "512" : "128"),
         targetLossWeights: val("targetLossWeights")
     };
 }
 
+function isLegacyArch(arch) {
+    return arch === "resnet" || arch === "tensor_resnet";
+}
+
+var LAST_ARCH_FAMILY = "gs";
 function toggleArchitectureMode() {
-    var arch = val("architecture") || "resnet";
+    var arch = val("architecture") || "gs_tensor";
+    var legacy = isLegacyArch(arch);
+    var gsBox = document.getElementById("gsArchContainer");
+    var legacyBox = document.getElementById("legacyArchContainer");
     var rankRow = document.getElementById("tensorRankRow");
-    if (rankRow) {
-        rankRow.style.display = (arch === "tensor_resnet") ? "block" : "none";
+    var geoRow = document.getElementById("geoSizeRow");
+    if (gsBox) gsBox.style.display = legacy ? "none" : "block";
+    if (legacyBox) legacyBox.style.display = legacy ? "block" : "none";
+    if (rankRow) rankRow.style.display = (arch === "tensor_resnet") ? "block" : "none";
+    if (geoRow) geoRow.style.display = (arch === "gs_tensor") ? "flex" : "none";
+    // Swap the head-width default when switching between architecture families,
+    // unless the user customised it.
+    var family = legacy ? "legacy" : "gs";
+    var headEl = document.getElementById("headHiddenSizes");
+    if (headEl && family !== LAST_ARCH_FAMILY) {
+        var cur = (headEl.value || "").trim();
+        if (family === "legacy" && (cur === "" || cur === "128")) headEl.value = "512";
+        if (family === "gs" && (cur === "" || cur === "512")) headEl.value = "128";
+    }
+    LAST_ARCH_FAMILY = family;
+    updateParamEstimate();
+}
+
+// Live learnable-parameter estimate (mirrors buildSurrogateNetwork.m).
+function updateParamEstimate() {
+    var el = document.getElementById("paramEstimate");
+    if (!el) return;
+    try {
+        var arch = val("architecture") || "gs_tensor";
+        var schema = val("featureSchema") || "v3_physics";
+        var F;
+        if (schema === "v1_legacy") {
+            F = chk("includeRatios") ? 8 : 5;
+        } else {
+            F = 8 + ((schema === "v2_physics" && chk("includeVerticalGap")) ? 1 : 0);
+        }
+        var T = Math.max(1, document.querySelectorAll('.metric-cb:checked').length);
+        var heads = (val("headHiddenSizes") || "").split(/[,;\s]+/).map(function(s) { return parseInt(s, 10); })
+            .filter(function(v) { return v > 0; });
+        if (heads.length === 0) heads = [isLegacyArch(arch) ? 512 : 128];
+        var multi = chk("useMultiHead");
+        var fc = function(i, o) { return i * o + o; };
+        var ln = function(n) { return 2 * n; };
+        var headParams = function(inDim, outDim) {
+            var p = 0, prev = inDim;
+            heads.forEach(function(h) { p += fc(prev, h) + ln(h); prev = h; });
+            return p + fc(prev, outDim);
+        };
+        var total = 0;
+        if (isLegacyArch(arch)) {
+            var a = num("fc1a") || 256, b = num("fc1b") || 512, A = num("fc2a") || 1024;
+            var R = num("tensorRank") || 512, c = b + F;
+            total = fc(F, a) + ln(a) + fc(a, b) + ln(b) + fc(F, b);           // block 1 + proj1
+            if (arch === "tensor_resnet") {
+                total += fc(c, A) + ln(A) + fc(A, R) + ln(R) + fc(F, R) + ln(R) + fc(R, b) + ln(b);
+            } else {
+                total += fc(c, A) + ln(A) + fc(A, b) + ln(b);
+            }
+            total += fc(c, b);                                                   // proj2
+            total += multi ? T * headParams(b + F, 1) : headParams(b + F, T);
+        } else {
+            var W = num("modelWidth") || 256;
+            var nb = parseInt(val("numBlocks"), 10); if (isNaN(nb)) nb = 2;
+            var G = num("geoWidth") || 128;
+            var gd = parseInt(val("geoDepth"), 10); if (isNaN(gd)) gd = 2;
+            var gated = (arch === "gs_tensor");
+            total = fc(F, W) + ln(W);                                            // stem
+            var gOut = 3;
+            if (gated) {
+                var prev = 3;
+                for (var d = 0; d < gd; d++) { total += fc(prev, G) + ln(G); prev = G; }
+                gOut = gd > 0 ? G : 3;
+            }
+            var blk = fc(W, W) + ln(W) + fc(W, W) + (gated ? fc(gOut, W) : 0);
+            total += nb * blk;
+            total += multi ? T * headParams(W, 1) : headParams(W, T);
+        }
+        el.innerHTML = "&asymp; <strong>" + total.toLocaleString("en-US") + "</strong> learnables (" +
+            F + " inputs &rarr; " + T + " targets)";
+    } catch (e) {
+        el.textContent = "≈ — learnables";
     }
 }
 
@@ -868,7 +971,11 @@ function copyLatexTable() {
 }
 
 document.addEventListener("DOMContentLoaded", function() {
+    toggleFeatureSchema();
     toggleArchitectureMode();
+    document.querySelectorAll('.metric-cb').forEach(function(cb) {
+        cb.addEventListener("change", updateParamEstimate);
+    });
     if (window.AssteroidBridge && window.AssteroidBridge.init) {
         window.AssteroidBridge.init("Stage3_Training");
     }
@@ -1022,7 +1129,8 @@ document.addEventListener("DOMContentLoaded", function() {
             <div class="field">
                 <label for="featureSchema">Input Feature Schema</label>
                 <select id="featureSchema" onchange="toggleFeatureSchema()">
-                    <option value="v2_physics" selected>v2 Physics-Informed Invariants (Gap metrics &amp; scale-free log space)</option>
+                    <option value="v3_physics" selected>v3 Physics-Informed Invariants (8D, log lateral gap, no redundant h/λ) — v6.3 default</option>
+                    <option value="v2_physics">v2 Physics-Informed Invariants (linear g_norm, optional h/λ)</option>
                     <option value="v1_legacy">v1 Legacy (Dimensionless ratios: p/λ, r/λ, p/r)</option>
                 </select>
             </div>
@@ -1032,7 +1140,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 <div class="info-card" style="border-left: 3px solid var(--accent);">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                         <strong style="color:var(--text-primary); font-size:12px;">Electrodynamic Invariant Space</strong>
-                        <span class="badge-tag badge-physics">v2_physics active</span>
+                        <span class="badge-tag badge-physics" id="physicsSchemaBadge">v3_physics active</span>
                     </div>
                     <div style="color:var(--text-secondary); margin-bottom:8px;">
                         Eliminates collinear log-space redundancy by retiring ratio
@@ -1072,21 +1180,25 @@ document.addEventListener("DOMContentLoaded", function() {
                                 <span class="badge-tag badge-success">Key Invariant</span>
                             </div>
                             <div class="feature-item-desc" style="color:var(--text-primary);">
-                                g<sub>norm</sub> = (P &minus; 2r)/P &isin; (0, 1]
+                                <span id="gapFeatureLog">ln g<sub>norm</sub> = ln[(P &minus; 2r)/P] &mdash; resolves the near-touching regime</span>
+                                <span id="gapFeatureLinear" style="display:none;">g<sub>norm</sub> = (P &minus; 2r)/P &isin; (0, 1]</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Vertical Gap Metric Controls -->
-                <div class="info-card" style="margin-top:8px;">
+                <!-- Vertical Gap Metric Controls (v2_physics only; redundant for a fixed gap) -->
+                <div class="info-card" id="verticalGapCard" style="margin-top:8px; display:none;">
                     <div class="toggle-row">
-                        <input type="checkbox" id="includeVerticalGap" checked onchange="toggleVerticalGapInput()">
+                        <input type="checkbox" id="includeVerticalGap" onchange="toggleVerticalGapInput()">
                         <label for="includeVerticalGap" style="font-weight:600; color:var(--text-primary); cursor:pointer;">
                             Include Vertical Gap Ratio (h<sub>gap</sub> / λ)
                         </label>
                     </div>
-                    <div id="verticalGapInputRow" style="display:block; margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
+                    <div style="font-size:10px; color:var(--text-secondary); margin-top:4px;">
+                        Redundant for a fixed gap: h<sub>gap</sub>/λ is a constant multiple of 1/λ (a near-exact quadratic of ln λ). Kept only for reproducing v2 models.
+                    </div>
+                    <div id="verticalGapInputRow" style="display:none; margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
                         <div class="field-row">
                             <div class="field" style="max-width:180px;">
                                 <label for="gapHeightUm">Spacer Height h<sub>gap</sub> (µm)</label>
@@ -1139,39 +1251,100 @@ document.addEventListener("DOMContentLoaded", function() {
             <div class="field">
                 <label>Backbone Architecture</label>
                 <select id="architecture" onchange="toggleArchitectureMode()">
-                    <option value="resnet">Standard Residual Network (ResNet-MLP)</option>
-                    <option value="tensor_resnet" selected>Low-Rank Tensor-Product ResNet (Tucker / Bilinear Core)</option>
+                    <option value="gs_tensor" selected>Geometry–Spectrum Factorized Tensor Network (gs_tensor, v6.3 default)</option>
+                    <option value="lean_resnet">Lean Residual MLP (lean_resnet, gs_tensor ablation without geometry gates)</option>
+                    <option value="tensor_resnet">Legacy: Low-Rank Tensor-Product ResNet (tensor_resnet, ≤ v6.2)</option>
+                    <option value="resnet">Legacy: Standard Residual Network (resnet)</option>
                 </select>
             </div>
-            <div id="tensorRankRow" class="field" style="display:block; background:rgba(72, 178, 172, 0.08); border:1px solid var(--border); border-radius:4px; padding:8px; margin-bottom:8px;">
-                <label>Tensor Contraction Rank (R) <span style="color:var(--accent);font-size:10px;">(Bilinear Hadamard Core)</span></label>
-                <input type="number" id="tensorRank" value="512" step="16" min="8">
-                <div style="font-size:10px; color:var(--text-secondary); margin-top:4px; line-height:1.35;">
-                    Contracts multi-scale Block 2 features with direct coordinate/spectral basis modes via a rank-R multiplicative core for smooth 3D (p, r, &lambda;) manifolds.
+
+            <!-- gs_tensor / lean_resnet sizes -->
+            <div id="gsArchContainer" style="display:block; background:rgba(72, 178, 172, 0.08); border:1px solid var(--border); border-radius:4px; padding:8px; margin-bottom:8px;">
+                <div style="font-size:10px; color:var(--text-secondary); margin-bottom:6px; line-height:1.35;">
+                    A &lambda;-blind geometry encoder G(P, r) (<code>sliceLayer</code> of ln P, ln r, ln g<sub>norm</sub>) multiplicatively gates a
+                    spectral-geometric residual stream: h<sub>k</sub> = h<sub>k&minus;1</sub> + W<sub>o</sub>[a<sub>k</sub> &odot; s<sub>k</sub>(G)].
+                    Identity skips only; heads are physically bounded (sigmoid for Abs, softplus for log-EE).
+                </div>
+                <div class="field-row">
+                    <div class="field">
+                        <label>Model Width <span style="color:var(--text-secondary);font-size:10px;">(stem &amp; residual stream)</span></label>
+                        <input type="number" id="modelWidth" value="256" step="16" min="8" oninput="updateParamEstimate()">
+                    </div>
+                    <div class="field">
+                        <label>Residual Blocks</label>
+                        <input type="number" id="numBlocks" value="2" step="1" min="0" max="8" oninput="updateParamEstimate()">
+                    </div>
+                </div>
+                <div class="field-row" id="geoSizeRow">
+                    <div class="field">
+                        <label>Geometry Encoder Width</label>
+                        <input type="number" id="geoWidth" value="128" step="16" min="4" oninput="updateParamEstimate()">
+                    </div>
+                    <div class="field">
+                        <label>Geometry Encoder Depth</label>
+                        <input type="number" id="geoDepth" value="2" step="1" min="0" max="6" oninput="updateParamEstimate()">
+                    </div>
+                </div>
+                <div class="field-row">
+                    <div class="field">
+                        <label>Hidden Activation</label>
+                        <select id="hiddenActivation">
+                            <option value="gelu" selected>GELU (C&infin;, default)</option>
+                            <option value="swish">Swish / SiLU</option>
+                            <option value="tanh">tanh</option>
+                        </select>
+                    </div>
+                    <div class="field" style="justify-content:flex-end;">
+                        <div class="toggle-row">
+                            <input type="checkbox" id="boundedHeads" checked>
+                            <label for="boundedHeads">Physically bounded heads</label>
+                        </div>
+                        <div class="toggle-row">
+                            <input type="checkbox" id="zeroInitResidualOut" checked>
+                            <label for="zeroInitResidualOut">Zero-init residual outputs</label>
+                        </div>
+                    </div>
                 </div>
             </div>
+
+            <!-- Legacy resnet / tensor_resnet sizes -->
+            <div id="legacyArchContainer" style="display:none;">
+                <div id="tensorRankRow" class="field" style="display:block; background:rgba(72, 178, 172, 0.08); border:1px solid var(--border); border-radius:4px; padding:8px; margin-bottom:8px;">
+                    <label>Tensor Contraction Rank (R) <span style="color:var(--accent);font-size:10px;">(Bilinear Hadamard Core)</span></label>
+                    <input type="number" id="tensorRank" value="512" step="16" min="8" oninput="updateParamEstimate()">
+                    <div style="font-size:10px; color:var(--text-secondary); margin-top:4px; line-height:1.35;">
+                        Contracts multi-scale Block 2 features with direct coordinate/spectral basis modes via a rank-R multiplicative core for smooth 3D (p, r, &lambda;) manifolds.
+                    </div>
+                </div>
+                <div class="field-row">
+                    <div class="field">
+                        <label>FC1a Width</label>
+                        <input type="number" id="fc1a" value="256" step="16" min="1" oninput="updateParamEstimate()">
+                    </div>
+                    <div class="field">
+                        <label>FC1b Width <span style="color:var(--text-secondary);font-size:10px;">(skip connections auto-match)</span></label>
+                        <input type="number" id="fc1b" value="512" step="16" min="1" oninput="updateParamEstimate()">
+                    </div>
+                </div>
+                <div class="field-row">
+                    <div class="field">
+                        <label>FC2a Width</label>
+                        <input type="number" id="fc2a" value="1024" step="16" min="1" oninput="updateParamEstimate()">
+                    </div>
+                </div>
+            </div>
+
             <div class="toggle-row">
-                <input type="checkbox" id="useMultiHead" checked>
+                <input type="checkbox" id="useMultiHead" checked onchange="updateParamEstimate()">
                 <label for="useMultiHead">Use multi-head outputs</label>
             </div>
             <div class="field-row">
                 <div class="field">
-                    <label>FC1a Width</label>
-                    <input type="number" id="fc1a" value="256" step="16" min="1">
-                </div>
-                <div class="field">
-                    <label>FC1b Width <span style="color:var(--text-secondary);font-size:10px;">(skip connections auto-match)</span></label>
-                    <input type="number" id="fc1b" value="512" step="16" min="1">
-                </div>
-            </div>
-            <div class="field-row">
-                <div class="field">
-                    <label>FC2a Width</label>
-                    <input type="number" id="fc2a" value="1024" step="16" min="1">
-                </div>
-                <div class="field">
                     <label>Head Hidden Sizes <span style="color:var(--text-secondary);font-size:10px;">(can be comma-separated)</span></label>
-                    <input type="text" id="headHiddenSizes" value="512" placeholder="e.g., 512 or 512,256">
+                    <input type="text" id="headHiddenSizes" value="128" placeholder="e.g., 128 or 256,128" oninput="updateParamEstimate()">
+                </div>
+                <div class="field" style="justify-content:flex-end;">
+                    <div id="paramEstimate" style="font-size:11px; color:var(--text-secondary); padding-bottom:6px;">≈ — learnables</div>
                 </div>
             </div>
         </div>

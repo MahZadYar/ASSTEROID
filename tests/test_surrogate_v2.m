@@ -12,6 +12,12 @@
 %      analyte-weighted inference objective; gradient matches central
 %      finite differences.
 %   7. Spectral smoothness diagnostic on a 0.1 nm grid (reported only).
+%   8. Multi-tier evaluation metrics report.
+%   9. Legacy tensor_resnet + peak-weighted MSE (backward compatibility).
+%
+% Since v6.3 the default dataset schema is v3_physics and the default
+% architecture is gs_tensor, so checks 4-7 exercise the new defaults on the
+% benchmark data (see tests/test_gs_tensor.m for architecture-level checks).
 %
 % Run from the Codebase folder after setup_project:
 %   matlab -batch "addpath(pwd); setup_project; run('tests/test_surrogate_v2.m')"
@@ -122,7 +128,9 @@ end
 fprintf('\n[4] v2 smoke training and persistence\n');
 m2 = train_sers_dnn(ds, MaxEpochs=2, MiniBatchSize=1024, Plots="none", Verbose=false, ...
     ValidationFrequency=50);
-failures = check(failures, isPhysicsSchemaModel(m2), 'trained model carries v2 schema');
+failures = check(failures, isPhysicsSchemaModel(m2), 'trained model carries physics schema');
+failures = check(failures, isfield(m2, 'architecture') && m2.architecture == "gs_tensor", ...
+    'default architecture is gs_tensor');
 lt = arrayfun(@(L) string(class(L)), m2.net.Layers);
 failures = check(failures, ~any(contains(lt, 'BatchNormalization')) && any(contains(lt, 'LayerNormalization')), ...
     'LayerNorm, no BatchNorm');

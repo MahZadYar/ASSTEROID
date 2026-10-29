@@ -1,0 +1,272 @@
+---
+config:
+  layout: elk
+  elk:
+    mergeEdges: false
+    nodePlacementStrategy: LINEAR_SEGMENTS %% SIMPLE | NETWORK_SIMPLEX | LINEAR_SEGMENTS | BRANDES_KOEPF (default)
+    nodePlacementAlignment: BALANCED %% NONE | LEFTUP | LEFTDOWN | RIGHTUP | RIGHTDOWN | BALANCED
+  look: handdrawn
+  theme: default
+
+---
+flowchart TB
+    %% ==========================================
+    %% PROPOSAL (rev. 2): Geometry-Spectrum Factorized Tensor Network ("gs_tensor")
+    %% Default config: modelWidth = 256, geoWidth = 128, numBlocks = 2, headHiddenSizes = 128
+    %% 450,435 trainable parameters (vs 2,546,691 in tensor_resnet)
+    %% Rev. 2 uses the full MATLAB R2026b layer catalog where it adds value:
+    %%   sliceLayer (geometry column split), sigmoidLayer / softplusLayer (physically bounded outputs),
+    %%   scalingLayer (fixed in-network target standardization). The no-op "regression" identity is removed.
+    %% ==========================================
+    %% CLASS DEFINITIONS (ASSTEROID PROJECT PALETTE)
+    %% Row A: Cobalt Blue (#241ec3, #eef3ff) -> Raw Inputs & Feature Input
+    %% Row B: Electric Violet (#7f00e0, #f1ebff) -> Fully Connected & Layer Normalization
+    %% Row C: SERS Teal (#27928d, #e4fffc) -> Element-wise Mult (⊙) & SERS Metrics
+    %% Row D: Luminous Gold (#c9942c, #fff8eb) -> Activations (GELU, Sigmoid, Softplus)
+    %% Neutrals & Accents -> Addition (+), Concatenation, Utility (Slice, Scaling), Constants
+    %% ==========================================
+    classDef inputStyle fill:#eef3ff,stroke:#241ec3,stroke-width:1.5px,color:#080050,font-weight:bold;
+    classDef fcStyle fill:#f1ebff,stroke:#7f00e0,stroke-width:1.5px,color:#1f003e;
+    classDef normStyle fill:#fbf8ff,stroke:#994ef3,stroke-width:1.5px,color:#3d0070;
+    classDef actStyle fill:#fff8eb,stroke:#c9942c,stroke-width:1.5px,color:#5f4100;
+    classDef boundStyle fill:#fff8eb,stroke:#c9942c,stroke-width:2.2px,color:#5f4100,font-weight:bold;
+    classDef addStyle fill:#fee2e2,stroke:#dc2626,stroke-width:1.8px,color:#7f1d1d,font-weight:bold;
+    classDef multStyle fill:#e4fffc,stroke:#27928d,stroke-width:2px,color:#003634,font-weight:bold;
+    classDef concatStyle fill:#ede9fe,stroke:#8b5cf6,stroke-width:1.8px,color:#4c1d95,font-weight:bold;
+    classDef utilStyle fill:#f0f9ff,stroke:#0369a1,stroke-width:1.5px,stroke-dasharray:5 3,color:#0c4a6e;
+    classDef metricStyle fill:#e4fffc,stroke:#27928d,stroke-width:2px,color:#003634,font-weight:bold;
+    classDef constStyle fill:#f8fafc,stroke:#94a3b8,stroke-width:1.2px,stroke-dasharray:4 3,color:#334155;
+
+    %% ==========================================
+    %% RAW INPUTS, CONSTANTS & PHYSICS PAYLOAD (v3_physics, 8D)
+    %% ==========================================
+    subgraph s_inputs["Input Parameters & Physics-Informed Preprocessing (v3_physics)"]
+        subgraph s_raw["Raw Design & Spectral Parameters"]
+            p_P[("$$P\\text{ [nm]}$$<br>Period")]:::inputStyle
+            p_r[("$$r\\text{ [nm]}$$<br>Radius")]:::inputStyle
+            p_lam[("$$\\lambda\\text{ [nm]}$$<br>Simulation Wavelength")]:::inputStyle
+            p_nk[("$$n(\\lambda), k(\\lambda)$$<br>Refractive Indices (Au)")]:::inputStyle
+        end
+
+        subgraph s_const["Fixed Constants (not fed; absorbed by biases)"]
+            c_lamL["$$\\lambda_L = 785\\text{ nm}$$<br>Pump Laser Wavelength"]:::constStyle
+            c_hgap["$$h_{\\text{gap}} = 5\\text{ nm}$$<br>Particle-Mirror Gap"]:::constStyle
+        end
+
+        subgraph s_feat["Physics-Informed Payload Invariants"]
+            subgraph s_fgeo["Geometric Invariants (λ-blind)"]
+                f_logP[("$$\\ln P\\,[\\mu\\mathrm{m}]$$")]:::inputStyle
+                f_logr[("$$\\ln r\\,[\\mu\\mathrm{m}]$$")]:::inputStyle
+                f_logg[("$$\\ln g_{\\text{norm}} = \\ln\\frac{P - 2r}{P}$$")]:::inputStyle
+            end
+
+            subgraph s_fspec["Spectral & Material Invariants"]
+                f_loglam[("$$\\ln \\lambda\\,[\\mu\\mathrm{m}]$$")]:::inputStyle
+                f_eps1[("$$\\varepsilon_1(\\lambda) = n^2 - k^2$$")]:::inputStyle
+                f_eps2[("$$\\varepsilon_2(\\lambda) = 2nk$$")]:::inputStyle
+            end
+
+            subgraph s_fx["Geometry-Spectrum Cross Ratios"]
+                f_Plam[("$$P / \\lambda$$")]:::inputStyle
+                f_rlam[("$$r / \\lambda$$")]:::inputStyle
+            end
+        end
+
+        n_in["<b>Input Vector</b> [8]<br><code>input</code>"]:::inputStyle
+    end
+
+    %% ==========================================
+    %% GEOMETRY ENCODER G(P, r): λ-blind branch
+    %% (carries pump response at fixed λ_L, loading factors κ_D, modal amplitudes)
+    %% ==========================================
+    subgraph s_geo["Geometry Encoder G(P, r) — λ-blind"]
+        g_sel@{ shape: trap-t, label: "<b>Slice</b> [3]<br><code>geo_slice</code>" }
+        g_fc1["<b>FC</b> [128]<br><code>geo_fc1</code>"]:::fcStyle
+        g_bn1(["<b>LN</b> [128]<br><code>geo_ln1</code>"]):::normStyle
+        g_gelu1{{"<b>GELU</b><br><code>geo_gelu1</code>"}}:::actStyle
+        g_fc2["<b>FC</b> [128]<br><code>geo_fc2</code>"]:::fcStyle
+        g_bn2(["<b>LN</b> [128]<br><code>geo_ln2</code>"]):::normStyle
+        g_gelu2{{"<b>GELU</b><br><code>geo_gelu2</code>"}}:::actStyle
+    end
+
+    %% ==========================================
+    %% SPECTRAL-GEOMETRIC STEM
+    %% ==========================================
+    subgraph s_stem["Spectral-Geometric Stem"]
+        s_fc["<b>FC</b> [256]<br><code>stem_fc</code>"]:::fcStyle
+        s_bn(["<b>LN</b> [256]<br><code>stem_ln</code>"]):::normStyle
+        s_gelu{{"<b>GELU</b><br><code>stem_gelu</code>"}}:::actStyle
+    end
+
+    %% ==========================================
+    %% GEOMETRY-CONDITIONED BILINEAR RESIDUAL BLOCK 1
+    %% ==========================================
+    subgraph s_b1["Geometry-Conditioned Bilinear Residual Block 1"]
+        subgraph s_b1a["Spectral Factor"]
+            b1_fca["<b>FC</b> [256]<br><code>b1_fc_a</code>"]:::fcStyle
+            b1_bna(["<b>LN</b> [256]<br><code>b1_ln_a</code>"]):::normStyle
+            b1_gelua{{"<b>GELU</b><br><code>b1_gelu_a</code>"}}:::actStyle
+        end
+        subgraph s_b1g["Geometric Gate (linear, bias = 1)"]
+            b1_gate["<b>FC</b> [256]<br><code>b1_gate</code>"]:::fcStyle
+        end
+        b1_mult@{ shape: circle, label: '<b>⊙</b> [256]<br><code>b1_mult</code>' }
+        b1_fco["<b>FC</b> [256] · rank contraction<br><code>b1_fc_o</code>"]:::fcStyle
+        b1_add@{ shape: circle, label: '<b>+</b> [256]<br><code>b1_add</code>' }
+    end
+
+    %% ==========================================
+    %% GEOMETRY-CONDITIONED BILINEAR RESIDUAL BLOCK 2
+    %% ==========================================
+    subgraph s_b2["Geometry-Conditioned Bilinear Residual Block 2"]
+        subgraph s_b2a["Spectral Factor"]
+            b2_fca["<b>FC</b> [256]<br><code>b2_fc_a</code>"]:::fcStyle
+            b2_bna(["<b>LN</b> [256]<br><code>b2_ln_a</code>"]):::normStyle
+            b2_gelua{{"<b>GELU</b><br><code>b2_gelu_a</code>"}}:::actStyle
+        end
+        subgraph s_b2g["Geometric Gate (linear, bias = 1)"]
+            b2_gate["<b>FC</b> [256]<br><code>b2_gate</code>"]:::fcStyle
+        end
+        b2_mult@{ shape: circle, label: '<b>⊙</b> [256]<br><code>b2_mult</code>' }
+        b2_fco["<b>FC</b> [256] · rank contraction<br><code>b2_fc_o</code>"]:::fcStyle
+        b2_add@{ shape: circle, label: '<b>+</b> [256]<br><code>b2_add</code>' }
+    end
+
+    %% ==========================================
+    %% DECOUPLED MULTI-TASK READOUT HEADS (physically bounded)
+    %% ==========================================
+    subgraph s_heads["Decoupled, Physically Bounded Readout Heads"]
+        subgraph s_h1["Head #1 · Abs ∈ (0, 1)"]
+            h1_fc1["<b>FC</b> [128]<br><code>head_1_fc1</code>"]:::fcStyle
+            h1_bn1(["<b>LN</b> [128]<br><code>head_1_ln1</code>"]):::normStyle
+            h1_gelu1{{"<b>GELU</b><br><code>head_1_gelu1</code>"}}:::actStyle
+            h1_out["<b>FC</b> [1]<br><code>head_1_out</code>"]:::fcStyle
+            h1_act{{"<b>Sigmoid</b><br><code>head_1_bound</code>"}}:::boundStyle
+            h1_z@{ shape: trap-b, label: "<b>Scale</b> [1]<br><code>head_1_zscore</code>" }
+        end
+        subgraph s_h2["Head #2 · log-EE ≥ 0"]
+            h2_fc1["<b>FC</b> [128]<br><code>head_2_fc1</code>"]:::fcStyle
+            h2_bn1(["<b>LN</b> [128]<br><code>head_2_ln1</code>"]):::normStyle
+            h2_gelu1{{"<b>GELU</b><br><code>head_2_gelu1</code>"}}:::actStyle
+            h2_out["<b>FC</b> [1]<br><code>head_2_out</code>"]:::fcStyle
+            h2_act{{"<b>Softplus</b><br><code>head_2_bound</code>"}}:::boundStyle
+            h2_z@{ shape: trap-b, label: "<b>Scale</b> [1]<br><code>head_2_zscore</code>" }
+        end
+        subgraph s_h3["Head #3 · log-EE ≥ 0"]
+            h3_fc1["<b>FC</b> [128]<br><code>head_3_fc1</code>"]:::fcStyle
+            h3_bn1(["<b>LN</b> [128]<br><code>head_3_ln1</code>"]):::normStyle
+            h3_gelu1{{"<b>GELU</b><br><code>head_3_gelu1</code>"}}:::actStyle
+            h3_out["<b>FC</b> [1]<br><code>head_3_out</code>"]:::fcStyle
+            h3_act{{"<b>Softplus</b><br><code>head_3_bound</code>"}}:::boundStyle
+            h3_z@{ shape: trap-b, label: "<b>Scale</b> [1]<br><code>head_3_zscore</code>" }
+        end
+    end
+
+    %% ==========================================
+    %% NETWORK OUTPUT, LATENT TARGETS & OUTPUT METRICS
+    %% ==========================================
+    subgraph s_out["Network Output, Latent Targets & Physical Metrics"]
+        n_cat@{ shape: lean-right, label: "<b>Concat</b> [3] · network output<br><code>concatOut</code>" }
+        subgraph s_targets["Standardized Latent Predictions"]
+            t_z1["$$Z_1 = \\frac{\\mathrm{Abs} - \\mu_1}{\\sigma_1}$$"]:::metricStyle
+            t_z2["$$Z_2 = \\frac{\\log_{10}(1 + \\mathrm{EE}_V) - \\mu_2}{\\sigma_2}$$"]:::metricStyle
+            t_z3["$$Z_3 = \\frac{\\log_{10}(1 + \\mathrm{EE}_S) - \\mu_3}{\\sigma_3}$$"]:::metricStyle
+        end
+        subgraph s_metrics["Physical Calibration & Output Metrics"]
+            m_abs["$$\\mathrm{Abs}(\\lambda)$$<br>Far-Field Absorptance"]:::metricStyle
+            m_eev["$$\\mathrm{EE}_V(\\lambda)$$<br>Volumetric Enhancement Efficacy"]:::metricStyle
+            m_ees["$$\\mathrm{EE}_S(\\lambda)$$<br>Surface Enhancement Efficacy"]:::metricStyle
+        end
+    end
+
+    %% ==========================================
+    %% LEGEND: LAYER TYPES USED (MATLAB R2026b)
+    %% ==========================================
+    subgraph s_legend["Legend: Layer Types Used (11 types, MATLAB R2026b)"]
+        leg_input["<b>Input Vector</b> [d]<br>Feature Input"]:::inputStyle
+        leg_fc["<b>FC</b> [d]<br>Fully Connected"]:::fcStyle
+        leg_bn(["<b>LN</b> [d]<br>Layer Normalization"]):::normStyle
+        leg_gelu{{"<b>GELU</b><br>GELU Activation"}}:::actStyle
+        leg_bound{{"<b>Sigmoid / Softplus</b><br>Bounding Output Activation"}}:::boundStyle
+        leg_add@{ shape: circle, label: '<b>+</b><br>Addition' }
+        leg_mult@{ shape: circle, label: '<b>⊙</b><br>Element-wise Multiplication' }
+        leg_concat@{ shape: lean-right, label: "<b>Concat</b> [d]<br>Concatenation" }
+        leg_slice@{ shape: trap-t, label: "<b>Slice</b> [d]<br>Channel Slice (0 params)" }
+        leg_scale@{ shape: trap-b, label: "<b>Scale</b> [d]<br>Fixed Affine Scaling (0 params)" }
+        leg_const["<b>Constant</b><br>Fixed, not fed to network"]:::constStyle
+        leg_met["<b>Physical Metric</b><br>Decoded Spectral Output"]:::metricStyle
+
+        leg_input ~~~ leg_fc ~~~ leg_bn ~~~ leg_gelu ~~~ leg_bound ~~~ leg_add
+        leg_mult ~~~ leg_concat ~~~ leg_slice ~~~ leg_scale ~~~ leg_const ~~~ leg_met
+    end
+
+    %% Apply class styling to operation / extended-shape nodes
+    class b1_add,b2_add,leg_add addStyle;
+    class b1_mult,b2_mult,leg_mult multStyle;
+    class n_cat,leg_concat concatStyle;
+    class g_sel,h1_z,h2_z,h3_z,leg_slice,leg_scale utilStyle;
+
+    %% ==========================================
+    %% TOPOLOGICAL CONNECTIONS & EDGE ROUTING
+    %% ==========================================
+    %% Raw inputs -> invariants
+    p_P --> f_logP & f_logg & f_Plam
+    p_r --> f_logr & f_logg & f_rlam
+    p_lam --> f_loglam & f_Plam & f_rlam & p_nk
+    p_nk --> f_eps1 & f_eps2
+
+    %% Fixed constants are implicitly encoded (no input column)
+    c_lamL & c_hgap -. "absorbed into biases" .-> g_fc1
+
+    %% Invariants -> input vector
+    f_logP & f_logr & f_logg --> n_in
+    f_loglam & f_eps1 & f_eps2 --> n_in
+    f_Plam & f_rlam --> n_in
+
+    %% Geometry encoder (channel slice, then λ-blind MLP)
+    n_in -- "8D" --> g_sel
+    g_sel -- "3D: ln P, ln r, ln g" --> g_fc1
+    g_fc1 --> g_bn1 --> g_gelu1 --> g_fc2 --> g_bn2 --> g_gelu2
+
+    %% Spectral-geometric stem
+    n_in -- "8D" --> s_fc
+    s_fc --> s_bn --> s_gelu
+
+    %% Block 1
+    s_gelu -- "256D" --> b1_fca
+    b1_fca --> b1_bna --> b1_gelua
+    b1_gelua -- "256D" --> b1_mult
+    g_gelu2 -- "128D" --> b1_gate
+    b1_gate -- "256D" --> b1_mult
+    b1_mult -- "256D" --> b1_fco
+    b1_fco -- "256D" --> b1_add
+    s_gelu -- "identity skip" --> b1_add
+
+    %% Block 2
+    b1_add -- "256D" --> b2_fca
+    b2_fca --> b2_bna --> b2_gelua
+    b2_gelua -- "256D" --> b2_mult
+    g_gelu2 -- "128D" --> b2_gate
+    b2_gate -- "256D" --> b2_mult
+    b2_mult -- "256D" --> b2_fco
+    b2_fco -- "256D" --> b2_add
+    b1_add -- "identity skip" --> b2_add
+
+    %% Decoupled heads with physical bounds and fixed z-scoring
+    b2_add -- "256D" --> h1_fc1 & h2_fc1 & h3_fc1
+    h1_fc1 --> h1_bn1 --> h1_gelu1 --> h1_out --> h1_act --> h1_z
+    h2_fc1 --> h2_bn1 --> h2_gelu1 --> h2_out --> h2_act --> h2_z
+    h3_fc1 --> h3_bn1 --> h3_gelu1 --> h3_out --> h3_act --> h3_z
+
+    %% Network output (concatenation)
+    h1_z -- "1D" --> n_cat
+    h2_z -- "1D" --> n_cat
+    h3_z -- "1D" --> n_cat
+
+    %% Inverse standardization & metric calibration
+    n_cat -. "Z₁" .-> t_z1
+    n_cat -. "Z₂" .-> t_z2
+    n_cat -. "Z₃" .-> t_z3
+    t_z1 ==> m_abs
+    t_z2 ==> m_eev
+    t_z3 ==> m_ees

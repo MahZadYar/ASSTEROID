@@ -2947,16 +2947,9 @@ function runTrainingPipeline(src, d, fig, visPanel)
         metricsList = string(d.metricsToTrain);
     end
 
-    networkConfig = struct( ...
-        "architecture", safeStr(d, "architecture", "tensor_resnet"), ...
-        "tensorRank", safeNum(d, "tensorRank", 512), ...
-        "useMultiHead", safeBool(d, "useMultiHead", true), ...
-        "fc1a", safeNum(d, "fc1a", 256), ...
-        "fc1b", safeNum(d, "fc1b", 512), ...
-        "proj1", safeNum(d, "proj1", 512), ...
-        "fc2a", safeNum(d, "fc2a", 1024), ...
-        "fc2b", safeNum(d, "fc2b", 512), ...
-        "headHiddenSizes", parseNumberList(safeStr(d, "headHiddenSizes", "512"), 512));
+    % Architecture + layer sizes (gs_tensor default; legacy resnet /
+    % tensor_resnet remain selectable). Shared with TrainingController.
+    networkConfig = networkConfigFromUI(d);
 
     targetLossWeights = parseNumberList(safeStr(d, "targetLossWeights", ""), []);
     extraTrainingOptions = parseNameValuePairs(safeStr(d, "extraTrainingOptions", ""));
@@ -2996,9 +2989,9 @@ function runTrainingPipeline(src, d, fig, visPanel)
         plotsMode = "none";
     end
 
-    featureSchema = safeStr(d, "featureSchema", "v2_physics");
+    featureSchema = safeStr(d, "featureSchema", "v3_physics");
     splitMode     = safeStr(d, "splitMode", "geometry");
-    incVertGap    = safeBool(d, "includeVerticalGap", true);
+    incVertGap    = safeBool(d, "includeVerticalGap", false) && featureSchema == "v2_physics";
     gapHeightUm   = safeNum(d, "gapHeightUm", 0.005);
 
     defaultCpPath = fullfile(workDir, "DNNCheckpoints");

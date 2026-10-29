@@ -14,6 +14,24 @@ Previous implementations had a critical architectural issue: different models co
 
 **Solution:** Implement an explicit model flag system that saves preprocessing configuration at training time and ensures all inference paths respect these flags.
 
+### Physics Feature Schemas (current default: `v3_physics`, ASSTEROID ≥ 6.3)
+
+The v1 log/ratio pipeline described below is retained for legacy models. New models use a self-describing **physics schema** built by `buildPhysicsFeatures.m` from the same five raw columns `[p_um, r_um, lambda_um, n, k]`, z-scored with train-split statistics stored in `model.featureSchema` (`FeatureNames`, `FeatureMean`, `FeatureStd`); `ensureModelFlags` rebinds `model.normalize` to `standardizeModelFeatures` on load, so training, dense prediction and `dlgradient` optimization share one code path.
+
+| # | `v3_physics` (default) | `v2_physics` (legacy) | Definition |
+|---|---|---|---|
+| 1 | `log_p` | `log_p` | `log(P)` [µm] |
+| 2 | `log_r` | `log_r` | `log(r)` [µm] |
+| 3 | `log_lambda` | `log_lambda` | `log(lambda)` [µm] |
+| 4 | `eps1` | `eps1` | `n.^2 - k.^2` |
+| 5 | `eps2` | `eps2` | `2.*n.*k` |
+| 6 | `p_over_lambda` | `p_over_lambda` | `P ./ lambda` |
+| 7 | `r_over_lambda` | `r_over_lambda` | `r ./ lambda` |
+| 8 | `log_g_norm` | `g_norm` | `log((P - 2r)./P)` vs `(P - 2r)./P` (lateral opening) |
+| 9 | — | `h_over_lambda` (optional, `IncludeVerticalGap`) | `h_gap ./ lambda` |
+
+Why v3: with a fixed particle–mirror gap (`h_gap` = 5 nm) the column `h_over_lambda` is a constant multiple of `1/lambda`, an almost exact quadratic of `log_lambda` over the Stokes window (R² > 0.99999), so it adds no information and is removed (`IncludeVerticalGap` is ignored with a warning for v3). The lateral gap enters logarithmically, which spreads the near-touching band `g_norm` ∈ [0.02, 0.10] over ~41 % of the standardized range instead of ~8 %. Physics-schema datasets also record per-target physical bounds (`targetTransform.BoundKind`, `LowerBound`, `UpperBound`) consumed by the bounded heads of the `gs_tensor` architecture (see `paper_to_code_reference.md` §7).
+
 ---
 
 ## Architecture Overview

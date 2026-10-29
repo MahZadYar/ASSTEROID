@@ -20,9 +20,9 @@ function cfg = trainingConfig(options)
 %       Verbose             – Console progress (logical, true)
 %       Holdout             – Fraction for val+test (0-1, 0.2)
 %       ValSplit            – Validation share of holdout (0-1, 0.5)
-%       FeatureSchema       – "v2_physics" (default) | "v1_legacy"
+%       FeatureSchema       – "v3_physics" (default) | "v2_physics" | "v1_legacy"
 %       SplitMode           – "geometry" (default, no (P,r) leakage) | "row"
-%       IncludeVerticalGap  – v2 only: add h_gap/lambda feature (logical, false)
+%       IncludeVerticalGap  – v2 only: add h_gap/lambda feature (logical, false; ignored for v3)
 %       GapHeightUm         – v2 only: vertical gap height in µm (0.005)
 %       SaveArtifacts       – Persist model & dataset to disk (logical, true)
 %       NetworkConfig       – Struct of layer width overrides (struct)
@@ -91,9 +91,9 @@ arguments
     options.Verbose             (1,1) logical = true
     options.Holdout             (1,1) double  {mustBeBetween(options.Holdout,0,1)} = 0.2
     options.ValSplit            (1,1) double  {mustBeBetween(options.ValSplit,0,1)} = 0.5
-    options.FeatureSchema       (1,1) string  {mustBeMember(options.FeatureSchema, ["v2_physics", "v1_legacy"])} = "v2_physics"
+    options.FeatureSchema       (1,1) string  {mustBeMember(options.FeatureSchema, ["v3_physics", "v2_physics", "v1_legacy"])} = "v3_physics"
     options.SplitMode           (1,1) string  {mustBeMember(options.SplitMode, ["geometry", "row"])} = "geometry"
-    options.IncludeVerticalGap  (1,1) logical = true
+    options.IncludeVerticalGap  (1,1) logical = false
     options.GapHeightUm         (1,1) double  {mustBePositive} = 0.005
     options.SaveArtifacts       (1,1) logical = true
     options.DatabaseFile        (1,1) string  = ""
