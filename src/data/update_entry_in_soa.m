@@ -70,18 +70,28 @@ function allData = update_entry_in_soa(allData, rowIdx, entry)
         if (isnumeric(val) || islogical(val)) && ~isscalar(val) && isvector(val)
             val = double(val(:)');
             entry.(fn) = val;
+            curRows = size(allData.(fn), 1);
             curCols = size(allData.(fn), 2);
             newCols = numel(val);
             if newCols > curCols
                 padCols = newCols - curCols;
-                allData.(fn) = [allData.(fn), nan(N, padCols)];
+                if curRows == N
+                    allData.(fn) = [allData.(fn), nan(N, padCols)];
+                elseif curRows == 1
+                    allData.(fn) = [allData.(fn), nan(1, padCols)];
+                end
             end
         elseif isstring(val) && ~isscalar(val) && isvector(val)
+            curRows = size(allData.(fn), 1);
             curCols = size(allData.(fn), 2);
             newCols = numel(val);
             if newCols > curCols
                 padCols = newCols - curCols;
-                allData.(fn) = [allData.(fn), strings(N, padCols)];
+                if curRows == N
+                    allData.(fn) = [allData.(fn), strings(N, padCols)];
+                elseif curRows == 1
+                    allData.(fn) = [allData.(fn), strings(1, padCols)];
+                end
             end
         end
     end
@@ -92,31 +102,41 @@ function allData = update_entry_in_soa(allData, rowIdx, entry)
         fn = fldsAll{k};
         if isfield(entry, fn)
             val = entry.(fn);
-            if isnumeric(val) || islogical(val)
-                val = double(val);
-                if isscalar(val)
-                    allData.(fn)(rowIdx, 1) = val;
-                else
-                    valRow = val(:)';
-                    curCols = size(allData.(fn), 2);
-                    if numel(valRow) < curCols
-                        valRow(end+1:curCols) = NaN;
+            curRows = size(allData.(fn), 1);
+            if curRows == N
+                if isnumeric(val) || islogical(val)
+                    val = double(val);
+                    if isscalar(val)
+                        allData.(fn)(rowIdx, 1) = val;
+                    else
+                        valRow = val(:)';
+                        curCols = size(allData.(fn), 2);
+                        if numel(valRow) < curCols
+                            valRow(end+1:curCols) = NaN;
+                        end
+                        allData.(fn)(rowIdx, 1:curCols) = valRow(1:curCols);
                     end
-                    allData.(fn)(rowIdx, 1:curCols) = valRow(1:curCols);
-                end
-            elseif isstring(val)
-                if isscalar(val)
-                    allData.(fn)(rowIdx, 1) = string(val);
-                else
-                    valRow = string(val(:)');
-                    curCols = size(allData.(fn), 2);
-                    if numel(valRow) < curCols
-                        valRow(end+1:curCols) = "";
+                elseif isstring(val)
+                    if isscalar(val)
+                        allData.(fn)(rowIdx, 1) = string(val);
+                    else
+                        valRow = string(val(:)');
+                        curCols = size(allData.(fn), 2);
+                        if numel(valRow) < curCols
+                            valRow(end+1:curCols) = "";
+                        end
+                        allData.(fn)(rowIdx, 1:curCols) = valRow(1:curCols);
                     end
-                    allData.(fn)(rowIdx, 1:curCols) = valRow(1:curCols);
+                elseif iscell(val)
+                    allData.(fn)(rowIdx, 1:numel(val)) = val;
                 end
-            elseif iscell(val)
-                allData.(fn)(rowIdx, 1:numel(val)) = val;
+            elseif curRows == 1 && isscalar(val)
+                % Branch/dataset level metadata or broadcasted scalar
+                if isnumeric(val) || islogical(val)
+                    allData.(fn) = double(val);
+                elseif isstring(val)
+                    allData.(fn) = string(val);
+                end
             end
         end
     end

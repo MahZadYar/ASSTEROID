@@ -5,14 +5,14 @@ entry = struct();
 if isempty(S) || ~isstruct(S)
     return;
 end
+N = structRowCount(S);
 flds = fieldnames(S);
 for k = 1:numel(flds)
     fn = flds{k};
     val = S.(fn);
     
     % Skip scalar branch parameters or broadcasted arrays (like [1 x L] lambda)
-    if size(val, 1) == 1
-        entry.(fn) = val;
+    if size(val, 1) == 1 && N > 1
         continue;
     end
     

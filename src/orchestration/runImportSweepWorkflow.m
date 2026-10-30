@@ -75,7 +75,8 @@ end
     if cfg.mode == "merge"
         reporter.start("LoadExisting", "Loading existing database...");
         if isfield(cfg, "existingData") && isstruct(cfg.existingData) && ~isempty(fieldnames(cfg.existingData))
-            allDataStruct = normalizeGeometryFields(cfg.existingData);
+            allDataStruct = stripBranchMetadata(cfg.existingData);
+            allDataStruct = normalizeGeometryFields(allDataStruct);
             nExisting = structRowCount(allDataStruct);
             reporter.complete("LoadExisting", sprintf("Using in-memory database (%d existing entries).", nExisting));
         elseif strlength(string(cfg.outputFile)) > 0 && isfile(cfg.outputFile)
@@ -96,6 +97,7 @@ end
                 loaded = load(cfg.databaseFile, "db");
                 if isfield(loaded, "db") && isfield(loaded.db, "Sim") && isstruct(loaded.db.Sim)
                     allDataStruct = extractBranchAsSoA(loaded.db, "Sim");
+                    allDataStruct = stripBranchMetadata(allDataStruct);
                     allDataStruct = normalizeGeometryFields(allDataStruct);
                     nExisting = structRowCount(allDataStruct);
                     reporter.complete("LoadExisting", sprintf("Loaded %d existing entries from %s (db.Sim).", nExisting, cfg.databaseFile));
@@ -667,4 +669,20 @@ end
 
 function r = ternary(cond, trueVal, falseVal)
     if cond, r = trueVal; else, r = falseVal; end
+end
+
+function S = stripBranchMetadata(S)
+    %stripBranchMetadata Remove branch-level scalar/vector metadata from SoA.
+    if isempty(S) || ~isstruct(S)
+        return;
+    end
+    metaFields = ["Source", "Parent", "Method", "ModelRef", "Resolution", ...
+                  "SourceFiles", "TrainDataRef", "LaserWl", "StokesWindow", "Shifts", ...
+                  "AnalyteSpectrum", "AnalyteShifts"];
+    for k = 1:numel(metaFields)
+        fn = char(metaFields(k));
+        if isfield(S, fn)
+            S = rmfield(S, fn);
+        end
+    end
 end
