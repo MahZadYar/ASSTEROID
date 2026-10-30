@@ -537,6 +537,8 @@ function collectConfig() {
         numBlocks: isNaN(parseInt(val("numBlocks"), 10)) ? 2 : parseInt(val("numBlocks"), 10),
         geoWidth: num("geoWidth") || 128,
         geoDepth: isNaN(parseInt(val("geoDepth"), 10)) ? 2 : parseInt(val("geoDepth"), 10),
+        specFeatures: val("specFeatures") || "all",
+        stemFeatures: val("specFeatures") || "all",
         hiddenActivation: val("hiddenActivation") || "gelu",
         boundedHeads: chk("boundedHeads"),
         zeroInitResidualOut: chk("zeroInitResidualOut"),
@@ -625,12 +627,27 @@ function updateParamEstimate() {
             var G = num("geoWidth") || 128;
             var gd = parseInt(val("geoDepth"), 10); if (isNaN(gd)) gd = 2;
             var gated = (arch === "gs_tensor");
-            total = fc(F, W) + ln(W);                                            // stem
+            var specFeat = val("specFeatures") || "all";
+            var F_spec = F;
+            if (specFeat === "no_geo_logs") F_spec = Math.max(3, F - 3);
+            else if (specFeat === "spectral_only") F_spec = 3;
+
+            // Spectral branch / trunk stem (2-stage expansion: F_spec -> W/2 -> W)
+            var W_mid = Math.round(W / 2);
+            total = fc(F_spec, W_mid) + ln(W_mid) + fc(W_mid, W) + ln(W);
+
+            // Geometry encoder (progressive funnel: 3 -> G/2 -> G)
             var gOut = 3;
             if (gated) {
                 var prev = 3;
-                for (var d = 0; d < gd; d++) { total += fc(prev, G) + ln(G); prev = G; }
-                gOut = gd > 0 ? G : 3;
+                if (gd === 2) {
+                    var G_mid = Math.round(G / 2);
+                    total += fc(3, G_mid) + ln(G_mid) + fc(G_mid, G) + ln(G);
+                    gOut = G;
+                } else {
+                    for (var d = 0; d < gd; d++) { total += fc(prev, G) + ln(G); prev = G; }
+                    gOut = gd > 0 ? G : 3;
+                }
             }
             var blk = fc(W, W) + ln(W) + fc(W, W) + (gated ? fc(gOut, W) : 0);
             total += nb * blk;
@@ -1287,6 +1304,14 @@ document.addEventListener("DOMContentLoaded", function() {
                 </div>
                 <div class="field-row">
                     <div class="field">
+                        <label>Spectral Branch Features</label>
+                        <select id="specFeatures" onchange="updateParamEstimate()">
+                            <option value="all" selected>All Features (8D, default)</option>
+                            <option value="no_geo_logs">No Log-Geometry (5D ablation)</option>
+                            <option value="spectral_only">Spectral Only (3D DeepONet)</option>
+                        </select>
+                    </div>
+                    <div class="field">
                         <label>Hidden Activation</label>
                         <select id="hiddenActivation">
                             <option value="gelu" selected>GELU (C&infin;, default)</option>
@@ -1294,6 +1319,8 @@ document.addEventListener("DOMContentLoaded", function() {
                             <option value="tanh">tanh</option>
                         </select>
                     </div>
+                </div>
+                <div class="field-row">
                     <div class="field" style="justify-content:flex-end;">
                         <div class="toggle-row">
                             <input type="checkbox" id="boundedHeads" checked>

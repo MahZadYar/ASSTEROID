@@ -6,13 +6,14 @@ function [net, info] = buildSurrogateNetwork(numFeatures, numTargets, config, op
 %                                            TargetTransform=tt)
 %
 %   Architectures (config.architecture):
-%     "gs_tensor"     (default, v6.3) Geometry-Spectrum Factorized Tensor
+%     "gs_tensor"     (default, v6.4) Geometry-Spectrum Factorized Tensor
 %                     Network: a lambda-blind geometry encoder G(P, r)
-%                     (sliceLayer -> MLP) multiplicatively gates a
-%                     spectral-geometric residual stream through
-%                     geometry-conditioned bilinear residual blocks
+%                     (sliceLayer -> 2-stage MLP, 3 -> 64 -> 128)
+%                     multiplicatively gates a spectral-geometric residual
+%                     stream via geometry-conditioned bilinear residual blocks
 %                         h_k = h_{k-1} + W_o [ a_k(h_{k-1}) .* s_k(G) ],
-%                     with identity skips and physically bounded heads
+%                     with a 2-stage expansion stem (8 -> 128 -> 256),
+%                     identity skips and physically bounded heads
 %                     (sigmoid for absorptance, softplus for log10(1+EE)).
 %     "lean_resnet"   Ablation of gs_tensor without the geometry encoder
 %                     and gates (plain identity-skip residual MLP blocks).
@@ -23,7 +24,9 @@ function [net, info] = buildSurrogateNetwork(numFeatures, numTargets, config, op
 %     Common : architecture, normalization ("layer" | "batch"),
 %              useMultiHead (true), headHiddenSizes ([] -> 128 for
 %              gs_tensor/lean_resnet, 512 for legacy)
-%     gs/lean: modelWidth (256), geoWidth (128), geoDepth (2),
+%     gs/lean: modelWidth (256), stemWidths ([128 256]), stemFeatures
+%              ("all" | "no_geo_logs" | "spectral_only"), geoWidths
+%              ([64 128]), geoWidth (back-compat override), geoDepth (2),
 %              numBlocks (2), geometryFeatures (["log_p","log_r",
 %              "log_g_norm"]), gateBiasInit (1), zeroInitResidualOut
 %              (true), boundedHeads (true), hiddenActivation ("gelu" |
@@ -33,12 +36,13 @@ function [net, info] = buildSurrogateNetwork(numFeatures, numTargets, config, op
 %
 %   Name-Value:
 %     FeatureNames    - names of the input feature columns (required for
-%                       gs_tensor to locate the geometry columns)
+%                       gs_tensor geometry slice and non-default stemFeatures)
 %     TargetTransform - dataset.targetTransform (Mean, Std, bounds); needed
 %                       for bounded heads (see surrogateHeadSpecs)
 %
 %   Output info struct: Config (resolved), HeadSpecs, BoundedHeads,
-%   GeometryFeatureIdx, NumLearnables, LayerTypes.
+%   GeometryFeatureIdx, StemFeatureIdx, StemFeatures, NumLearnables,
+%   LayerTypes.
 %
 %   All layers are MATLAB R2026b built-ins (featureInputLayer, sliceLayer,
 %   fullyConnectedLayer, layerNormalizationLayer, geluLayer, sigmoidLayer,
@@ -72,6 +76,12 @@ switch config.architecture
                 config.geometryFeatures, options.FeatureNames, numFeatures);
             info.GeometryFeatureIdx = config.geometryFeatureIdx;
         end
+        [config.specFeatureIdx, config.useSpecSlice] = localResolveSpecIdx( ...
+            config.specFeatures, options.FeatureNames, numFeatures);
+        info.SpecFeatureIdx = config.specFeatureIdx;
+        info.SpecFeatures = config.specFeatures;
+        info.StemFeatureIdx = config.specFeatureIdx;
+        info.StemFeatures = config.specFeatures;
         specs = info.HeadSpecs;
         if config.boundedHeads && ~any([specs.Kind] ~= "none")
             warning('buildSurrogateNetwork:NoBoundMetadata', ...
@@ -118,28 +128,41 @@ actKind = config.hiddenActivation;
 net = dlnetwork;
 net = addLayers(net, featureInputLayer(numFeatures, Name="input"));
 
-% --- Spectral-geometric stem: the single full-input injection -----------
-stem = [
-    fullyConnectedLayer(W, Name="stem_fc")
-    localNormLayer("stem_ln", normKind)
-    localActLayer("stem_act", actKind)];
-net = addLayers(net, stem);
-net = connectLayers(net, "input", "stem_fc");
+% --- Spectral branch / trunk stem ----------------------------------------
+specLayers = [];
+if config.useSpecSlice
+    specLayers = [specLayers; sliceLayer(1, config.specFeatureIdx, Name="spec_slice")];
+end
+
+for s = 1:numel(config.specWidths)
+    W_s = config.specWidths(s);
+    specLayers = [specLayers
+        fullyConnectedLayer(W_s, Name=sprintf("spec_fc%d", s))
+        localNormLayer(sprintf("spec_ln%d", s), normKind)
+        localActLayer(sprintf("spec_act%d", s), actKind)]; %#ok<AGROW>
+end
+net = addLayers(net, specLayers);
+if config.useSpecSlice
+    net = connectLayers(net, "input", "spec_slice");
+else
+    net = connectLayers(net, "input", "spec_fc1");
+end
+prev = sprintf("spec_act%d", numel(config.specWidths));
 
 % --- Geometry encoder G(P, r): lambda-blind ------------------------------
 geoOut = "";
 if useGate
     geo = sliceLayer(1, config.geometryFeatureIdx, Name="geo_slice");
-    for d = 1:config.geoDepth
+    for d = 1:numel(config.geoWidths)
         geo = [geo
-            fullyConnectedLayer(config.geoWidth, Name=sprintf("geo_fc%d", d))
+            fullyConnectedLayer(config.geoWidths(d), Name=sprintf("geo_fc%d", d))
             localNormLayer(sprintf("geo_ln%d", d), normKind)
             localActLayer(sprintf("geo_act%d", d), actKind)]; %#ok<AGROW>
     end
     net = addLayers(net, geo);
     net = connectLayers(net, "input", "geo_slice");
-    if config.geoDepth > 0
-        geoOut = sprintf("geo_act%d", config.geoDepth);
+    if ~isempty(config.geoWidths)
+        geoOut = sprintf("geo_act%d", numel(config.geoWidths));
     else
         geoOut = "geo_slice";
     end
@@ -147,7 +170,6 @@ end
 
 % --- Geometry-conditioned bilinear residual blocks ------------------------
 gateBias = config.gateBiasInit;
-prev = "stem_act";
 for k = 1:config.numBlocks
     tag = sprintf("b%d", k);
     spectral = [
@@ -274,6 +296,79 @@ end
 if numel(unique(idx)) ~= numel(idx)
     error('buildSurrogateNetwork:DuplicateGeometryFeature', ...
         'Geometry features resolve to duplicate input columns.');
+end
+end
+
+function [idx, useSlice] = localResolveSpecIdx(requested, featureNames, numFeatures)
+useSlice = false;
+idx = 1:numFeatures;
+
+if isempty(requested)
+    return;
+end
+
+if (isstring(requested) || ischar(requested)) && isscalar(string(requested)) && lower(string(requested)) == "all"
+    return;
+end
+
+if isempty(featureNames)
+    error('buildSurrogateNetwork:FeatureNamesRequiredForSpec', ...
+        'Non-default specFeatures ("%s") requires FeatureNames.', string(requested));
+end
+if numel(featureNames) ~= numFeatures
+    error('buildSurrogateNetwork:FeatureNamesSize', ...
+        'FeatureNames has %d entries but the network has %d input features.', ...
+        numel(featureNames), numFeatures);
+end
+
+featureNames = string(featureNames);
+
+if (isstring(requested) || ischar(requested)) && isscalar(string(requested))
+    reqStr = lower(strtrim(string(requested)));
+    if reqStr == "no_geo_logs"
+        % Exclude log geometric features: log_p, log_r, log_g_norm (and legacy aliases)
+        geoCols = ["log_p", "p_um", "log_r", "r_um", "log_g_norm", "g_norm", "p_over_r"];
+        keepMask = ~ismember(featureNames, geoCols);
+        idx = find(keepMask);
+        if isempty(idx)
+            error('buildSurrogateNetwork:EmptySpecFeatures', ...
+                'specFeatures="no_geo_logs" left zero features in [%s].', strjoin(featureNames, ', '));
+        end
+        useSlice = true;
+        return;
+    elseif reqStr == "spectral_only"
+        % Retain strictly spectral/material features: log_lambda, eps1, eps2 (and aliases)
+        specCols = ["log_lambda", "lambda_um", "eps1", "eps2"];
+        idx = find(ismember(featureNames, specCols));
+        if isempty(idx)
+            error('buildSurrogateNetwork:EmptySpecFeatures', ...
+                'specFeatures="spectral_only" found no matching features in [%s].', strjoin(featureNames, ', '));
+        end
+        useSlice = true;
+        return;
+    end
+end
+
+% Explicit list of feature names or numeric indices
+if isnumeric(requested)
+    idx = localPosIntVec(requested, 'specFeatures');
+    if any(idx > numFeatures)
+        error('buildSurrogateNetwork:SpecFeatureIdxRange', ...
+            'specFeatures indices exceed numFeatures (%d).', numFeatures);
+    end
+    useSlice = (numel(idx) ~= numFeatures || ~isequal(idx, 1:numFeatures));
+else
+    reqNames = string(requested(:)');
+    idx = zeros(1, numel(reqNames));
+    for j = 1:numel(reqNames)
+        hit = find(featureNames == reqNames(j), 1);
+        if isempty(hit)
+            error('buildSurrogateNetwork:MissingSpecFeature', ...
+                'Spectral feature "%s" not found in [%s].', reqNames(j), strjoin(featureNames, ', '));
+        end
+        idx(j) = hit;
+    end
+    useSlice = (numel(idx) ~= numFeatures || ~isequal(idx, 1:numFeatures));
 end
 end
 
@@ -407,6 +502,11 @@ config.useMultiHead = true;
 config.headHiddenSizes = [];           % [] -> 128 (gs_tensor/lean_resnet) or 512 (legacy)
 % gs_tensor / lean_resnet
 config.modelWidth = 256;
+config.specWidths = [128, 256];
+config.specFeatures = "all";
+config.stemWidths = [128, 256];
+config.stemFeatures = "all";
+config.geoWidths = [64, 128];
 config.geoWidth = 128;
 config.geoDepth = 2;
 config.numBlocks = 2;
@@ -489,9 +589,68 @@ if isLegacy
         config.fc2b = config.fc1b;
     end
 else
-    config.modelWidth = localPosInt(config.modelWidth, 'modelWidth');
-    config.geoWidth = localPosInt(config.geoWidth, 'geoWidth');
-    config.geoDepth = localNonNegInt(config.geoDepth, 'geoDepth');
+    % Resolve specWidths (stemWidths) and modelWidth
+    widths = [];
+    if isfield(configIn, 'specWidths') && ~isempty(configIn.specWidths)
+        widths = configIn.specWidths;
+    elseif isfield(configIn, 'stemWidths') && ~isempty(configIn.stemWidths)
+        widths = configIn.stemWidths;
+    end
+
+    if ~isempty(widths)
+        config.specWidths = localPosIntVec(widths, 'specWidths');
+        config.modelWidth = config.specWidths(end);
+    elseif isfield(configIn, 'modelWidth') && ~isempty(configIn.modelWidth)
+        config.modelWidth = localPosInt(configIn.modelWidth, 'modelWidth');
+        if config.modelWidth == 256
+            config.specWidths = [128, 256];
+        else
+            config.specWidths = [round(config.modelWidth / 2), config.modelWidth];
+        end
+    else
+        config.modelWidth = 256;
+        config.specWidths = [128, 256];
+    end
+    config.stemWidths = config.specWidths;
+
+    % Resolve specFeatures (stemFeatures)
+    feats = "all";
+    if isfield(configIn, 'specFeatures') && ~isempty(configIn.specFeatures)
+        feats = configIn.specFeatures;
+    elseif isfield(configIn, 'stemFeatures') && ~isempty(configIn.stemFeatures)
+        feats = configIn.stemFeatures;
+    end
+    config.specFeatures = localSpecFeaturesStr(feats);
+    config.stemFeatures = config.specFeatures;
+
+    % Resolve geoWidths and geoDepth (defaults to [64, 128])
+    if isfield(configIn, 'geoWidths') && ~isempty(configIn.geoWidths)
+        config.geoWidths = localPosIntVec(configIn.geoWidths, 'geoWidths');
+        config.geoDepth = numel(config.geoWidths);
+        if ~isempty(config.geoWidths)
+            config.geoWidth = config.geoWidths(end);
+        else
+            config.geoWidth = 0;
+        end
+    elseif (isfield(configIn, 'geoWidth') && ~isempty(configIn.geoWidth)) || ...
+           (isfield(configIn, 'geoDepth') && ~isempty(configIn.geoDepth))
+        gw = 128;
+        gd = 2;
+        if isfield(configIn, 'geoWidth') && ~isempty(configIn.geoWidth)
+            gw = localPosInt(configIn.geoWidth, 'geoWidth');
+        end
+        if isfield(configIn, 'geoDepth') && ~isempty(configIn.geoDepth)
+            gd = localNonNegInt(configIn.geoDepth, 'geoDepth');
+        end
+        config.geoWidths = repmat(gw, 1, gd);
+        config.geoWidth = gw;
+        config.geoDepth = gd;
+    else
+        config.geoWidths = [64, 128];
+        config.geoDepth = 2;
+        config.geoWidth = 128;
+    end
+
     config.numBlocks = localNonNegInt(config.numBlocks, 'numBlocks');
     config.geometryFeatures = string(config.geometryFeatures(:)');
     if isempty(config.geometryFeatures)
@@ -507,6 +666,19 @@ else
     if ~ismember(config.hiddenActivation, ["gelu", "swish", "tanh"])
         error('train_sers_dnn:NetworkConfig', ...
             'hiddenActivation must be "gelu", "swish" or "tanh" (got "%s").', config.hiddenActivation);
+    end
+end
+end
+
+function v = localSpecFeaturesStr(v)
+if isnumeric(v)
+    return;
+end
+v = string(v);
+if isscalar(v)
+    s = lower(strtrim(v));
+    if ismember(s, ["all", "no_geo_logs", "spectral_only"])
+        v = s;
     end
 end
 end

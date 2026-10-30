@@ -3,7 +3,7 @@
 **Adaptive Sampling, Surrogate Training, Exploration and Refinement for Optimal Inverse Design**
 
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2026a%20%7C%20R2026b-blue.svg)](https://www.mathworks.com/products/matlab.html)
-[![Version](https://img.shields.io/badge/Version-6.3-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
+[![Version](https://img.shields.io/badge/Version-6.4-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.1021%2Facsnano.XXXXXXX-orange.svg)](#citation)
 [![Zenodo](https://img.shields.io/badge/Data-10.5281%2Fzenodo.XXXXXXX-blue.svg)](#dataset--trained-models)
@@ -320,7 +320,16 @@ Comprehensive architectural specifications, mathematical formalisms, and user ma
 
 ---
 
-## What's New in Version 6.3
+## What's New in Version 6.4
+
+* ⚡ **Symmetric Progressive Dual-Stream Backbone (`"gs_tensor"`)**: Fully symmetric parallel encoder design balancing the $\lambda$-blind geometry encoder $G(P, r)$ ($3 \to 64 \to 128$ via `geo_fc1` [64] $\to$ `geo_ln1` $\to$ `geo_act1` $\to$ `geo_fc2` [128] $\to$ `geo_ln2` $\to$ `geo_act2`) and the spectral-geometric trunk $S(\mathbf{x})$ ($8 \to 128 \to 256$ via `spec_fc1` [128] $\to$ `spec_ln1` $\to$ `spec_act1` $\to$ `spec_fc2` [256] $\to$ `spec_ln2` $\to$ `spec_act2`). This symmetric funneling eliminates early bottlenecking, delivering exactly 473,987 learnables at default sizes (~5.4× fewer than `tensor_resnet`'s 2,546,691).
+* 🎚️ **Selectable Spectral Trunk Input Decoupling (`specFeatures`)**: Stage 3 GUI and `buildSurrogateNetwork` now expose three spectral input modes:
+  - `"all"` (default, 8D, 473,987 parameters): full multi-scale input vector feeding the spectral stream.
+  - `"no_geo_logs"` (5D, 473,603 parameters): slices out $\ln P, \ln r, \ln g_{\text{norm}}$ from the spectral trunk, providing a cleaner separation where geometry enters solely via scale ratios and the geometry gate.
+  - `"spectral_only"` (3D, 473,347 parameters): pure DeepONet-style separation where the trunk receives strictly optical coordinates $[\ln\lambda, \varepsilon_1, \varepsilon_2]$.
+* 🏷️ **Symmetric `geo_` and `spec_` Layer Taxonomy**: All layers in both parallel branches adhere to symmetric, standardized naming conventions across the network graph (`geo_slice`, `geo_fc<k>`, `geo_ln<k>`, `geo_act<k>` vs `spec_slice`, `spec_fc<k>`, `spec_ln<k>`, `spec_act<k>`), streamlining visual topology inspection and gradient tracking.
+
+### Previous Highlights (Version 6.3)
 
 * 🧭 **Geometry–Spectrum Factorized Tensor Network (`"gs_tensor"`, new default)**: A physics-structured surrogate backbone with ~5.7× fewer learnables than `tensor_resnet` (450,435 vs 2,546,691 at default sizes). A λ-blind geometry encoder $G(P, r)$ (`sliceLayer` of $\ln P, \ln r, \ln g_{\text{norm}}$) multiplicatively gates a spectral–geometric residual stream through geometry-conditioned bilinear residual blocks $\mathbf{h}_k = \mathbf{h}_{k-1} + \mathbf{W}_{o,k}(\mathbf{a}_k \odot \mathbf{s}_k)$ with parameter-free identity skips, replacing the redundant `proj1`/`proj2` projections and repeated input concatenations. Built entirely from MATLAB R2026b built-in layers ([`buildSurrogateNetwork`](src/modeling/buildSurrogateNetwork.m)).
 * 🧱 **Physically bounded output heads**: `sigmoidLayer` keeps far-field absorptance within $[0, \mathrm{Abs}_{\max}]$ and `softplusLayer` keeps $\log_{10}(1 + \mathrm{EE}_D) \ge 0$, followed by a fixed `scalingLayer` into the standardized loss space — smooth, kink-free bounds for `dlgradient`-driven optimization. Duan smearing is stored as `targetTransform.SmearingFactor` for bounded heads.

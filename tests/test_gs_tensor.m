@@ -1,14 +1,16 @@
-%% test_gs_tensor  Verification of the v6.3 gs_tensor surrogate architecture.
+%% test_gs_tensor  Verification of the v6.4 gs_tensor surrogate architecture.
 %
 % Self-contained (synthetic SoA data, no benchmark file required).
 % Checks (each prints PASS/FAIL; any failure raises an error at the end):
 %   1. v3_physics feature schema (8 columns, log_g_norm, no h_over_lambda).
 %   2. Dataset bound metadata (BoundKind / LowerBound / UpperBound).
-%   3. buildSurrogateNetwork: learnable counts (gs_tensor 450,435;
-%      lite 254,883; legacy tensor_resnet 2,546,691 with 9 inputs),
+%   3. buildSurrogateNetwork: learnable counts (gs_tensor 473,987;
+%      lite 267,939; v6.3 config 450,435; legacy tensor_resnet 2,546,691),
+%      symmetric spec_ and geo_ parallel layer naming, specFeatures
+%      ablations (no_geo_logs 473,603, spectral_only 473,347),
 %      allowed layer types, lambda-blind geometry encoder, physically
-%      bounded outputs, lean_resnet, single-head bounded split, swish,
-%      v2 feature aliasing.
+%      bounded outputs, lean_resnet (398,979), single-head bounded split,
+%      swish, v2 feature aliasing.
 %   4. Smoke training (gs_tensor): metadata, bounded physical predictions,
 %      save/load reproduction, finite input gradients (dlgradient).
 %   5. Fine-tuning a pretrained gs_tensor re-synchronises the fixed
@@ -58,7 +60,7 @@ failures = check(failures, isequal(tt.BoundKind, ["sigmoid", "softplus", "softpl
 fprintf('\n[3] buildSurrogateNetwork\n');
 fn8 = string(ds.featureNames);
 [net, info] = buildSurrogateNetwork(8, 3, struct(), FeatureNames=fn8, TargetTransform=tt);
-failures = check(failures, info.NumLearnables == 450435, 'gs_tensor default learnables', ...
+failures = check(failures, info.NumLearnables == 473987, 'gs_tensor default learnables (v6.4 Option A)', ...
     sprintf('(%d)', info.NumLearnables));
 allowed = ["FeatureInputLayer", "SliceLayer", "FullyConnectedLayer", "LayerNormalizationLayer", ...
     "GELULayer", "MultiplicationLayer", "AdditionLayer", "SigmoidLayer", "SoftplusLayer", ...
@@ -67,6 +69,19 @@ failures = check(failures, all(ismember(info.LayerTypes, allowed)) && numel(info
     'gs_tensor uses exactly the 11 built-in layer types', sprintf('[%s]', strjoin(info.LayerTypes, ', ')));
 failures = check(failures, isequal(info.GeometryFeatureIdx, find(ismember(fn8, ["log_p", "log_r", "log_g_norm"]))), ...
     'geometry slice indices resolved by name');
+netNames = string(arrayfun(@(L) L.Name, net.Layers, 'UniformOutput', false));
+failures = check(failures, any(netNames == "spec_fc1") && any(netNames == "spec_fc2") ...
+    && any(netNames == "geo_fc1") && any(netNames == "geo_fc2"), ...
+    'symmetric spec_ and geo_ parallel branch layer naming');
+
+% specFeatures ablations
+[nNoGeo, iNoGeo] = buildSurrogateNetwork(8, 3, struct('specFeatures', "no_geo_logs"), FeatureNames=fn8, TargetTransform=tt);
+failures = check(failures, iNoGeo.NumLearnables == 473603 && any(arrayfun(@(L) string(L.Name) == "spec_slice", nNoGeo.Layers)), ...
+    'specFeatures=no_geo_logs (5 inputs to spectral branch, 473,603 params)');
+[nSpecOnly, iSpecOnly] = buildSurrogateNetwork(8, 3, struct('specFeatures', "spectral_only"), FeatureNames=fn8, TargetTransform=tt);
+failures = check(failures, iSpecOnly.NumLearnables == 473347 && any(arrayfun(@(L) string(L.Name) == "spec_slice", nSpecOnly.Layers)), ...
+    'specFeatures=spectral_only (3 inputs to spectral branch, 473,347 params)');
+
 rng(3);
 X = 4 * randn(3000, 8);
 X2 = X; X2(:, setdiff(1:8, info.GeometryFeatureIdx)) = randn(3000, 5);
@@ -84,10 +99,13 @@ failures = check(failures, min(Yt(:, 1)) >= -1e-4 && max(Yt(:, 1)) <= 100 + 1e-4
     'Abs head bounded to [0, 100]', sprintf('([%.3g, %.3g])', min(Yt(:, 1)), max(Yt(:, 1))));
 failures = check(failures, min(Yt(:, 2:3), [], 'all') >= -1e-5, ...
     'log10(1+EE) heads non-negative', sprintf('(min %.3g)', min(Yt(:, 2:3), [], 'all')));
-[~, iLite] = buildSurrogateNetwork(8, 3, struct('modelWidth', 192, 'geoWidth', 96, 'headHiddenSizes', 96), ...
+[~, iLite] = buildSurrogateNetwork(8, 3, struct('modelWidth', 192, 'geoWidths', [48, 96], 'headHiddenSizes', 96), ...
     FeatureNames=fn8, TargetTransform=tt);
-failures = check(failures, iLite.NumLearnables == 254883, 'gs_tensor lite learnables', ...
+failures = check(failures, iLite.NumLearnables == 267939, 'gs_tensor lite learnables', ...
     sprintf('(%d)', iLite.NumLearnables));
+[~, iV63] = buildSurrogateNetwork(8, 3, struct('specWidths', 256, 'geoWidths', [128, 128]), ...
+    FeatureNames=fn8, TargetTransform=tt);
+failures = check(failures, iV63.NumLearnables == 450435, 'v6.3 1-stage config reproduced (450,435 learnables)');
 [~, iTT] = buildSurrogateNetwork(9, 3, struct('architecture', "tensor_resnet"));
 failures = check(failures, iTT.NumLearnables == 2546691, 'legacy tensor_resnet reproduced exactly (9 inputs)', ...
     sprintf('(%d)', iTT.NumLearnables));
@@ -96,7 +114,7 @@ failures = check(failures, iLegacy.Config.architecture == "tensor_resnet", ...
     'legacy width overrides without architecture keep tensor_resnet');
 [nLean, iLean] = buildSurrogateNetwork(8, 3, struct('architecture', "lean_resnet"), TargetTransform=tt);
 leanNames = string(arrayfun(@(L) L.Name, nLean.Layers, 'UniformOutput', false));
-failures = check(failures, iLean.NumLearnables == 366851 && ~any(leanNames == "geo_slice"), ...
+failures = check(failures, iLean.NumLearnables == 398979 && ~any(leanNames == "geo_slice"), ...
     'lean_resnet (no geometry encoder)', sprintf('(%d)', iLean.NumLearnables));
 [nSH, ~] = buildSurrogateNetwork(8, 3, struct('useMultiHead', false), FeatureNames=fn8, TargetTransform=tt);
 shNames = string(arrayfun(@(L) L.Name, nSH.Layers, 'UniformOutput', false));
@@ -116,7 +134,7 @@ fprintf('\n[4] gs_tensor smoke training\n');
 m = train_surrogate_dnn(ds, MaxEpochs=3, MiniBatchSize=256, LearningRate=1e-3, Plots="none", ...
     Verbose=false, ValidationFrequency=10, LossFunction="peak_mse");
 failures = check(failures, m.architecture == "gs_tensor" && m.networkInfo.BoundedHeads ...
-    && m.networkInfo.NumLearnables == 450435, 'model metadata (architecture, bounded heads, learnables)');
+    && m.networkInfo.NumLearnables == 473987, 'model metadata (architecture, bounded heads, learnables)');
 failures = check(failures, isPhysicsSchemaModel(m) && m.flags.FeatureSchema == "v3_physics", ...
     'model carries v3_physics schema');
 lamVec = (0.785:0.01:1.10)';
