@@ -144,8 +144,8 @@ The continuous colormap used in 2D/3D surface plots ([`src/vis/AuroraAustralis.t
 ### Stage 1: Ingestion & Sweep QA
 - **HTML View:** [`scripts/apps/import_tab.html`](../scripts/apps/import_tab.html)
 - **Controller:** [`src/app/controllers/ImportController.m`](../src/app/controllers/ImportController.m)
-- **Features:** Multi-file COMSOL sweep parsing, electromagnetic passivity check ($0 \leq \mathrm{Abs} \leq 1$), unit normalization, SoA deduplication, and QA plot generation.
-- **Key Events:** `ScanDirectory`, `RunImport`, `BrowseImportPath`.
+- **Features:** Multi-file COMSOL sweep parsing, electromagnetic passivity check ($0 \leq \mathrm{Abs} \leq 1$), unit normalization, schema-aware fine-grained coordinate $(p, r, \lambda)$ merge semantics with configurable wavelength match tolerance ($\Delta\lambda$, default $10^{-4}\text{ nm}$), dynamic NaN padding for multi-batch spectral extensions and metric introductions (e.g. `E4`), partial-batch backfilling, direct in-memory `db.Sim` synchronization, deprecated `prl_sweep.mat` file decoupling, and QA plot generation.
+- **Key Events:** `PreviewFile`, `RunImport`, `RecalculateDerived`, `BrowseFile`, `RefreshDbState`, `SaveDatabaseRequest`, `StopProcess`.
 
 ### Stage 2: Adaptive Parameter Sampling
 - **HTML View:** [`scripts/apps/adaptive_sampling_app.html`](../scripts/apps/adaptive_sampling_app.html)

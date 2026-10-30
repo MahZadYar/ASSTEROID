@@ -63,7 +63,7 @@ end
         if iscell(allData.lambda)
             nLambda = cellfun(@numel, allData.lambda);
         else
-            nLambda = repmat(size(allData.lambda, 2), N, 1);
+            nLambda = sum(isfinite(allData.lambda), 2);
         end
         histogram(ax2, nLambda, "FaceColor", [0.2 0.6 0.9]);
         xlabel(ax2, "# Wavelength Points");

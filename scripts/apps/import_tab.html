@@ -586,6 +586,7 @@ function collectConfig() {
         mode: val("mode"),
         replaceExisting: chk("replaceExisting"),
         recalculateExisting: chk("recalculateExisting"),
+        wavelengthTolerance: num("wavelengthTolerance", 0.0001),
         metricVariants: collectMetricVariants()
     };
 
@@ -771,12 +772,16 @@ function toggleSection(el) {
                         <option value="rebuild">Rebuild (Clean)</option>
                     </select>
                 </div>
+                <div class="field">
+                    <label>Wavelength Match Tolerance &Delta;&lambda; (nm)</label>
+                    <input type="number" id="wavelengthTolerance" value="0.0001" step="0.00001" min="0">
+                </div>
                 <div class="toggle-row">
                     <input type="checkbox" id="replaceExisting">
-                    <label for="replaceExisting">Replace existing entries on parameter match (overwrite)</label>
+                    <label for="replaceExisting">Replace matching points (overwrite on (p, r, &lambda;) match)</label>
                 </div>
                 <div style="font-size:10px; color:var(--text-secondary); margin-left:22px; margin-top:-2px; margin-bottom:6px;">
-                    When checked, imported points overwrite old database entries on input match. Default (unchecked) skips duplicates.
+                    When checked, imported values overwrite existing data on (p, r, &lambda;) coordinate match for imported metrics. When unchecked, missing (NaN) values and new wavelengths/metrics are filled/extended without overwriting existing valid data.
                 </div>
                 <div class="toggle-row">
                     <input type="checkbox" id="recalculateExisting">

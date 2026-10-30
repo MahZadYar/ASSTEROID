@@ -1,4 +1,5 @@
 % test_replace_existing_import.m - Test ReplaceExisting option in import workflow
+addpath(fullfile(fileparts(mfilename('fullpath')), '..'));
 setup_project;
 
 testDir = fileparts(mfilename('fullpath'));

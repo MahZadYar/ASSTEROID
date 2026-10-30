@@ -105,7 +105,7 @@ $$
 - `EE_S_laser` (legacy aliases `EF_surf_laser`, `EF_surf_approx` — single-wavelength surface Enhancement Efficacy benchmark, $\mathrm{EE}_S^L$)
 - `EE_V_laser` (legacy aliases `EF_vol_laser`, `EF_vol_approx` — single-wavelength volumetric Enhancement Efficacy benchmark, $\mathrm{EE}_V^L$)
 
-See import pipeline extraction in [src/orchestration/runImportSweepWorkflow.m](src/orchestration/runImportSweepWorkflow.m).
+See import pipeline extraction in [src/orchestration/runImportSweepWorkflow.m](src/orchestration/runImportSweepWorkflow.m), with coordinate-level merge handled by [src/data/mergeEntryWithNewWavelengths.m](src/data/mergeEntryWithNewWavelengths.m) and in-place SoA updates via [src/data/update_entry_in_soa.m](src/data/update_entry_in_soa.m).
 
 ### 2.3 Generalized Enhancement Efficacy ($\mathrm{EE}$) Master Functional & The 8-Metric Hierarchy (Paper Eqs. 14–16)
 

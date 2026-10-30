@@ -31,6 +31,23 @@ function [simData, updatedCount] = recomputeDerivedMetrics(simData, cfg, analyte
                    "EF_vol", "EF_surf", "Absorptance", "M_vol", "M_surf", ...
                    "M2_vol", "M2_surf", "EF_vol_M", "EF_surf_M", "EF_Abs"];
     nRows = structRowCount(simData);
+
+    % Dynamically discover any additional 2D spectral fields in simData (e.g. E4)
+    reservedFields = ["period", "radius", "p", "r", "lambda", "lambda_nm", "lambda0", ...
+                      "f", "RamanShift", "RamanWindow", "RamanWindowEffective", ...
+                      "LaserWl", "lambda_exc_nm", "kappa_V", "kappa_S", "VolCorr", "SurfCorr"];
+    allFlds = string(fieldnames(simData));
+    for fi = 1:numel(allFlds)
+        fn = allFlds(fi);
+        if ~ismember(fn, reservedFields) && ...
+           ~endsWith(fn, ["_laser", "_broad", "_avg", "_analyte"]) && ...
+           ~ismember(fn, baseMetrics)
+            val = simData.(fn);
+            if (isnumeric(val) || islogical(val)) && ndims(val) == 2 && size(val, 1) >= nRows && size(val, 2) > 1
+                baseMetrics(end+1) = fn; %#ok<AGROW>
+            end
+        end
+    end
     updatedCount = 0;
 
     present = false(size(baseMetrics));

@@ -145,6 +145,15 @@ classdef ImportController < handle
             analyteFile = obj.resolveAnalyteFile();
             outputFile = obj.resolveOutputFile();
 
+            existingSimData = struct();
+            if isfield(obj.session.db, "Sim") && isstruct(obj.session.db.Sim) && ~isempty(fieldnames(obj.session.db.Sim))
+                try
+                    existingSimData = extractBranchAsSoA(obj.session.db, "Sim");
+                catch
+                    existingSimData = struct();
+                end
+            end
+
             % Build column schema from UI event data
             columnSchema = struct([]);
             if isfield(d, "columnSchema") && ~isempty(d.columnSchema)
@@ -197,7 +206,10 @@ classdef ImportController < handle
                 Mode                = obj.safeStr(d, "mode", "merge"), ...
                 ReplaceExisting     = obj.safeBool(d, "replaceExisting", false), ...
                 RecalculateExisting = obj.safeBool(d, "recalculateExisting", false), ...
-                MetricVariants      = obj.safeStruct(d, "metricVariants"));
+                MetricVariants      = obj.safeStruct(d, "metricVariants"), ...
+                WavelengthTolerance = obj.safeNum(d, "wavelengthTolerance", 1e-4), ...
+                ExistingData        = existingSimData, ...
+                DatabaseFile        = obj.session.dbFile);
 
             results = runImportSweepWorkflow(cfg, rep);
 
@@ -364,11 +376,11 @@ classdef ImportController < handle
     %% Internal Helpers
     methods (Access = private)
         function outputFile = resolveOutputFile(obj)
-            outputFile = "prl_sweep.mat";
+            outputFile = "";
             db = obj.session.db;
             if isfield(db, "Global") && isfield(db.Global, "SimFile")
                 sf = string(db.Global.SimFile);
-                if strlength(sf) > 0
+                if strlength(sf) > 0 && ~endsWith(sf, "prl_sweep.mat", "IgnoreCase", true)
                     outputFile = sf;
                 end
             end

@@ -25,7 +25,8 @@ function results = runImportSweepWorkflow(cfg, reporter)
 %           .schema           – resolved column schema
 %           .elapsedTotal     – wall-clock seconds
 %
-%   See also: importSweepConfig, readSweepTable, ProgressReporter
+%   See also: importSweepConfig, readSweepTable, mergeEntryWithNewWavelengths,
+%             update_entry_in_soa, ProgressReporter
 
 arguments
     cfg      (1,1) struct
@@ -71,19 +72,39 @@ end
 
     %% 3. Load existing database (merge mode)
     allDataStruct = struct();
-    if cfg.mode == "merge" && isfile(cfg.outputFile)
+    if cfg.mode == "merge"
         reporter.start("LoadExisting", "Loading existing database...");
-        try
-            S = load(cfg.outputFile, "allData");
-            if isfield(S, "allData") && isstruct(S.allData)
-                allDataStruct = normalizeGeometryFields(S.allData);
-                nExisting = structRowCount(allDataStruct);
-                reporter.complete("LoadExisting", sprintf("Loaded %d existing entries.", nExisting));
-            else
-                reporter.warn("LoadExisting", "No valid allData in file; starting fresh.");
+        if isfield(cfg, "existingData") && isstruct(cfg.existingData) && ~isempty(fieldnames(cfg.existingData))
+            allDataStruct = normalizeGeometryFields(cfg.existingData);
+            nExisting = structRowCount(allDataStruct);
+            reporter.complete("LoadExisting", sprintf("Using in-memory database (%d existing entries).", nExisting));
+        elseif strlength(string(cfg.outputFile)) > 0 && isfile(cfg.outputFile)
+            try
+                S = load(cfg.outputFile, "allData");
+                if isfield(S, "allData") && isstruct(S.allData)
+                    allDataStruct = normalizeGeometryFields(S.allData);
+                    nExisting = structRowCount(allDataStruct);
+                    reporter.complete("LoadExisting", sprintf("Loaded %d existing entries from %s.", nExisting, cfg.outputFile));
+                else
+                    reporter.warn("LoadExisting", "No valid allData in file; starting fresh.");
+                end
+            catch ME
+                reporter.warn("LoadExisting", "Load failed: " + ME.message + ". Starting fresh.");
             end
-        catch ME
-            reporter.warn("LoadExisting", "Load failed: " + ME.message + ". Starting fresh.");
+        elseif isfield(cfg, "databaseFile") && isfile(cfg.databaseFile)
+            try
+                loaded = load(cfg.databaseFile, "db");
+                if isfield(loaded, "db") && isfield(loaded.db, "Sim") && isstruct(loaded.db.Sim)
+                    allDataStruct = extractBranchAsSoA(loaded.db, "Sim");
+                    allDataStruct = normalizeGeometryFields(allDataStruct);
+                    nExisting = structRowCount(allDataStruct);
+                    reporter.complete("LoadExisting", sprintf("Loaded %d existing entries from %s (db.Sim).", nExisting, cfg.databaseFile));
+                end
+            catch ME
+                reporter.warn("LoadExisting", "Could not load db.Sim: " + ME.message);
+            end
+        else
+            reporter.complete("LoadExisting", "No existing database found; starting fresh.");
         end
     elseif cfg.mode == "rebuild"
         reporter.info("Rebuild mode — ignoring any existing database.");
@@ -193,42 +214,41 @@ end
         existingIdx = findExistingRowsGeneric(allDataStruct, inputNames, keyPairs(g, :));
 
         if ~isempty(existingIdx)
-            if isfield(cfg, "replaceExisting") && cfg.replaceExisting
-                % Overwrite / replace existing entries with newly imported entry
-                allDataStruct = removeRowsFromStruct(allDataStruct, existingIdx);
-                replacedDuplicates = replacedDuplicates + numel(existingIdx);
-            elseif isfield(cfg, "recalculateExisting") && cfg.recalculateExisting
-                % Legacy merge with existing
-                if ~isempty(spectralName)
-                    oldEntry = extractEntryStruct(allDataStruct, existingIdx(1));
-                    interpSamples = max(2, round((cfg.ramanWindow(2) - cfg.ramanWindow(1)) / cfg.interpResolution));
-                    entry = mergeEntryWithNewWavelengths(oldEntry, entry, cfg.ramanWindow, interpSamples);
-                end
-                allDataStruct = removeRowsFromStruct(allDataStruct, existingIdx);
-                replacedDuplicates = replacedDuplicates + numel(existingIdx);
-            else
-                % Default: skip existing entries when parameters match
-                skippedExisting = skippedExisting + numel(existingIdx);
-                continue;
-            end
-        end
+            targetRow = existingIdx(1);
+            oldEntry = extractEntryStruct(allDataStruct, targetRow);
 
-        allDataStruct = append_entry_struct(allDataStruct, entry);
-        entriesWritten = entriesWritten + 1;
+            % Fine-grained schema-aware merge of spectral curves and metrics
+            [mergedEntry, isUpdated] = mergeEntryWithNewWavelengths(oldEntry, entry, cfg, analyteSpectrum, metricNames, c);
+
+            if isUpdated || (isfield(cfg, "replaceExisting") && cfg.replaceExisting)
+                allDataStruct = update_entry_in_soa(allDataStruct, targetRow, mergedEntry);
+                replacedDuplicates = replacedDuplicates + 1;
+            else
+                skippedExisting = skippedExisting + 1;
+            end
+
+            % Clean up any duplicate rows for this geometry if they existed
+            if numel(existingIdx) > 1
+                allDataStruct = removeRowsFromStruct(allDataStruct, existingIdx(2:end));
+            end
+        else
+            allDataStruct = append_entry_struct(allDataStruct, entry);
+            entriesWritten = entriesWritten + 1;
+        end
     end
 
     reporter.complete("ProcessGroups", sprintf( ...
-        "Processed %d groups: %d written, %d replaced, %d skipped.", ...
+        "Processed %d groups: %d written, %d replaced/updated, %d skipped.", ...
         numGroups, entriesWritten, replacedDuplicates, skippedExisting));
 
     if fewPointsGroups > 0
         reporter.warn("ProcessGroups", sprintf("%d groups had <2 spectral points; proceeded with limited data.", fewPointsGroups));
     end
 
-    %% 8. Save output (legacy SoA format)
-    reporter.start("Save", "Saving database...");
+    %% 8. Save output (legacy SoA format only if explicitly requested)
     totalEntries = structRowCount(allDataStruct);
-    if entriesWritten > 0 || replacedDuplicates > 0
+    if strlength(string(cfg.outputFile)) > 0 && (entriesWritten > 0 || replacedDuplicates > 0)
+        reporter.start("Save", sprintf("Saving legacy SoA dataset to %s...", cfg.outputFile));
         allData = allDataStruct; %#ok<NASGU>
         w = whos("allData");
         if w.bytes > 2e9
@@ -238,11 +258,11 @@ end
         end
         reporter.complete("Save", sprintf("Saved %d entries to %s", totalEntries, cfg.outputFile));
     else
-        reporter.complete("Save", "No changes; dataset already up to date.");
+        reporter.complete("Save", "Dataset synchronized in memory.");
     end
 
     %% 9. Pack into unified database
-    reporter.start("PackDB", "Packing into unified database (in-memory only)...");
+    reporter.start("PackDB", "Packing into unified database (in-memory)...");
     dbFile = cfg.databaseFile;
     db = createDatabaseStruct();
     if isfile(dbFile)
@@ -279,20 +299,20 @@ end
         end
     end
 
-    reporter.complete("PackDB", sprintf("Prepared db.Sim (%d entries) in memory (not auto-saved).", totalEntries));
+    reporter.complete("PackDB", sprintf("Prepared db.Sim (%d entries) in memory.", totalEntries));
 
     %% Assemble results
     allData = allDataStruct;
     summary = struct();
-    summary.totalEntries      = totalEntries;
-    summary.numEntries        = totalEntries;
-    summary.newEntries        = max(entriesWritten - replacedDuplicates, 0);
+    summary.totalEntries       = totalEntries;
+    summary.numEntries         = totalEntries;
+    summary.newEntries         = entriesWritten;
     summary.replacedDuplicates = replacedDuplicates;
-    summary.skippedExisting   = skippedExisting;
-    summary.numGroups         = numGroups;
-    summary.inputFile         = inputPath;
-    summary.outputFile        = cfg.outputFile;
-    summary.databaseFile      = dbFile;
+    summary.skippedExisting    = skippedExisting;
+    summary.numGroups          = numGroups;
+    summary.inputFile          = inputPath;
+    summary.outputFile         = cfg.outputFile;
+    summary.databaseFile       = dbFile;
 
     results = struct();
     results.allData      = allData;
@@ -331,9 +351,6 @@ end
 
 function schema = resolveColumnSchema(cfg, T)
     %resolveColumnSchema Build or validate the column schema.
-    %   If cfg.columnSchema is non-empty, validate it against the table.
-    %   Otherwise, auto-detect roles from column names using heuristics.
-
     colNames = T.Properties.VariableNames;
 
     if ~isempty(cfg.columnSchema) && isstruct(cfg.columnSchema) && numel(cfg.columnSchema) > 0
@@ -431,9 +448,6 @@ end
 function entry = processGeometryGroup(idx, cols, keyValues, ...
         inputNames, spectralName, metricNames, cfg, analyteSpectrum, c)
     %processGeometryGroup Process a single geometry group (dynamic schema).
-    %   Groups rows by input parameter values, sorts by spectral variable,
-    %   and computes derived metrics (_laser, _broad, _analyte).
-
     entry = struct();
 
     % Store input parameter values (scalars)
@@ -481,13 +495,13 @@ function entry = processGeometryGroup(idx, cols, keyValues, ...
     end
 
     % === Spectral metric variant computation ===
-    % Only if we have a spectral variable with enough points
     if ~isempty(spectralName) && numel(spectralSorted) >= 2
         laserLambda_nm = cfg.laserWavelength;
 
         % Compute Raman shift (assumes spectral variable is wavelength in nm)
-        RamanShift_cm = (1 ./ (laserLambda_nm * 1e-9) - 1 ./ (spectralSorted * 1e-9)) / 100;
-        entry.RamanShift = RamanShift_cm(:)';
+        RamanShift_cm = (1 ./ (laserLambda_nm * 1e-9) - 1 ./ (spectralSorted(:)' * 1e-9)) / 100;
+        RamanShift_cm = RamanShift_cm(:)';
+        entry.RamanShift = RamanShift_cm;
         entry.LaserWl = laserLambda_nm;
 
         % Frequency conversion
@@ -539,9 +553,10 @@ function entry = processGeometryGroup(idx, cols, keyValues, ...
             broadFieldName = mn + "_broad";
             avgFieldName   = mn + "_avg";
             broadEnabled = isBroadVariantEnabled(mv, mn);
-            if broadEnabled && nnz(stokesWindowMask) >= 2 && shiftRange > 0
+            validStokes = stokesWindowMask & isfinite(spectralData);
+            if broadEnabled && nnz(validStokes) >= 2 && shiftRange > 0
                 broadVal = computeSpectralAverage( ...
-                    RamanShift_cm, stokesWindowMask, shiftMin, shiftMax, ...
+                    RamanShift_cm, validStokes, shiftMin, shiftMax, ...
                     interpSamples, spectralData, cfg.spectralInterpMethod);
                 entry.(broadFieldName) = broadVal;
                 entry.(avgFieldName)   = broadVal;
@@ -552,9 +567,9 @@ function entry = processGeometryGroup(idx, cols, keyValues, ...
 
             % _analyte variant: analyte-weighted average
             analyteFieldName = mn + "_analyte";
-            if isVariantEnabled(mv, analyteFieldName) && nnz(stokesWindowMask) >= 2 && shiftRange > 0
+            if isVariantEnabled(mv, analyteFieldName) && nnz(validStokes) >= 2 && shiftRange > 0
                 entry.(analyteFieldName) = computeAnalyteVariant( ...
-                    RamanShift_cm, stokesWindowMask, shiftMin, shiftMax, ...
+                    RamanShift_cm, validStokes, shiftMin, shiftMax, ...
                     interpSamples, spectralData, analyteSpectrum, cfg.spectralInterpMethod);
             elseif isVariantEnabled(mv, analyteFieldName)
                 entry.(analyteFieldName) = NaN;
@@ -630,7 +645,6 @@ end
 
 function enabled = isVariantEnabled(metricVariants, key)
     %isVariantEnabled Return true if a metric+variant should be computed.
-    %   Missing keys default to true for backward compatibility.
     key = char(key);
     if isfield(metricVariants, key)
         enabled = logical(metricVariants.(key));

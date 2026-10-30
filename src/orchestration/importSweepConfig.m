@@ -13,8 +13,9 @@ function cfg = importSweepConfig(options)
 %     --- Paths ---
 %       WorkDir              (1,1) string  — Working directory (default: pwd)
 %       InputFile            (1,1) string  — Path to sweep data file
-%       OutputFile           (1,1) string  — Path to output SoA .mat file
+%       OutputFile           (1,1) string  — Optional path to legacy output SoA .mat file (default: "")
 %       AnalyteSpectrumFile  (1,1) string  — Raman spectrum of analyte
+%       ExistingData         (:,:) struct  — In-memory SoA struct to merge into
 %
 %     --- Column Schema ---
 %       ColumnSchema         (1,:) struct  — Dynamic column definitions from
@@ -29,11 +30,15 @@ function cfg = importSweepConfig(options)
 %       DetectShiftWindow    (1,1) logical — Auto-detect shift window from data
 %       InterpResolution     (1,1) double  — Dense interpolation resolution (1/cm)
 %       SpectralInterpMethod (1,1) string  — "makima" | "pchip" | "linear" | "spline"
+%       WavelengthTolerance  (1,1) double  — Spectral wavelength match tolerance in nm (default: 1e-4)
+%
+%     --- Database ---
+%       DatabaseFile         (1,1) string  — Master unified database file (default: "database.mat")
 %
 %     --- Import Behaviour ---
 %       Mode                 (1,1) string  — "merge" | "rebuild"
-%       ReplaceExisting      (1,1) logical — Replace/overwrite existing entries if input parameters match (default: false)
-%       RecalculateExisting  (1,1) logical — Recalculate metrics for duplicates (legacy merge mode)
+%       ReplaceExisting      (1,1) logical — Replace matching (p, r, lambda) points for imported metrics (default: false)
+%       RecalculateExisting  (1,1) logical — Legacy merge alias
 %
 %   Output:
 %       cfg — struct with all configuration fields
@@ -42,8 +47,6 @@ function cfg = importSweepConfig(options)
 %       cfg = importSweepConfig( ...
 %           WorkDir="D:\data", ...
 %           InputFile="SweepPropeTable.dat", ...
-%           OutputFile="prl_sweep.mat", ...
-%           ReplaceExisting=true, ...
 %           LaserWavelength=785);
 %       results = runImportSweepWorkflow(cfg, ProgressReporter.console());
 %
@@ -54,8 +57,9 @@ arguments
     %% Paths
     options.WorkDir             (1,1) string  = string(pwd)
     options.InputFile           (1,1) string  = "SweepPropeTable.dat"
-    options.OutputFile          (1,1) string  = "prl_sweep.mat"
+    options.OutputFile          (1,1) string  = ""
     options.AnalyteSpectrumFile (1,1) string  = ""
+    options.ExistingData        (:,:) struct  = struct([])
 
     %% Column Schema (dynamic column definitions from preview)
     options.ColumnSchema        (:,:)         = struct([])
@@ -67,6 +71,7 @@ arguments
     options.InterpResolution    (1,1) double {mustBePositive} = 1
     options.SpectralInterpMethod (1,1) string {mustBeMember(options.SpectralInterpMethod, ...
                                     ["makima", "pchip", "linear", "spline"])} = "makima"
+    options.WavelengthTolerance (1,1) double {mustBePositive} = 1e-4
 
     %% Database
     options.DatabaseFile        (1,1) string  = "database.mat"
@@ -92,6 +97,7 @@ end
     cfg.inputFile           = options.InputFile;
     cfg.outputFile          = options.OutputFile;
     cfg.analyteSpectrumFile = options.AnalyteSpectrumFile;
+    cfg.existingData        = options.ExistingData;
 
     % Column schema
     cfg.columnSchema        = options.ColumnSchema;
@@ -102,6 +108,7 @@ end
     cfg.detectShiftWindow   = options.DetectShiftWindow;
     cfg.interpResolution    = options.InterpResolution;
     cfg.spectralInterpMethod = options.SpectralInterpMethod;
+    cfg.wavelengthTolerance = options.WavelengthTolerance;
 
     % Database
     cfg.databaseFile        = options.DatabaseFile;

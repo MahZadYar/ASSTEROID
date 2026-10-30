@@ -1,272 +1,406 @@
-function mergedEntry = mergeEntryWithNewWavelengths(oldEntry, newEntry, ramanWindow, interpSamples)
-% mergeEntryWithNewWavelengths  Insert new spectral samples into an existing entry.
+function [mergedEntry, isUpdated] = mergeEntryWithNewWavelengths(oldEntry, newEntry, varargin)
+% mergeEntryWithNewWavelengths Schema-aware fine-grained merge of spectral curves and metrics.
+%
+%   [mergedEntry, isUpdated] = mergeEntryWithNewWavelengths(oldEntry, newEntry, cfg, analyteSpectrum, metricNames, c)
+%
+%   Merges newEntry into oldEntry for matching geometry (p, r). Features:
+%     1. Wavelength grid: union of old and new wavelengths sorted ascending with tolerance.
+%     2. Selective metric update: only metrics in metricNames (from the import table)
+%        update corresponding (p, r, lambda) values; untouched metrics keep their values.
+%     3. NaN preservation & backfill: older entries for new metrics are filled with NaNs;
+%        subsequent batches backfill missing NaNs without overwriting valid data.
+%     4. Dynamic derived metrics: automatically recomputes _laser, _broad (_avg), and _analyte
+%        for all active spectral metrics (including new metrics like E4).
+%
+%   Legacy signature compatibility:
+%     mergedEntry = mergeEntryWithNewWavelengths(oldEntry, newEntry, ramanWindow, interpSamples)
+%
+%   See also: runImportSweepWorkflow, update_entry_in_soa, extractEntryStruct
 
-tolNm = 1e-6;
-oldLambda = sanitizeLambdaVector(oldEntry);
-newLambda = sanitizeLambdaVector(newEntry);
+    isUpdated = false;
 
-if isempty(oldLambda)
-    mergedEntry = newEntry;
-    return;
-end
-if isempty(newLambda)
+    if isempty(oldEntry) || ~isstruct(oldEntry)
+        mergedEntry = newEntry;
+        isUpdated = true;
+        return;
+    end
+    if isempty(newEntry) || ~isstruct(newEntry)
+        mergedEntry = oldEntry;
+        isUpdated = false;
+        return;
+    end
+
+    %% Parse optional arguments (modern vs. legacy signature)
+    cfg = struct();
+    analyteSpectrum = struct();
+    metricNames = {};
+    c = 299792458;
+
+    if nargin >= 3 && isstruct(varargin{1})
+        % Modern signature: (oldEntry, newEntry, cfg, analyteSpectrum, metricNames, c)
+        cfg = varargin{1};
+        if nargin >= 4 && isstruct(varargin{2})
+            analyteSpectrum = varargin{2};
+        end
+        if nargin >= 5 && (iscell(varargin{3}) || isstring(varargin{3}))
+            metricNames = cellstr(varargin{3});
+        end
+        if nargin >= 6 && isnumeric(varargin{4}) && isscalar(varargin{4})
+            c = double(varargin{4});
+        end
+    elseif nargin >= 3 && isnumeric(varargin{1})
+        % Legacy signature: (oldEntry, newEntry, ramanWindow, interpSamples)
+        cfg.ramanWindow = varargin{1};
+        if nargin >= 4 && isnumeric(varargin{2})
+            cfg.interpResolution = (cfg.ramanWindow(2) - cfg.ramanWindow(1)) / max(2, varargin{2});
+        end
+        cfg.replaceExisting = true;
+        cfg.wavelengthTolerance = 1e-4;
+    end
+
+    tol = 1e-4;
+    if isfield(cfg, "wavelengthTolerance") && isfinite(cfg.wavelengthTolerance) && cfg.wavelengthTolerance > 0
+        tol = double(cfg.wavelengthTolerance);
+    end
+
+    replaceExisting = false;
+    if isfield(cfg, "replaceExisting")
+        replaceExisting = logical(cfg.replaceExisting);
+    end
+    recalculateExisting = false;
+    if isfield(cfg, "recalculateExisting")
+        recalculateExisting = logical(cfg.recalculateExisting);
+    end
+
+    %% 1. Sanitize & extract wavelength vectors
+    oldLambda = sanitizeLambdaVector(oldEntry);
+    newLambda = sanitizeLambdaVector(newEntry);
+
+    if isempty(oldLambda) && isempty(newLambda)
+        mergedEntry = preferNonEmptyFields(oldEntry, newEntry);
+        isUpdated = true;
+        return;
+    elseif isempty(oldLambda)
+        mergedEntry = newEntry;
+        isUpdated = true;
+        return;
+    elseif isempty(newLambda)
+        mergedEntry = oldEntry;
+        isUpdated = false;
+        return;
+    end
+
+    oldLambda = double(oldLambda(:)');
+    newLambda = double(newLambda(:)');
+
+    %% 2. Construct sorted union of wavelengths with tolerance
+    combined = [oldLambda(:); newLambda(:)];
+    combinedSorted = sort(combined);
+    mergedLambda = [];
+    for i = 1:numel(combinedSorted)
+        lam = combinedSorted(i);
+        if isempty(mergedLambda) || abs(lam - mergedLambda(end)) > tol
+            mergedLambda(end+1) = lam; %#ok<AGROW>
+        end
+    end
+    mergedLambda = mergedLambda(:)';
+    nMerged = numel(mergedLambda);
+
+    if nMerged > numel(oldLambda)
+        isUpdated = true;
+    end
+
+    %% 3. Identify all spectral metric fields
+    reserved = {'period', 'radius', 'p', 'r', 'gap', 'thickness', 'angle', ...
+                'height', 'pitch', 'particle_r', 'diameter', ...
+                'lambda', 'lambda_nm', 'lambda0', 'f', 'RamanShift', ...
+                'RamanWindow', 'RamanWindowEffective', 'LaserWl', 'lambda_exc_nm', ...
+                'kappa_V', 'kappa_S', 'VolCorr', 'SurfCorr', 'V_corr', 'S_corr'};
+
+    oldSpectral = {};
+    oldFlds = fieldnames(oldEntry);
+    for k = 1:numel(oldFlds)
+        fn = oldFlds{k};
+        if ismember(fn, reserved) || isDerivedVariantName(fn)
+            continue;
+        end
+        val = oldEntry.(fn);
+        if (isnumeric(val) || islogical(val)) && numel(val) == numel(oldLambda)
+            oldSpectral{end+1} = fn; %#ok<AGROW>
+        end
+    end
+
+    newSpectral = {};
+    newFlds = fieldnames(newEntry);
+    for k = 1:numel(newFlds)
+        fn = newFlds{k};
+        if ismember(fn, reserved) || isDerivedVariantName(fn)
+            continue;
+        end
+        val = newEntry.(fn);
+        if (isnumeric(val) || islogical(val)) && numel(val) == numel(newLambda)
+            newSpectral{end+1} = fn; %#ok<AGROW>
+        end
+    end
+
+    if ~isempty(metricNames)
+        for k = 1:numel(metricNames)
+            mn = metricNames{k};
+            if isfield(newEntry, mn) && ~ismember(mn, newSpectral) && ~ismember(mn, reserved)
+                newSpectral{end+1} = mn; %#ok<AGROW>
+            end
+        end
+    end
+
+    allSpectralFields = unique([oldSpectral, newSpectral]);
+
+    %% 4. Initialize merged entry with metadata from oldEntry
     mergedEntry = oldEntry;
-    return;
-end
 
-baseFields = {'EE_V','EE_S','EF_max','Abs','ECC', ...
-    'EF_vol','EF_surf','E_vol','E_surf','M_vol','M_surf', ...
-    'M2_vol','M2_surf','intW_vol','intW_t','Absorptance','Reflectance', ...
-    'Transmittance','ECCheck','SkinDepth','ResistiveLoss'};
-
-oldLambdaRow = ensureRowVector(getFieldSafe(oldEntry, 'lambda'));
-oldMask = ~isnan(oldLambdaRow);
-idxOldValid = oldMask;
-
-newLambdaRow = ensureRowVector(getFieldSafe(newEntry, 'lambda'));
-newMask = ~isnan(newLambdaRow);
-idxNewValid = newMask;
-
-combinedLambda = oldLambda;
-combinedData = struct();
-for k = 1:numel(baseFields)
-    fn = baseFields{k};
-    oldVals = ensureRowVector(getFieldSafe(oldEntry, fn));
-    oldVals = padRowToLength(oldVals, numel(oldMask));
-    combinedData.(fn) = oldVals(idxOldValid);
-end
-
-newData = struct();
-for k = 1:numel(baseFields)
-    fn = baseFields{k};
-    newVals = ensureRowVector(getFieldSafe(newEntry, fn));
-    newVals = padRowToLength(newVals, numel(newMask));
-    newData.(fn) = newVals(idxNewValid);
-end
-
-for i = 1:numel(newLambda)
-    lam = newLambda(i);
-    idx = find(abs(combinedLambda - lam) <= tolNm, 1);
-    if isempty(idx)
-        combinedLambda(end+1) = lam; %#ok<AGROW>
-        for k = 1:numel(baseFields)
-            fn = baseFields{k};
-            combinedData.(fn)(end+1) = newData.(fn)(i);
+    % Update input parameters and geometric loading factors from newEntry if present
+    updateScalars = {'period', 'radius', 'p', 'r', 'kappa_V', 'kappa_S', 'VolCorr', 'SurfCorr'};
+    for k = 1:numel(updateScalars)
+        fn = updateScalars{k};
+        if isfield(newEntry, fn) && ~isempty(newEntry.(fn)) && isfinite(newEntry.(fn)(1))
+            mergedEntry.(fn) = newEntry.(fn);
         end
+    end
+
+    %% 5. Merge each spectral metric field with fine-grained coordinate replacement
+    for k = 1:numel(allSpectralFields)
+        fn = allSpectralFields{k};
+        mergedData = nan(1, nMerged);
+
+        % Populate from oldEntry
+        hasOld = isfield(oldEntry, fn) && isnumeric(oldEntry.(fn));
+        if hasOld
+            oldVals = double(ensureRowVector(oldEntry.(fn)));
+            for i = 1:numel(oldLambda)
+                idxM = find(abs(mergedLambda - oldLambda(i)) <= tol, 1);
+                if ~isempty(idxM) && i <= numel(oldVals)
+                    mergedData(idxM) = oldVals(i);
+                end
+            end
+        else
+            % Field is new to this entry!
+            isUpdated = true;
+        end
+
+        % Update from newEntry only if field is in the incoming import
+        hasNew = isfield(newEntry, fn) && isnumeric(newEntry.(fn));
+        isImported = isempty(metricNames) || any(strcmp(fn, metricNames));
+
+        if hasNew && isImported
+            newVals = double(ensureRowVector(newEntry.(fn)));
+            for j = 1:numel(newLambda)
+                idxM = find(abs(mergedLambda - newLambda(j)) <= tol, 1);
+                if isempty(idxM) || j > numel(newVals)
+                    continue;
+                end
+                vNew = newVals(j);
+                existedInOld = any(abs(oldLambda - newLambda(j)) <= tol);
+
+                if ~existedInOld
+                    % New wavelength coordinate
+                    if ~isnan(vNew)
+                        mergedData(idxM) = vNew;
+                        isUpdated = true;
+                    end
+                else
+                    % Overlapping wavelength coordinate (e.g. laser wl, or NaN backfill)
+                    if isnan(mergedData(idxM))
+                        if ~isnan(vNew)
+                            mergedData(idxM) = vNew;
+                            isUpdated = true;
+                        end
+                    elseif replaceExisting || recalculateExisting
+                        if ~isnan(vNew) && (isnan(mergedData(idxM)) || abs(mergedData(idxM) - vNew) > eps(vNew))
+                            mergedData(idxM) = vNew;
+                            isUpdated = true;
+                        end
+                    end
+                end
+            end
+        end
+
+        mergedEntry.(fn) = mergedData;
+    end
+
+    %% 6. Synchronize legacy metric aliases if present
+    aliasPairs = {
+        'EE_V', 'EF_vol';
+        'EE_S', 'EF_surf';
+        'Abs',  'Absorptance';
+        'ECC',  'ECCheck'
+    };
+    for a = 1:size(aliasPairs, 1)
+        f1 = aliasPairs{a, 1};
+        f2 = aliasPairs{a, 2};
+        if isfield(mergedEntry, f1) && isfield(mergedEntry, f2)
+            v1 = ensureRowVector(mergedEntry.(f1));
+            v2 = ensureRowVector(mergedEntry.(f2));
+            if numel(v1) == nMerged && numel(v2) == nMerged
+                nan1 = isnan(v1);
+                nan2 = isnan(v2);
+                v1(nan1 & ~nan2) = v2(nan1 & ~nan2);
+                v2(~nan1 & nan2) = v1(~nan1 & nan2);
+                mergedEntry.(f1) = v1;
+                mergedEntry.(f2) = v2;
+            elseif numel(v1) == nMerged
+                mergedEntry.(f2) = v1;
+            elseif numel(v2) == nMerged
+                mergedEntry.(f1) = v2;
+            end
+        elseif isfield(mergedEntry, f1) && ~isfield(mergedEntry, f2)
+            mergedEntry.(f2) = mergedEntry.(f1);
+        elseif ~isfield(mergedEntry, f1) && isfield(mergedEntry, f2)
+            mergedEntry.(f1) = mergedEntry.(f2);
+        end
+    end
+
+    %% 7. Laser wavelength & Raman shift recomputation
+    laserWl_nm = NaN;
+    if isfield(oldEntry, "LaserWl") && ~isempty(oldEntry.LaserWl) && isfinite(oldEntry.LaserWl(1))
+        laserWl_nm = double(oldEntry.LaserWl(1));
+    elseif isfield(newEntry, "LaserWl") && ~isempty(newEntry.LaserWl) && isfinite(newEntry.LaserWl(1))
+        laserWl_nm = double(newEntry.LaserWl(1));
+    elseif isfield(cfg, "laserWavelength") && isfinite(cfg.laserWavelength)
+        laserWl_nm = double(cfg.laserWavelength);
     else
-        for k = 1:numel(baseFields)
-            fn = baseFields{k};
-            combinedData.(fn)(idx) = newData.(fn)(i);
+        laserWl_nm = min(mergedLambda);
+    end
+    if laserWl_nm < 1
+        laserWl_nm = laserWl_nm * 1e9; % meters to nm
+    end
+
+    mergedEntry.lambda = mergedLambda;
+    mergedEntry.lambda_nm = mergedLambda;
+    lambda_m = mergedLambda * 1e-9;
+    mergedEntry.f = c ./ lambda_m;
+    mergedEntry.LaserWl = laserWl_nm;
+    mergedEntry.lambda_exc_nm = laserWl_nm;
+
+    RamanShift_cm = (1 ./ (laserWl_nm * 1e-9) - 1 ./ lambda_m) / 100;
+    mergedEntry.RamanShift = RamanShift_cm;
+
+    ramanWindow = [100, 3600];
+    if isfield(cfg, "ramanWindow") && numel(cfg.ramanWindow) == 2
+        ramanWindow = double(cfg.ramanWindow);
+    end
+    mergedEntry.RamanWindow = ramanWindow;
+    shiftMin = ramanWindow(1);
+    shiftMax = ramanWindow(2);
+    mergedEntry.RamanWindowEffective = [shiftMin, shiftMax];
+
+    %% 8. Derived scalar variants (_laser, _broad, _analyte) for all metrics
+    [~, laserIdx] = min(abs(mergedLambda - laserWl_nm));
+    stokesWindowMask = (RamanShift_cm > 0) & (RamanShift_cm >= shiftMin) & (RamanShift_cm <= shiftMax);
+    shiftRange = shiftMax - shiftMin;
+
+    interpRes = 1;
+    if isfield(cfg, "interpResolution") && isfinite(cfg.interpResolution) && cfg.interpResolution > 0
+        interpRes = double(cfg.interpResolution);
+    end
+    interpSamples = max(2, round(shiftRange / interpRes));
+
+    interpMethod = "makima";
+    if isfield(cfg, "spectralInterpMethod") && strlength(string(cfg.spectralInterpMethod)) > 0
+        interpMethod = string(cfg.spectralInterpMethod);
+    end
+
+    hasValidAnalyte = isstruct(analyteSpectrum) && ...
+        isfield(analyteSpectrum, "shift_cm") && ~isempty(analyteSpectrum.shift_cm);
+
+    allMergedFlds = fieldnames(mergedEntry);
+    for k = 1:numel(allMergedFlds)
+        fn = allMergedFlds{k};
+        if ismember(fn, reserved) || isDerivedVariantName(fn)
+            continue;
+        end
+        data = mergedEntry.(fn);
+        if ~isnumeric(data) || numel(data) ~= nMerged
+            continue;
+        end
+
+        % Laser-line variant
+        mergedEntry.(fn + "_laser") = data(laserIdx);
+
+        % Broadband variant
+        validStokes = stokesWindowMask & isfinite(data);
+        if nnz(validStokes) >= 2 && shiftRange > 0
+            rs = RamanShift_cm(validStokes);
+            dvals = data(validStokes);
+            [rs, sOrd] = sort(rs);
+            dvals = dvals(sOrd);
+            shiftDense = linspace(shiftMin, shiftMax, interpSamples);
+            dense = safeInterpolateLocal(rs, dvals, shiftDense, interpMethod);
+            denom = shiftDense(end) - shiftDense(1);
+            if denom > 0
+                bVal = trapz(shiftDense, dense) / denom;
+            else
+                bVal = mean(dense, 'omitnan');
+            end
+            mergedEntry.(fn + "_broad") = bVal;
+            mergedEntry.(fn + "_avg")   = bVal;
+        elseif isfinite(data(laserIdx))
+            mergedEntry.(fn + "_broad") = data(laserIdx);
+            mergedEntry.(fn + "_avg")   = data(laserIdx);
+        else
+            mergedEntry.(fn + "_broad") = NaN;
+            mergedEntry.(fn + "_avg")   = NaN;
+        end
+
+        % Analyte-weighted variant
+        if hasValidAnalyte && nnz(validStokes) >= 2 && shiftRange > 0
+            rs = RamanShift_cm(validStokes);
+            dvals = data(validStokes);
+            [rs, sOrd] = sort(rs);
+            dvals = dvals(sOrd);
+            shiftDense = linspace(shiftMin, shiftMax, interpSamples);
+            dense = safeInterpolateLocal(rs, dvals, shiftDense, interpMethod);
+            mergedEntry.(fn + "_analyte") = computeAnalyteWeightedMetric(shiftDense, dense, analyteSpectrum);
+        else
+            mergedEntry.(fn + "_analyte") = NaN;
         end
     end
 end
 
-[lambdaSorted, sortIdx] = sort(combinedLambda);
-for k = 1:numel(baseFields)
-    fn = baseFields{k};
-    combinedData.(fn) = combinedData.(fn)(sortIdx);
+%% ========================================================================
+%  LOCAL HELPERS
+%  ========================================================================
+
+function tf = isDerivedVariantName(fn)
+    fn = char(fn);
+    tf = endsWith(fn, '_laser') || endsWith(fn, '_broad') || ...
+         endsWith(fn, '_avg') || endsWith(fn, '_analyte');
 end
 
-if isempty(lambdaSorted)
-    mergedEntry = newEntry;
-    return;
-end
-
-lambdaSorted_m = lambdaSorted * 1e-9;
-c0 = 299792458;
-f_sorted = c0 ./ lambdaSorted_m;
-
-% Determine laser wavelength (nm) from stored metadata, NOT from min(lambda)
-laserWl_nm = getFieldSafe(oldEntry, 'LaserWl');
-if isempty(laserWl_nm) || ~isfinite(laserWl_nm)
-    laserWl_nm = getFieldSafe(newEntry, 'LaserWl');
-end
-if isempty(laserWl_nm) || ~isfinite(laserWl_nm)
-    laserWl_nm = getFieldSafe(oldEntry, 'lambda_exc_nm');
-    if isempty(laserWl_nm) || ~isfinite(laserWl_nm)
-        warning('mergeEntryWithNewWavelengths:NoLaserWl', ...
-            'No LaserWl metadata found; falling back to nearest column to min(lambda).');
-        laserWl_nm = min(lambdaSorted);
-    end
-end
-laserWl_nm = double(laserWl_nm(1));
-
-% If stored value looks like meters (< 1), convert to nm
-if laserWl_nm < 1
-    laserWl_nm = laserWl_nm * 1e9;
-end
-
-RamanShift_cm = (1./(laserWl_nm * 1e-9) - 1./(lambdaSorted * 1e-9)) / 100;
-[~, laserIdx] = min(abs(RamanShift_cm));
-
-% Synchronize EE_V <-> EF_vol, EE_S <-> EF_surf, Abs <-> Absorptance, ECC <-> ECCheck
-if all(isnan(combinedData.EE_V)) && ~all(isnan(combinedData.EF_vol))
-    combinedData.EE_V = combinedData.EF_vol;
-elseif all(isnan(combinedData.EF_vol)) && ~all(isnan(combinedData.EE_V))
-    combinedData.EF_vol = combinedData.EE_V;
-end
-if all(isnan(combinedData.EE_S)) && ~all(isnan(combinedData.EF_surf))
-    combinedData.EE_S = combinedData.EF_surf;
-elseif all(isnan(combinedData.EF_surf)) && ~all(isnan(combinedData.EE_S))
-    combinedData.EF_surf = combinedData.EE_S;
-end
-if all(isnan(combinedData.Abs)) && ~all(isnan(combinedData.Absorptance))
-    combinedData.Abs = combinedData.Absorptance;
-elseif all(isnan(combinedData.Absorptance)) && ~all(isnan(combinedData.Abs))
-    combinedData.Absorptance = combinedData.Abs;
-end
-if all(isnan(combinedData.ECC)) && ~all(isnan(combinedData.ECCheck))
-    combinedData.ECC = combinedData.ECCheck;
-elseif all(isnan(combinedData.ECCheck)) && ~all(isnan(combinedData.ECC))
-    combinedData.ECCheck = combinedData.ECC;
-end
-
-EE_V_sorted = combinedData.EE_V;
-EE_S_sorted = combinedData.EE_S;
-EF_max_sorted = combinedData.EF_max;
-Abs_sorted = combinedData.Abs;
-ECC_sorted = combinedData.ECC;
-
-EF_vol_sorted = combinedData.EF_vol;
-EF_surf_sorted = combinedData.EF_surf;
-E_vol_sorted = combinedData.E_vol;
-E_surf_sorted = combinedData.E_surf;
-M_vol_sorted = combinedData.M_vol;
-M_surf_sorted = combinedData.M_surf;
-M2_vol_sorted = combinedData.M2_vol;
-M2_surf_sorted = combinedData.M2_surf;
-intW_vol_sorted = combinedData.intW_vol;
-intW_t_sorted = combinedData.intW_t;
-absorptance_sorted = combinedData.Absorptance;
-reflectance_sorted = combinedData.Reflectance;
-transmittance_sorted = combinedData.Transmittance;
-ECCheck_sorted = combinedData.ECCheck;
-skinDepth_sorted = combinedData.SkinDepth;
-resistiveLoss_sorted = combinedData.ResistiveLoss;
-
-% Derived spectral combinations
-M_vol_laser = M_vol_sorted(laserIdx);
-M_surf_laser = M_surf_sorted(laserIdx);
-Absorptance_laser = absorptance_sorted(laserIdx);
-EF_vol_M_sorted = (M_vol_laser .* M_vol_sorted(:))';
-EF_surf_M_sorted = (M_surf_laser .* M_surf_sorted(:))';
-EF_Abs_sorted = (Absorptance_laser .* absorptance_sorted(:))';
-
-stokesAvail = RamanShift_cm(RamanShift_cm > 0);
-if isempty(stokesAvail)
-    shiftMin = NaN;
-    shiftMax = NaN;
-else
-    shiftMin = max(ramanWindow(1), min(stokesAvail));
-    shiftMax = min(ramanWindow(2), max(stokesAvail));
-end
-
-EF_vol_avg = NaN;
-EF_surf_avg = NaN;
-EF_max_avg = NaN;
-Absorptance_avg = NaN;
-EF_vol_M_avg = NaN;
-EF_surf_M_avg = NaN;
-EF_Abs_avg = NaN;
-stokesWindowMask = isfinite(shiftMin) & isfinite(shiftMax) & (RamanShift_cm > 0) & (RamanShift_cm >= shiftMin) & (RamanShift_cm <= shiftMax);
-if nnz(stokesWindowMask) >= 2 && (shiftMax - shiftMin) > 0
-    shiftDense = linspace(shiftMin, shiftMax, interpSamples);
-    rs = RamanShift_cm(stokesWindowMask);
-    [rs, rsOrd] = sort(rs);
-
-    ev = EF_vol_sorted(stokesWindowMask); ev = ev(rsOrd);
-    es = EF_surf_sorted(stokesWindowMask); es = es(rsOrd);
-    em = EF_max_sorted(stokesWindowMask); em = em(rsOrd);
-    ab = absorptance_sorted(stokesWindowMask); ab = ab(rsOrd);
-    evm = EF_vol_M_sorted(stokesWindowMask); evm = evm(rsOrd);
-    esm = EF_surf_M_sorted(stokesWindowMask); esm = esm(rsOrd);
-    eab = EF_Abs_sorted(stokesWindowMask); eab = eab(rsOrd);
-
-    if ~all(isnan(ev))
-        ev_dense = pchip(rs, ev, shiftDense);
-        EF_vol_avg = trapz(shiftDense, ev_dense) / (shiftDense(end) - shiftDense(1));
-    end
-    if ~all(isnan(es))
-        es_dense = pchip(rs, es, shiftDense);
-        EF_surf_avg = trapz(shiftDense, es_dense) / (shiftDense(end) - shiftDense(1));
-    end
-    if ~all(isnan(em))
-        em_dense = pchip(rs, em, shiftDense);
-        EF_max_avg = trapz(shiftDense, em_dense) / (shiftDense(end) - shiftDense(1));
-    end
-    if ~all(isnan(ab))
-        abs_dense = pchip(rs, ab, shiftDense);
-        Absorptance_avg = trapz(shiftDense, abs_dense) / (shiftDense(end) - shiftDense(1));
-    end
-    if ~all(isnan(evm))
-        evm_dense = pchip(rs, evm, shiftDense);
-        EF_vol_M_avg = trapz(shiftDense, evm_dense) / (shiftDense(end) - shiftDense(1));
-    end
-    if ~all(isnan(esm))
-        esm_dense = pchip(rs, esm, shiftDense);
-        EF_surf_M_avg = trapz(shiftDense, esm_dense) / (shiftDense(end) - shiftDense(1));
-    end
-    if ~all(isnan(eab))
-        eabs_dense = pchip(rs, eab, shiftDense);
-        EF_Abs_avg = trapz(shiftDense, eabs_dense) / (shiftDense(end) - shiftDense(1));
+function out = preferNonEmptyFields(eA, eB)
+    out = eA;
+    fldsB = fieldnames(eB);
+    for i = 1:numel(fldsB)
+        fn = fldsB{i};
+        if ~isfield(out, fn) || isempty(out.(fn))
+            out.(fn) = eB.(fn);
+        end
     end
 end
 
-mergedEntry = oldEntry;
-scalarFieldsFromNew = {'period','radius','kappa_V','kappa_S'};
-for k = 1:numel(scalarFieldsFromNew)
-    fn = scalarFieldsFromNew{k};
-    if isfield(newEntry, fn)
-        mergedEntry.(fn) = newEntry.(fn);
+function dense = safeInterpolateLocal(rs, data, shiftDense, method)
+    try
+        switch lower(string(method))
+            case "makima"
+                dense = makima(rs, data, shiftDense);
+            case "pchip"
+                dense = pchip(rs, data, shiftDense);
+            case "linear"
+                dense = interp1(rs, data, shiftDense, "linear", "extrap");
+            case "spline"
+                dense = spline(rs, data, shiftDense);
+            otherwise
+                dense = makima(rs, data, shiftDense);
+        end
+    catch
+        dense = nan(size(shiftDense));
     end
-end
-mergedEntry.lambda = lambdaSorted(:)';
-mergedEntry.f = f_sorted(:)';
-mergedEntry.RamanShift = RamanShift_cm(:)';
-mergedEntry.LaserWl = laserWl_nm;
-mergedEntry.RamanWindow = ramanWindow;
-mergedEntry.RamanWindowEffective = [shiftMin, shiftMax];
-mergedEntry.EE_V = EE_V_sorted(:)';
-mergedEntry.EE_S = EE_S_sorted(:)';
-mergedEntry.EF_max = EF_max_sorted(:)';
-mergedEntry.Abs = Abs_sorted(:)';
-mergedEntry.ECC = ECC_sorted(:)';
-mergedEntry.EF_vol = EF_vol_sorted(:)';
-mergedEntry.EF_surf = EF_surf_sorted(:)';
-mergedEntry.E_vol = E_vol_sorted(:)';
-mergedEntry.E_surf = E_surf_sorted(:)';
-mergedEntry.M_vol = M_vol_sorted(:)';
-mergedEntry.M_surf = M_surf_sorted(:)';
-mergedEntry.M2_vol = M2_vol_sorted(:)';
-mergedEntry.M2_surf = M2_surf_sorted(:)';
-mergedEntry.intW_vol = intW_vol_sorted(:)';
-mergedEntry.intW_t = intW_t_sorted(:)';
-mergedEntry.Absorptance = absorptance_sorted(:)';
-mergedEntry.Reflectance = reflectance_sorted(:)';
-mergedEntry.Transmittance = transmittance_sorted(:)';
-mergedEntry.ECCheck = ECCheck_sorted(:)';
-mergedEntry.SkinDepth = skinDepth_sorted(:)';
-mergedEntry.ResistiveLoss = resistiveLoss_sorted(:)';
-mergedEntry.EE_V_laser = EE_V_sorted(laserIdx);
-mergedEntry.EE_S_laser = EE_S_sorted(laserIdx);
-mergedEntry.EF_max_laser = EF_max_sorted(laserIdx);
-mergedEntry.Abs_laser = Abs_sorted(laserIdx);
-mergedEntry.EF_vol_laser = EF_vol_sorted(laserIdx);
-mergedEntry.EF_surf_laser = EF_surf_sorted(laserIdx);
-mergedEntry.M_vol_laser = M_vol_laser;
-mergedEntry.M_surf_laser = M_surf_laser;
-mergedEntry.Absorptance_laser = Absorptance_laser;
-mergedEntry.EF_vol_M = EF_vol_M_sorted;
-mergedEntry.EF_surf_M = EF_surf_M_sorted;
-mergedEntry.EF_Abs = EF_Abs_sorted;
-mergedEntry.EE_V_broad = EF_vol_avg;
-mergedEntry.EE_S_broad = EF_surf_avg;
-mergedEntry.EF_max_broad = EF_max_avg;
-mergedEntry.Abs_broad = Absorptance_avg;
-mergedEntry.Absorptance_avg = Absorptance_avg;
-mergedEntry.EF_vol_avg = EF_vol_avg;
-mergedEntry.EF_surf_avg = EF_surf_avg;
-mergedEntry.EF_vol_M_avg = EF_vol_M_avg;
-mergedEntry.EF_surf_M_avg = EF_surf_M_avg;
-mergedEntry.EF_Abs_avg = EF_Abs_avg;
 end
