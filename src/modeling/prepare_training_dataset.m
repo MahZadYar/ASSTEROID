@@ -185,14 +185,19 @@ for k = 1:numTargets
     paddedTargetData = padSpectra(rawTargetData, maxLambdaWidth, numRowsExpected);
     metricStack(:, :, k) = paddedTargetData;
 
-    % Data QA: absorptance is stored in percent; values above 100 % are unphysical.
+    % Data QA: absorptance is stored in percent; values outside [0, 100]% violate optical passivity.
     if any(strcmpi(targetFields{k}, {'Abs', 'Absorptance'}))
-        absOver = any(paddedTargetData > 100, 2);
-        if any(absOver)
+        absOver = paddedTargetData > 100 | paddedTargetData < 0;
+        if any(absOver(:))
+            nBad = nnz(absOver);
+            maxVal = max(paddedTargetData(:), [], 'omitnan');
+            minVal = min(paddedTargetData(:), [], 'omitnan');
             warning('prepare_training_dataset:AbsorptanceAbove100', ...
-                ['%d of %d geometries have %s > 100 %% (max %.1f %%). ', ...
-                 'These are unphysical and are kept in training; check the COMSOL import.'], ...
-                nnz(absOver), numRows, targetFields{k}, max(paddedTargetData(:), [], 'omitnan'));
+                ['%d entries across %d geometries have unphysical %s (max = %.2e %%, min = %.2e %%). ', ...
+                 'Enforcing optical passivity bounds [0, 100] %% to prevent Z-score variance collapse.'], ...
+                nBad, numRows, targetFields{k}, maxVal, minVal);
+            paddedTargetData = min(max(paddedTargetData, 0), 100);
+            metricStack(:, :, k) = paddedTargetData;
         end
     end
 end
