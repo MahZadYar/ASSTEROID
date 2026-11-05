@@ -7,14 +7,16 @@ function [net, info] = buildSurrogateNetwork(numFeatures, numTargets, config, op
 %
 %   Architectures (config.architecture):
 %     "gs_tensor"     (default, v6.4) Geometry-Spectrum Factorized Tensor
-%                     Network: a lambda-blind geometry encoder G(P, r)
+%                     Network: a lambda-blind Geometry Stem G(P, r)
 %                     (sliceLayer -> 2-stage MLP, 3 -> 64 -> 128)
-%                     multiplicatively gates a spectral-geometric residual
+%                     multiplicatively gates a Geo-Spectral Trunk residual
 %                     stream via geometry-conditioned bilinear residual blocks
 %                         h_k = h_{k-1} + W_o [ a_k(h_{k-1}) .* s_k(G) ],
-%                     with a 2-stage expansion stem (8 -> 128 -> 256),
-%                     identity skips and physically bounded heads
-%                     (sigmoid for absorptance, softplus for log10(1+EE)).
+%                     with a 2-stage expansion trunk (8 -> 128 -> 256),
+%                     identity skips and decoupled physically bounded heads
+%                     h1..hM (sigmoid for absorptance, softplus for
+%                     log10(1+EF_max) and log10(1+EE); 507,268 learnables for
+%                     4 targets, 473,987 for 3 targets).
 %     "lean_resnet"   Ablation of gs_tensor without the geometry encoder
 %                     and gates (plain identity-skip residual MLP blocks).
 %     "tensor_resnet" Legacy (v6.0-6.2) low-rank tensor-product ResNet.
@@ -211,7 +213,7 @@ trunkOut = prev;
 if config.useMultiHead
     net = addLayers(net, concatenationLayer(1, numTargets, Name="concatOut"));
     for i = 1:numTargets
-        headName = sprintf("head_%d", i);
+        headName = sprintf("h%d", i);
         layers = localBuildHeadLayers(headName, config.headHiddenSizes, 1, normKind, ...
             actKind, "ln", "act");
         layers = [layers; localBoundLayers(headName, specs(i))]; %#ok<AGROW>

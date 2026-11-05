@@ -40,7 +40,7 @@ arguments
     options.ValSplit (1,1) double {mustBeBetween(options.ValSplit, 0, 1)} = 0.5
     options.Shuffle (1,1) logical = true
     options.RatioLimit (1,:) double = []
-    options.TargetFields (1,:) string = ["Absorptance","M_vol","M_surf","EF_vol","EF_surf"]
+    options.TargetFields (1,:) string = ["Abs", "EF_max", "EE_V", "EE_S"]
     options.FeatureLogTransform (1,1) logical = true
     options.IncludeRatios (1,1) logical = true
     options.TargetLogTransform (1,1) logical = true

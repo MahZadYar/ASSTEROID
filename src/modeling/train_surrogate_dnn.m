@@ -748,7 +748,7 @@ end
 function [net, kinds] = localSyncBoundedHeads(net, specs, numTargets)
 %localSyncBoundedHeads Detect bounded heads and align their fixed z-scoring.
 %   Bounded heads end in "<prefix>_bound" (sigmoidLayer / softplusLayer)
-%   followed by "<prefix>_zscore" (scalingLayer), with prefix head_<c>
+%   followed by "<prefix>_zscore" (scalingLayer), with prefix h<c> / head_<c>
 %   (multi-head) or out_ch<c> (shared head). The scaling hyperparameters
 %   are reset from the current dataset statistics so a pretrained network
 %   fine-tuned on a re-standardised dataset stays consistent.
@@ -759,7 +759,7 @@ end
 names = string(arrayfun(@(L) L.Name, net.Layers, 'UniformOutput', false));
 changed = false;
 for c = 1:numTargets
-    for prefix = [sprintf("head_%d", c), sprintf("out_ch%d", c)]
+    for prefix = [sprintf("h%d", c), sprintf("head_%d", c), sprintf("out_ch%d", c)]
         bIdx = find(names == prefix + "_bound", 1);
         zIdx = find(names == prefix + "_zscore", 1);
         if isempty(bIdx) || isempty(zIdx)
@@ -943,8 +943,8 @@ try
                 continue;
             end
             % Update bias in net.Learnables
-            headLayerName = sprintf('head_%d_out', c);
-            rowIdx = find(strcmp(string(learnables.Layer), headLayerName) & ...
+            rowIdx = find((strcmp(string(learnables.Layer), sprintf('h%d_out', c)) | ...
+                           strcmp(string(learnables.Layer), sprintf('head_%d_out', c))) & ...
                           strcmp(string(learnables.Parameter), "Bias"), 1);
             if ~isempty(rowIdx)
                 bVal = learnables.Value{rowIdx};

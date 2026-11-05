@@ -84,7 +84,7 @@ arguments
     options.PreTrainedModelFile (1,1) string  = ""
     options.ContinueTraining    (1,1) logical = false
     options.RatioLimit          (1,2) double  = [0, 0.49]
-    options.MetricsToTrain      (1,:) string  = ["Absorptance", "EF_vol", "EF_surf"]
+    options.MetricsToTrain      (1,:) string  = ["Abs", "EF_max", "EE_V", "EE_S"]
     options.MaxEpochs           (1,1) double  {mustBePositive, mustBeInteger} = 1000
     options.MiniBatchSize       (1,1) double  {mustBePositive, mustBeInteger} = 1024
     options.LearningRate        (1,1) double  {mustBePositive} = 1e-5

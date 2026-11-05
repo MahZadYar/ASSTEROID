@@ -146,7 +146,7 @@ classdef TrainingController < handle
                 return;
             end
 
-            metricsList = ["Absorptance", "EF_vol", "EF_surf"];
+            metricsList = ["Abs", "EF_max", "EE_V", "EE_S"];
             if isfield(d, "metricsToTrain") && ~isempty(d.metricsToTrain)
                 metricsList = string(d.metricsToTrain);
             end

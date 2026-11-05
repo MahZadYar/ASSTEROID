@@ -4,13 +4,14 @@
 % Checks (each prints PASS/FAIL; any failure raises an error at the end):
 %   1. v3_physics feature schema (8 columns, log_g_norm, no h_over_lambda).
 %   2. Dataset bound metadata (BoundKind / LowerBound / UpperBound).
-%   3. buildSurrogateNetwork: learnable counts (gs_tensor 473,987;
-%      lite 267,939; v6.3 config 450,435; legacy tensor_resnet 2,546,691),
-%      symmetric spec_ and geo_ parallel layer naming, specFeatures
-%      ablations (no_geo_logs 473,603, spectral_only 473,347),
+%   3. buildSurrogateNetwork: learnable counts (gs_tensor 4-head 507,268
+%      and 3-head 473,987; lite 267,939; v6.3 config 450,435; legacy
+%      tensor_resnet 2,546,691), symmetric spec_ and geo_ parallel layer
+%      naming, h1..h4 readout head naming, specFeatures ablations
+%      (no_geo_logs 473,603 / 506,884, spectral_only 473,347 / 506,628),
 %      allowed layer types, lambda-blind geometry encoder, physically
-%      bounded outputs, lean_resnet (398,979), single-head bounded split,
-%      swish, v2 feature aliasing.
+%      bounded outputs, lean_resnet (398,979 / 432,260), single-head bounded
+%      split, swish, v2 feature aliasing.
 %   4. Smoke training (gs_tensor): metadata, bounded physical predictions,
 %      save/load reproduction, finite input gradients (dlgradient).
 %   5. Fine-tuning a pretrained gs_tensor re-synchronises the fixed
@@ -47,6 +48,10 @@ failures = check(failures, isequal(F0, F2(:, 1:8)), 'schema without Name default
 
 %% 2. Dataset bound metadata
 fprintf('\n[2] Dataset bound metadata\n');
+ds4 = prepare_training_dataset(allData, ri);   % default 4 targets: Abs, EF_max, EE_V, EE_S
+tt4 = ds4.targetTransform;
+failures = check(failures, isequal(tt4.BoundKind, ["sigmoid", "softplus", "softplus", "softplus"]), ...
+    'default 4-target bounds: Abs sigmoid, EF_max/EE_V/EE_S softplus');
 ds = prepare_training_dataset(allData, ri, TargetFields=["Absorptance", "EF_vol", "EF_surf"]);
 tt = ds.targetTransform;
 failures = check(failures, ds.featureSchema.Name == "v3_physics" && numel(ds.featureNames) == 8, ...
@@ -59,8 +64,14 @@ failures = check(failures, isequal(tt.BoundKind, ["sigmoid", "softplus", "softpl
 %% 3. Network builder
 fprintf('\n[3] buildSurrogateNetwork\n');
 fn8 = string(ds.featureNames);
+[net4, info4] = buildSurrogateNetwork(8, 4, struct(), FeatureNames=fn8, TargetTransform=tt4);
+net4Names = string(arrayfun(@(L) L.Name, net4.Layers, 'UniformOutput', false));
+failures = check(failures, info4.NumLearnables == 507268 ...
+    && any(net4Names == "h1_fc1") && any(net4Names == "h4_zscore"), ...
+    'gs_tensor 4-head learnables (507,268) and h1..h4 layer naming', ...
+    sprintf('(%d)', info4.NumLearnables));
 [net, info] = buildSurrogateNetwork(8, 3, struct(), FeatureNames=fn8, TargetTransform=tt);
-failures = check(failures, info.NumLearnables == 473987, 'gs_tensor default learnables (v6.4 Option A)', ...
+failures = check(failures, info.NumLearnables == 473987, 'gs_tensor 3-head learnables (v6.4 Option A)', ...
     sprintf('(%d)', info.NumLearnables));
 allowed = ["FeatureInputLayer", "SliceLayer", "FullyConnectedLayer", "LayerNormalizationLayer", ...
     "GELULayer", "MultiplicationLayer", "AdditionLayer", "SigmoidLayer", "SoftplusLayer", ...
@@ -162,9 +173,9 @@ ds2 = prepare_training_dataset(allData2, ri, TargetFields=["Absorptance", "EF_vo
 m2 = train_surrogate_dnn(ds2, MaxEpochs=1, MiniBatchSize=256, Plots="none", Verbose=false, ...
     ValidationFrequency=10, Layers=m.net);
 spec2 = surrogateHeadSpecs(ds2.targetTransform, 3);
-zl = m2.net.Layers(arrayfun(@(L) string(L.Name) == "head_1_zscore", m2.net.Layers));
+zl = m2.net.Layers(arrayfun(@(L) ismember(string(L.Name), ["h1_zscore", "head_1_zscore"]), m2.net.Layers));
 failures = check(failures, abs(zl.Scale - spec2(1).Scale) < 1e-12 && abs(zl.Offset - spec2(1).Offset) < 1e-12, ...
-    'head_1_zscore synced to new dataset statistics');
+    'h1_zscore synced to new dataset statistics');
 failures = check(failures, m2.architecture == "gs_tensor", 'pretrained architecture inferred from layer names');
 
 %% 6. Legacy architecture
@@ -208,6 +219,7 @@ allData.period = P;
 allData.radius = r;
 allData.lambda = lam;
 allData.Absorptance = 10 + 80 * res ./ max(res, [], 'all');   % percent
+allData.EF_max = 10 .^ (3 + 5 * res);
 allData.EF_vol = 10 .^ (1 + 2.5 * res);
 allData.EF_surf = 10 .^ (2 + 4 * res);
 end

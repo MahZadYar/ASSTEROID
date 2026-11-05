@@ -1,7 +1,7 @@
 # Proposal (rev. 2): Geometry–Spectrum Factorized Tensor Network (`gs_tensor`)
 
 > [!NOTE]
-> **Status: implemented in ASSTEROID v6.3.0** (`src/modeling/buildSurrogateNetwork.m`, `surrogateHeadSpecs.m`, `buildPhysicsFeatures.m` `v3_physics`, Stage 3 UI). This is the design proposal that motivated the implementation; the ablation campaign (Phase 5) and the manuscript update (Phase 7) are pending a full training run.
+> **Status: implemented in ASSTEROID v6.3.0 / v6.4.0** (`src/modeling/buildSurrogateNetwork.m`, `surrogateHeadSpecs.m`, `buildPhysicsFeatures.m` `v3_physics`, Stage 3 UI). In v6.4.0, the two streams were finalized as symmetric 2-stage progressive funnels (**Geometry Stem**: $3 \to 64 \to 128$, $8{,}960$ learnables; **Geo-Spectral Trunk**: $8 \to 128 \to 256$, $34{,}944$ learnables) with 4 decoupled physically bounded readout heads (`h1_*`..`h4_*` for $\mathrm{Abs}, \mathrm{EF}_{\max}, \mathrm{EE}_V, \mathrm{EE}_S$; **507,268** learnables for 4 heads, **473,987** for 3 heads). See `Graphics/Drafts/NetDiagram/TikZ/NetDiag_v3_4heads.tex` (`fig-si-surrogate.pdf`) for the canonical publication diagram.
 
 
 **A leaner, physics-structured surrogate backbone for ASSTEROID, re-evaluated against the full MATLAB R2026b layer catalog**

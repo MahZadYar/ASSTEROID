@@ -11,10 +11,10 @@ config:
 ---
 flowchart TB
     %% ==========================================
-    %% PROPOSAL (rev. 2): Geometry-Spectrum Factorized Tensor Network ("gs_tensor")
-    %% Default config: modelWidth = 256, geoWidth = 128, numBlocks = 2, headHiddenSizes = 128
-    %% 450,435 trainable parameters (vs 2,546,691 in tensor_resnet)
-    %% Rev. 2 uses the full MATLAB R2026b layer catalog where it adds value:
+    %% PROPOSAL (v6.4): Geometry-Spectrum Factorized Tensor Network ("gs_tensor")
+    %% Default config: modelWidth = 256, specWidths = [128, 256], geoWidths = [64, 128], numBlocks = 2, headHiddenSizes = 128
+    %% 507,268 trainable parameters for 4 heads (473,987 for 3 heads; vs 2,546,691 in tensor_resnet)
+    %% Uses the full MATLAB R2026b layer catalog where it adds value:
     %%   sliceLayer (geometry column split), sigmoidLayer / softplusLayer (physically bounded outputs),
     %%   scalingLayer (fixed in-network target standardization). The no-op "regression" identity is removed.
     %% ==========================================
@@ -76,26 +76,29 @@ flowchart TB
     end
 
     %% ==========================================
-    %% GEOMETRY ENCODER G(P, r): λ-blind branch
+    %% GEOMETRY STEM G(P, r): λ-blind branch
     %% (carries pump response at fixed λ_L, loading factors κ_D, modal amplitudes)
     %% ==========================================
-    subgraph s_geo["Geometry Encoder G(P, r) — λ-blind"]
-        g_sel@{ shape: trap-t, label: "<b>Slice</b> [3]<br><code>geo_slice</code>" }
-        g_fc1["<b>FC</b> [128]<br><code>geo_fc1</code>"]:::fcStyle
-        g_bn1(["<b>LN</b> [128]<br><code>geo_ln1</code>"]):::normStyle
-        g_gelu1{{"<b>GELU</b><br><code>geo_gelu1</code>"}}:::actStyle
-        g_fc2["<b>FC</b> [128]<br><code>geo_fc2</code>"]:::fcStyle
-        g_bn2(["<b>LN</b> [128]<br><code>geo_ln2</code>"]):::normStyle
-        g_gelu2{{"<b>GELU</b><br><code>geo_gelu2</code>"}}:::actStyle
+    subgraph s_geo["Geometry Stem G(P, r) — λ-blind"]
+        g_sel@{ shape: trap-t, label: "Slice [3]<br><code>geo_slice</code>" }
+        g_fc1["FC [64]<br><code>geo_fc1</code>"]:::fcStyle
+        g_bn1(["LN [64]<br><code>geo_ln1</code>"]):::normStyle
+        g_gelu1{{"GELU<br><code>geo_act1</code>"}}:::actStyle
+        g_fc2["FC [128]<br><code>geo_fc2</code>"]:::fcStyle
+        g_bn2(["LN [128]<br><code>geo_ln2</code>"]):::normStyle
+        g_gelu2{{"GELU<br><code>geo_act2</code>"}}:::actStyle
     end
 
     %% ==========================================
-    %% SPECTRAL-GEOMETRIC STEM
+    %% GEO-SPECTRAL TRUNK
     %% ==========================================
-    subgraph s_stem["Spectral-Geometric Stem"]
-        s_fc["<b>FC</b> [256]<br><code>stem_fc</code>"]:::fcStyle
-        s_bn(["<b>LN</b> [256]<br><code>stem_ln</code>"]):::normStyle
-        s_gelu{{"<b>GELU</b><br><code>stem_gelu</code>"}}:::actStyle
+    subgraph s_stem["Geo-Spectral Trunk"]
+        s_fc1["FC [128]<br><code>spec_fc1</code>"]:::fcStyle
+        s_bn1(["LN [128]<br><code>spec_ln1</code>"]):::normStyle
+        s_gelu1{{"GELU<br><code>spec_act1</code>"}}:::actStyle
+        s_fc["FC [256]<br><code>spec_fc2</code>"]:::fcStyle
+        s_bn(["LN [256]<br><code>spec_ln2</code>"]):::normStyle
+        s_gelu{{"GELU<br><code>spec_act2</code>"}}:::actStyle
     end
 
     %% ==========================================
@@ -136,29 +139,37 @@ flowchart TB
     %% DECOUPLED MULTI-TASK READOUT HEADS (physically bounded)
     %% ==========================================
     subgraph s_heads["Decoupled, Physically Bounded Readout Heads"]
-        subgraph s_h1["Head #1 · Abs ∈ (0, 1)"]
-            h1_fc1["<b>FC</b> [128]<br><code>head_1_fc1</code>"]:::fcStyle
-            h1_bn1(["<b>LN</b> [128]<br><code>head_1_ln1</code>"]):::normStyle
-            h1_gelu1{{"<b>GELU</b><br><code>head_1_gelu1</code>"}}:::actStyle
-            h1_out["<b>FC</b> [1]<br><code>head_1_out</code>"]:::fcStyle
-            h1_act{{"<b>Sigmoid</b><br><code>head_1_bound</code>"}}:::boundStyle
-            h1_z@{ shape: trap-b, label: "<b>Scale</b> [1]<br><code>head_1_zscore</code>" }
+        subgraph s_h1["Head 1 · Abs ∈ (0, 1)"]
+            h1_fc1["FC [128]<br><code>h1_fc1</code>"]:::fcStyle
+            h1_bn1(["LN [128]<br><code>h1_ln1</code>"]):::normStyle
+            h1_gelu1{{"GELU<br><code>h1_act1</code>"}}:::actStyle
+            h1_out["FC [1]<br><code>h1_out</code>"]:::fcStyle
+            h1_act{{"Sigmoid<br><code>h1_bound</code>"}}:::boundStyle
+            h1_z@{ shape: trap-b, label: "Scale [1]<br><code>h1_zscore</code>" }
         end
-        subgraph s_h2["Head #2 · log-EE ≥ 0"]
-            h2_fc1["<b>FC</b> [128]<br><code>head_2_fc1</code>"]:::fcStyle
-            h2_bn1(["<b>LN</b> [128]<br><code>head_2_ln1</code>"]):::normStyle
-            h2_gelu1{{"<b>GELU</b><br><code>head_2_gelu1</code>"}}:::actStyle
-            h2_out["<b>FC</b> [1]<br><code>head_2_out</code>"]:::fcStyle
-            h2_act{{"<b>Softplus</b><br><code>head_2_bound</code>"}}:::boundStyle
-            h2_z@{ shape: trap-b, label: "<b>Scale</b> [1]<br><code>head_2_zscore</code>" }
+        subgraph s_h2["Head 2 · log-EF_max ≥ 0"]
+            h2_fc1["FC [128]<br><code>h2_fc1</code>"]:::fcStyle
+            h2_bn1(["LN [128]<br><code>h2_ln1</code>"]):::normStyle
+            h2_gelu1{{"GELU<br><code>h2_act1</code>"}}:::actStyle
+            h2_out["FC [1]<br><code>h2_out</code>"]:::fcStyle
+            h2_act{{"Softplus<br><code>h2_bound</code>"}}:::boundStyle
+            h2_z@{ shape: trap-b, label: "Scale [1]<br><code>h2_zscore</code>" }
         end
-        subgraph s_h3["Head #3 · log-EE ≥ 0"]
-            h3_fc1["<b>FC</b> [128]<br><code>head_3_fc1</code>"]:::fcStyle
-            h3_bn1(["<b>LN</b> [128]<br><code>head_3_ln1</code>"]):::normStyle
-            h3_gelu1{{"<b>GELU</b><br><code>head_3_gelu1</code>"}}:::actStyle
-            h3_out["<b>FC</b> [1]<br><code>head_3_out</code>"]:::fcStyle
-            h3_act{{"<b>Softplus</b><br><code>head_3_bound</code>"}}:::boundStyle
-            h3_z@{ shape: trap-b, label: "<b>Scale</b> [1]<br><code>head_3_zscore</code>" }
+        subgraph s_h3["Head 3 · log-EE_V ≥ 0"]
+            h3_fc1["FC [128]<br><code>h3_fc1</code>"]:::fcStyle
+            h3_bn1(["LN [128]<br><code>h3_ln1</code>"]):::normStyle
+            h3_gelu1{{"GELU<br><code>h3_act1</code>"}}:::actStyle
+            h3_out["FC [1]<br><code>h3_out</code>"]:::fcStyle
+            h3_act{{"Softplus<br><code>h3_bound</code>"}}:::boundStyle
+            h3_z@{ shape: trap-b, label: "Scale [1]<br><code>h3_zscore</code>" }
+        end
+        subgraph s_h4["Head 4 · log-EE_S ≥ 0"]
+            h4_fc1["FC [128]<br><code>h4_fc1</code>"]:::fcStyle
+            h4_bn1(["LN [128]<br><code>h4_ln1</code>"]):::normStyle
+            h4_gelu1{{"GELU<br><code>h4_act1</code>"}}:::actStyle
+            h4_out["FC [1]<br><code>h4_out</code>"]:::fcStyle
+            h4_act{{"Softplus<br><code>h4_bound</code>"}}:::boundStyle
+            h4_z@{ shape: trap-b, label: "Scale [1]<br><code>h4_zscore</code>" }
         end
     end
 
@@ -166,14 +177,16 @@ flowchart TB
     %% NETWORK OUTPUT, LATENT TARGETS & OUTPUT METRICS
     %% ==========================================
     subgraph s_out["Network Output, Latent Targets & Physical Metrics"]
-        n_cat@{ shape: lean-right, label: "<b>Concat</b> [3] · network output<br><code>concatOut</code>" }
+        n_cat@{ shape: lean-right, label: "Concat [4] · network output<br><code>concatOut</code>" }
         subgraph s_targets["Standardized Latent Predictions"]
             t_z1["$$Z_1 = \\frac{\\mathrm{Abs} - \\mu_1}{\\sigma_1}$$"]:::metricStyle
-            t_z2["$$Z_2 = \\frac{\\log_{10}(1 + \\mathrm{EE}_V) - \\mu_2}{\\sigma_2}$$"]:::metricStyle
-            t_z3["$$Z_3 = \\frac{\\log_{10}(1 + \\mathrm{EE}_S) - \\mu_3}{\\sigma_3}$$"]:::metricStyle
+            t_z2["$$Z_2 = \\frac{\\log_{10}(1 + E^4_{\\max}) - \\mu_2}{\\sigma_2}$$"]:::metricStyle
+            t_z3["$$Z_3 = \\frac{\\log_{10}(1 + \\mathrm{EE}_V) - \\mu_3}{\\sigma_3}$$"]:::metricStyle
+            t_z4["$$Z_4 = \\frac{\\log_{10}(1 + \\mathrm{EE}_S) - \\mu_4}{\\sigma_4}$$"]:::metricStyle
         end
         subgraph s_metrics["Physical Calibration & Output Metrics"]
             m_abs["$$\\mathrm{Abs}(\\lambda)$$<br>Far-Field Absorptance"]:::metricStyle
+            m_efm["$$E^4_{\\max}(\\lambda)$$<br>Hotspot Max Enhancement Factor"]:::metricStyle
             m_eev["$$\\mathrm{EE}_V(\\lambda)$$<br>Volumetric Enhancement Efficacy"]:::metricStyle
             m_ees["$$\\mathrm{EE}_S(\\lambda)$$<br>Surface Enhancement Efficacy"]:::metricStyle
         end
@@ -204,7 +217,7 @@ flowchart TB
     class b1_add,b2_add,leg_add addStyle;
     class b1_mult,b2_mult,leg_mult multStyle;
     class n_cat,leg_concat concatStyle;
-    class g_sel,h1_z,h2_z,h3_z,leg_slice,leg_scale utilStyle;
+    class g_sel,h1_z,h2_z,h3_z,h4_z,leg_slice,leg_scale utilStyle;
 
     %% ==========================================
     %% TOPOLOGICAL CONNECTIONS & EDGE ROUTING
@@ -223,14 +236,14 @@ flowchart TB
     f_loglam & f_eps1 & f_eps2 --> n_in
     f_Plam & f_rlam --> n_in
 
-    %% Geometry encoder (channel slice, then λ-blind MLP)
+    %% Geometry Stem (channel slice, then λ-blind MLP)
     n_in -- "8D" --> g_sel
     g_sel -- "3D: ln P, ln r, ln g" --> g_fc1
     g_fc1 --> g_bn1 --> g_gelu1 --> g_fc2 --> g_bn2 --> g_gelu2
 
-    %% Spectral-geometric stem
-    n_in -- "8D" --> s_fc
-    s_fc --> s_bn --> s_gelu
+    %% Geo-Spectral Trunk
+    n_in -- "8D" --> s_fc1
+    s_fc1 --> s_bn1 --> s_gelu1 --> s_fc --> s_bn --> s_gelu
 
     %% Block 1
     s_gelu -- "256D" --> b1_fca
@@ -253,20 +266,24 @@ flowchart TB
     b1_add -- "identity skip" --> b2_add
 
     %% Decoupled heads with physical bounds and fixed z-scoring
-    b2_add -- "256D" --> h1_fc1 & h2_fc1 & h3_fc1
+    b2_add -- "256D" --> h1_fc1 & h2_fc1 & h3_fc1 & h4_fc1
     h1_fc1 --> h1_bn1 --> h1_gelu1 --> h1_out --> h1_act --> h1_z
     h2_fc1 --> h2_bn1 --> h2_gelu1 --> h2_out --> h2_act --> h2_z
     h3_fc1 --> h3_bn1 --> h3_gelu1 --> h3_out --> h3_act --> h3_z
+    h4_fc1 --> h4_bn1 --> h4_gelu1 --> h4_out --> h4_act --> h4_z
 
     %% Network output (concatenation)
     h1_z -- "1D" --> n_cat
     h2_z -- "1D" --> n_cat
     h3_z -- "1D" --> n_cat
+    h4_z -- "1D" --> n_cat
 
     %% Inverse standardization & metric calibration
     n_cat -. "Z₁" .-> t_z1
     n_cat -. "Z₂" .-> t_z2
     n_cat -. "Z₃" .-> t_z3
+    n_cat -. "Z₄" .-> t_z4
     t_z1 ==> m_abs
-    t_z2 ==> m_eev
-    t_z3 ==> m_ees
+    t_z2 ==> m_efm
+    t_z3 ==> m_eev
+    t_z4 ==> m_ees
