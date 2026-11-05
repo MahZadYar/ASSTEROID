@@ -103,3 +103,22 @@ All ASSTEROID data and orchestration utilities (`defaultComsolVarNames.m`, `cano
 | Single-wavelength (`_laser`) | `Abs_laser`, `EF_max_laser`, `EE_S_laser`, `EE_V_laser` | `Absorptance_laser`, `EF_laser_max`, `EF_surf_laser`, `EF_surf_approx`, `EF_vol_laser`, `EF_vol_approx` |
 | Broadband (`_broad`) | `EE_S_broad`, `EE_V_broad`, `Abs_broad`, `EF_max_broad` | `EE_S_avg`, `EF_surf_broad`, `EF_surf_avg`, `BEE_surf`, `EE_V_avg`, `EF_vol_broad`, `EF_vol_avg`, `BEE_vol`, `Abs_avg`, `Absorptance_avg` |
 | Analyte-weighted (`_analyte`) | `EE_S_analyte`, `EE_V_analyte`, `Abs_analyte`, `EF_max_analyte` | `EF_surf_analyte`, `AEE_surf`, `EF_vol_analyte`, `AEE_vol`, `Absorptance_analyte` |
+
+---
+
+## 5. Visual Notation: Color Tokens & Colormap Standards
+
+All ASSTEROID plotting scripts, GUI axes, and publication figures use the unified **OKHSL Color Palette** (`Pallette.svg`, `palette_reference.md`, `palette.css`, `palette.json`):
+
+### The 4 Primary Anchor Colors (Multi-Trace Curves)
+| Swatch | Hue | Hex Code | MATLAB `[r, g, b]` | OKHSL Lightness | Canonical Application |
+| :---: | :---: | :---: | :---: | :---: | :--- |
+| **A40** | Blue | `#241ec3` | `[36, 30, 195]/255` | 40% | Baseline FEM simulation, ground truth |
+| **B50** | Purple | `#7f00e0` | `[127, 0, 224]/255` | 50% | Surrogate DNN prediction (`gs_tensor`) |
+| **C60** | Teal | `#27928d` | `[39, 146, 141]/255` | 60% | Verified targets, optimization constraints |
+| **D70** | Gold | `#c9942c` | `[201, 148, 44]/255` | 70% | Pareto front, global maxima ($\mathrm{EF}_{\max}^L$) |
+
+### Sequential Heatmap Colormap (Field Maps & Error Landscapes)
+- **Matrix File**: `src/vis/AssteroidColormap.txt` (13 monotonic nodes, interpolated via `loadColormap(path, 256)`).
+- **Ramp Progression**: `A10` (0%, `#000117`) $\to$ `A15` (8%) $\to$ `A20` (16%) $\to$ `B30` (24%) $\to$ `B40` (32%) $\to$ `B50` (41%) $\to$ `BC55` (50%, `#725ec1`) $\to$ `C60` (59%) $\to$ `C70` (68%) $\to$ `C80` (76%) $\to$ `D90` (84%) $\to$ `D95` (92%) $\to$ `D98` (100%, `#fff8eb`).
+
