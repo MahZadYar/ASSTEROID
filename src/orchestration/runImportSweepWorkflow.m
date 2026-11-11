@@ -75,7 +75,7 @@ end
     if cfg.mode == "merge"
         reporter.start("LoadExisting", "Loading existing database...");
         if isfield(cfg, "existingData") && isstruct(cfg.existingData) && ~isempty(fieldnames(cfg.existingData))
-            allDataStruct = stripBranchMetadata(cfg.existingData);
+            allDataStruct = stripBranchMetadata(cfg.existingData, {}, cfg.metricVariants);
             allDataStruct = normalizeGeometryFields(allDataStruct);
             nExisting = structRowCount(allDataStruct);
             reporter.complete("LoadExisting", sprintf("Using in-memory database (%d existing entries).", nExisting));
@@ -97,7 +97,7 @@ end
                 loaded = load(cfg.databaseFile, "db");
                 if isfield(loaded, "db") && isfield(loaded.db, "Sim") && isstruct(loaded.db.Sim)
                     allDataStruct = extractBranchAsSoA(loaded.db, "Sim");
-                    allDataStruct = stripBranchMetadata(allDataStruct);
+                    allDataStruct = stripBranchMetadata(allDataStruct, {}, cfg.metricVariants);
                     allDataStruct = normalizeGeometryFields(allDataStruct);
                     nExisting = structRowCount(allDataStruct);
                     reporter.complete("LoadExisting", sprintf("Loaded %d existing entries from %s (db.Sim).", nExisting, cfg.databaseFile));
@@ -551,20 +551,17 @@ function entry = processGeometryGroup(idx, cols, keyValues, ...
                 entry.(laserFieldName) = spectralData(laserIdx);
             end
 
-            % _broad variant (and _avg alias): spectral average over Raman window
+            % _broad variant: spectral average over Raman window
             broadFieldName = mn + "_broad";
-            avgFieldName   = mn + "_avg";
-            broadEnabled = isBroadVariantEnabled(mv, mn);
+            broadEnabled = isVariantEnabled(mv, broadFieldName);
             validStokes = stokesWindowMask & isfinite(spectralData);
             if broadEnabled && nnz(validStokes) >= 2 && shiftRange > 0
                 broadVal = computeSpectralAverage( ...
                     RamanShift_cm, validStokes, shiftMin, shiftMax, ...
                     interpSamples, spectralData, cfg.spectralInterpMethod);
                 entry.(broadFieldName) = broadVal;
-                entry.(avgFieldName)   = broadVal;
             elseif broadEnabled
                 entry.(broadFieldName) = spectralData(laserIdx);
-                entry.(avgFieldName)   = spectralData(laserIdx);
             end
 
             % _analyte variant: analyte-weighted average
@@ -655,27 +652,23 @@ function enabled = isVariantEnabled(metricVariants, key)
     end
 end
 
-function enabled = isBroadVariantEnabled(metricVariants, mn)
-    bKey = char(mn + "_broad");
-    aKey = char(mn + "_avg");
-    if isfield(metricVariants, bKey)
-        enabled = logical(metricVariants.(bKey));
-    elseif isfield(metricVariants, aKey)
-        enabled = logical(metricVariants.(aKey));
-    else
-        enabled = true;
-    end
-end
-
 function r = ternary(cond, trueVal, falseVal)
     if cond, r = trueVal; else, r = falseVal; end
 end
 
-function S = stripBranchMetadata(S)
-    %stripBranchMetadata Remove branch-level scalar/vector metadata from SoA.
+function S = stripBranchMetadata(S, activeMetricNames, metricVariants)
+    %stripBranchMetadata Remove branch-level metadata and deprecated legacy metric aliases from SoA.
     if isempty(S) || ~isstruct(S)
         return;
     end
+    if nargin < 2
+        activeMetricNames = {};
+    end
+    activeMetricNames = cellstr(activeMetricNames);
+    if nargin < 3 || ~isstruct(metricVariants)
+        metricVariants = struct();
+    end
+
     metaFields = ["Source", "Parent", "Method", "ModelRef", "Resolution", ...
                   "SourceFiles", "TrainDataRef", "LaserWl", "StokesWindow", "Shifts", ...
                   "AnalyteSpectrum", "AnalyteShifts"];
@@ -683,6 +676,40 @@ function S = stripBranchMetadata(S)
         fn = char(metaFields(k));
         if isfield(S, fn)
             S = rmfield(S, fn);
+        end
+    end
+
+    % Strip deprecated legacy aliases and _avg fields
+    deprecatedPrefixes = ["EF_vol", "EF_surf", "Absorptance", "ECCheck", ...
+                          "M_vol", "M_surf", "M2_vol", "M2_surf", "EF_vol_M", "EF_surf_M", "EF_Abs"];
+    allFlds = fieldnames(S);
+    for k = 1:numel(allFlds)
+        fn = allFlds{k};
+        if endsWith(fn, "_avg")
+            S = rmfield(S, fn);
+            continue;
+        end
+        if ismember(fn, activeMetricNames)
+            continue;
+        end
+        for dp = deprecatedPrefixes
+            if strcmp(fn, dp) || startsWith(fn, dp + "_")
+                if isfield(S, fn)
+                    S = rmfield(S, fn);
+                end
+                break;
+            end
+        end
+    end
+
+    % If specific metric variants were explicitly deselected (false) in config, strip them
+    mvFlds = fieldnames(metricVariants);
+    for k = 1:numel(mvFlds)
+        vName = mvFlds{k};
+        if isfield(metricVariants, vName) && ~logical(metricVariants.(vName))
+            if isfield(S, vName)
+                S = rmfield(S, vName);
+            end
         end
     end
 end

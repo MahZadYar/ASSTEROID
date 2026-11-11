@@ -289,10 +289,8 @@ function allData = convertGridToSoA(input1, varargin)
                 avgVal(row) = trapz(shiftDense, mvDense) / (shiftDense(end) - shiftDense(1));
             end
             allData.([mf, '_broad']) = avgVal;
-            allData.([mf, '_avg'])   = avgVal;
         else
             allData.([mf, '_broad']) = metricData(:, laserIdx);
-            allData.([mf, '_avg'])   = metricData(:, laserIdx);
         end
     end
 

@@ -228,37 +228,7 @@ function [mergedEntry, isUpdated] = mergeEntryWithNewWavelengths(oldEntry, newEn
         mergedEntry.(fn) = mergedData;
     end
 
-    %% 6. Synchronize legacy metric aliases if present
-    aliasPairs = {
-        'EE_V', 'EF_vol';
-        'EE_S', 'EF_surf';
-        'Abs',  'Absorptance';
-        'ECC',  'ECCheck'
-    };
-    for a = 1:size(aliasPairs, 1)
-        f1 = aliasPairs{a, 1};
-        f2 = aliasPairs{a, 2};
-        if isfield(mergedEntry, f1) && isfield(mergedEntry, f2)
-            v1 = ensureRowVector(mergedEntry.(f1));
-            v2 = ensureRowVector(mergedEntry.(f2));
-            if numel(v1) == nMerged && numel(v2) == nMerged
-                nan1 = isnan(v1);
-                nan2 = isnan(v2);
-                v1(nan1 & ~nan2) = v2(nan1 & ~nan2);
-                v2(~nan1 & nan2) = v1(~nan1 & nan2);
-                mergedEntry.(f1) = v1;
-                mergedEntry.(f2) = v2;
-            elseif numel(v1) == nMerged
-                mergedEntry.(f2) = v1;
-            elseif numel(v2) == nMerged
-                mergedEntry.(f1) = v2;
-            end
-        elseif isfield(mergedEntry, f1) && ~isfield(mergedEntry, f2)
-            mergedEntry.(f2) = mergedEntry.(f1);
-        elseif ~isfield(mergedEntry, f1) && isfield(mergedEntry, f2)
-            mergedEntry.(f1) = mergedEntry.(f2);
-        end
-    end
+
 
     %% 7. Laser wavelength & Raman shift recomputation
     laserWl_nm = NaN;
@@ -294,7 +264,7 @@ function [mergedEntry, isUpdated] = mergeEntryWithNewWavelengths(oldEntry, newEn
     shiftMax = ramanWindow(2);
     mergedEntry.RamanWindowEffective = [shiftMin, shiftMax];
 
-    %% 8. Derived scalar variants (_laser, _broad, _analyte) for all metrics
+    %% 7. Derived scalar variants (_laser, _broad, _analyte) for actual metrics as selected
     [~, laserIdx] = min(abs(mergedLambda - laserWl_nm));
     stokesWindowMask = (RamanShift_cm > 0) & (RamanShift_cm >= shiftMin) & (RamanShift_cm <= shiftMax);
     shiftRange = shiftMax - shiftMin;
@@ -313,6 +283,11 @@ function [mergedEntry, isUpdated] = mergeEntryWithNewWavelengths(oldEntry, newEn
     hasValidAnalyte = isstruct(analyteSpectrum) && ...
         isfield(analyteSpectrum, "shift_cm") && ~isempty(analyteSpectrum.shift_cm);
 
+    mv = struct();
+    if isfield(cfg, "metricVariants") && isstruct(cfg.metricVariants)
+        mv = cfg.metricVariants;
+    end
+
     allMergedFlds = fieldnames(mergedEntry);
     for k = 1:numel(allMergedFlds)
         fn = allMergedFlds{k};
@@ -325,44 +300,73 @@ function [mergedEntry, isUpdated] = mergeEntryWithNewWavelengths(oldEntry, newEn
         end
 
         % Laser-line variant
-        mergedEntry.(fn + "_laser") = data(laserIdx);
+        if isVariantEnabledLocal(mv, fn + "_laser")
+            mergedEntry.(fn + "_laser") = data(laserIdx);
+        elseif isfield(mergedEntry, fn + "_laser")
+            mergedEntry = rmfield(mergedEntry, fn + "_laser");
+        end
 
-        % Broadband variant
-        validStokes = stokesWindowMask & isfinite(data);
-        if nnz(validStokes) >= 2 && shiftRange > 0
-            rs = RamanShift_cm(validStokes);
-            dvals = data(validStokes);
-            [rs, sOrd] = sort(rs);
-            dvals = dvals(sOrd);
-            shiftDense = linspace(shiftMin, shiftMax, interpSamples);
-            dense = safeInterpolateLocal(rs, dvals, shiftDense, interpMethod);
-            denom = shiftDense(end) - shiftDense(1);
-            if denom > 0
-                bVal = trapz(shiftDense, dense) / denom;
+        % Broadband variant (_broad only, no deprecated _avg)
+        if isVariantEnabledLocal(mv, fn + "_broad")
+            validStokes = stokesWindowMask & isfinite(data);
+            if nnz(validStokes) >= 2 && shiftRange > 0
+                rs = RamanShift_cm(validStokes);
+                dvals = data(validStokes);
+                [rs, sOrd] = sort(rs);
+                dvals = dvals(sOrd);
+                shiftDense = linspace(shiftMin, shiftMax, interpSamples);
+                dense = safeInterpolateLocal(rs, dvals, shiftDense, interpMethod);
+                denom = shiftDense(end) - shiftDense(1);
+                if denom > 0
+                    bVal = trapz(shiftDense, dense) / denom;
+                else
+                    bVal = mean(dense, 'omitnan');
+                end
+                mergedEntry.(fn + "_broad") = bVal;
+            elseif isfinite(data(laserIdx))
+                mergedEntry.(fn + "_broad") = data(laserIdx);
             else
-                bVal = mean(dense, 'omitnan');
+                mergedEntry.(fn + "_broad") = NaN;
             end
-            mergedEntry.(fn + "_broad") = bVal;
-            mergedEntry.(fn + "_avg")   = bVal;
-        elseif isfinite(data(laserIdx))
-            mergedEntry.(fn + "_broad") = data(laserIdx);
-            mergedEntry.(fn + "_avg")   = data(laserIdx);
-        else
-            mergedEntry.(fn + "_broad") = NaN;
-            mergedEntry.(fn + "_avg")   = NaN;
+        elseif isfield(mergedEntry, fn + "_broad")
+            mergedEntry = rmfield(mergedEntry, fn + "_broad");
         end
 
         % Analyte-weighted variant
-        if hasValidAnalyte && nnz(validStokes) >= 2 && shiftRange > 0
-            rs = RamanShift_cm(validStokes);
-            dvals = data(validStokes);
-            [rs, sOrd] = sort(rs);
-            dvals = dvals(sOrd);
-            shiftDense = linspace(shiftMin, shiftMax, interpSamples);
-            dense = safeInterpolateLocal(rs, dvals, shiftDense, interpMethod);
-            mergedEntry.(fn + "_analyte") = computeAnalyteWeightedMetric(shiftDense, dense, analyteSpectrum);
-        else
-            mergedEntry.(fn + "_analyte") = NaN;
+        if isVariantEnabledLocal(mv, fn + "_analyte")
+            validStokes = stokesWindowMask & isfinite(data);
+            if hasValidAnalyte && nnz(validStokes) >= 2 && shiftRange > 0
+                rs = RamanShift_cm(validStokes);
+                dvals = data(validStokes);
+                [rs, sOrd] = sort(rs);
+                dvals = dvals(sOrd);
+                shiftDense = linspace(shiftMin, shiftMax, interpSamples);
+                dense = safeInterpolateLocal(rs, dvals, shiftDense, interpMethod);
+                mergedEntry.(fn + "_analyte") = computeAnalyteWeightedMetric(shiftDense, dense, analyteSpectrum);
+            else
+                mergedEntry.(fn + "_analyte") = NaN;
+            end
+        elseif isfield(mergedEntry, fn + "_analyte")
+            mergedEntry = rmfield(mergedEntry, fn + "_analyte");
+        end
+    end
+
+    % Purge any deprecated legacy aliases and _avg fields from mergedEntry
+    deprecatedPrefixes = ["EF_vol", "EF_surf", "Absorptance", "ECCheck"];
+    cleanFlds = fieldnames(mergedEntry);
+    for k = 1:numel(cleanFlds)
+        cfn = cleanFlds{k};
+        if endsWith(cfn, "_avg")
+            mergedEntry = rmfield(mergedEntry, cfn);
+            continue;
+        end
+        for dp = deprecatedPrefixes
+            if strcmp(cfn, dp) || startsWith(cfn, dp + "_")
+                if isfield(mergedEntry, cfn)
+                    mergedEntry = rmfield(mergedEntry, cfn);
+                end
+                break;
+            end
         end
     end
 end
@@ -404,5 +408,14 @@ function dense = safeInterpolateLocal(rs, data, shiftDense, method)
         end
     catch
         dense = nan(size(shiftDense));
+    end
+end
+
+function tf = isVariantEnabledLocal(mv, key)
+    key = char(key);
+    if isstruct(mv) && isfield(mv, key)
+        tf = logical(mv.(key));
+    else
+        tf = true;
     end
 end

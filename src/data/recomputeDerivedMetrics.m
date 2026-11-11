@@ -27,22 +27,21 @@ function [simData, updatedCount] = recomputeDerivedMetrics(simData, cfg, analyte
         reporter = ProgressReporter.console();
     end
 
-    baseMetrics = ["EE_V", "EE_S", "EF_max", "Abs", "ECC", ...
-                   "EF_vol", "EF_surf", "Absorptance", "M_vol", "M_surf", ...
-                   "M2_vol", "M2_surf", "EF_vol_M", "EF_surf_M", "EF_Abs"];
     nRows = structRowCount(simData);
+    baseMetrics = string.empty(1, 0);
 
-    % Dynamically discover any additional 2D spectral fields in simData (e.g. E4)
+    % Dynamically discover all 2D spectral metric fields in simData
     reservedFields = ["period", "radius", "p", "r", "lambda", "lambda_nm", "lambda0", ...
                       "f", "RamanShift", "RamanWindow", "RamanWindowEffective", ...
-                      "LaserWl", "lambda_exc_nm", "kappa_V", "kappa_S", "VolCorr", "SurfCorr"];
+                      "LaserWl", "lambda_exc_nm", "kappa_V", "kappa_S", "VolCorr", "SurfCorr", ...
+                      "Source", "Parent", "Method", "ModelRef", "StokesWindow", "Shifts"];
     allFlds = string(fieldnames(simData));
     for fi = 1:numel(allFlds)
         fn = allFlds(fi);
         if ~ismember(fn, reservedFields) && ...
            ~endsWith(fn, ["_laser", "_broad", "_avg", "_analyte"]) && ...
            ~ismember(fn, baseMetrics)
-            val = simData.(fn);
+            val = simData.(char(fn));
             if (isnumeric(val) || islogical(val)) && ndims(val) == 2 && size(val, 1) >= nRows && size(val, 2) > 1
                 baseMetrics(end+1) = fn; %#ok<AGROW>
             end
@@ -69,9 +68,8 @@ function [simData, updatedCount] = recomputeDerivedMetrics(simData, cfg, analyte
             if isVariantEnabled(metricVariants, metric + "_laser")
                 simData.(metric + "_laser") = nan(nRows, 1);
             end
-            if isBroadEnabled(metricVariants, metric)
+            if isVariantEnabled(metricVariants, metric + "_broad")
                 simData.(metric + "_broad") = nan(nRows, 1);
-                simData.(metric + "_avg")   = nan(nRows, 1);
             end
             if hasValidAnalyte && isVariantEnabled(metricVariants, metric + "_analyte")
                 simData.(metric + "_analyte") = nan(nRows, 1);
@@ -170,10 +168,9 @@ function [simData, updatedCount] = recomputeDerivedMetrics(simData, cfg, analyte
                 mv = mv(ord);
                 mvDense = interpolateSpectral(rs, mv, shiftDense, spectralInterpMethod);
                 if ~all(isnan(mvDense))
-                    if isBroadEnabled(metricVariants, metric)
+                    if isVariantEnabled(metricVariants, metric + "_broad")
                         broadVal = trapz(shiftDense, mvDense) / (shiftDense(end) - shiftDense(1));
                         simData.(metric + "_broad")(i) = broadVal;
-                        simData.(metric + "_avg")(i)   = broadVal;
                     end
                     if hasValidAnalyte && isVariantEnabled(metricVariants, metric + "_analyte")
                         simData.(metric + "_analyte")(i) = computeAnalyteWeightedMetric(shiftDense, mvDense, analyteSpectrum);
@@ -254,14 +251,4 @@ function enabled = isVariantEnabled(metricVariants, key)
     end
 end
 
-function enabled = isBroadEnabled(metricVariants, metric)
-    bKey = char(metric + "_broad");
-    aKey = char(metric + "_avg");
-    if isfield(metricVariants, bKey)
-        enabled = logical(metricVariants.(bKey));
-    elseif isfield(metricVariants, aKey)
-        enabled = logical(metricVariants.(aKey));
-    else
-        enabled = true;
-    end
-end
+
