@@ -25,6 +25,7 @@ This document extracts the **rationale** and **methodology** of the study (see `
   - 🧠 Stage 3 (Train): [scripts/pipeline/run_dnn_pipeline.m](scripts/pipeline/run_dnn_pipeline.m)
   - 🔮 Stage 4 (Predict): [scripts/pipeline/run_prediction_vis.m](scripts/pipeline/run_prediction_vis.m)
   - 🔍 Stage 5 (Optimize): [scripts/pipeline/run_locate_maxima.m](scripts/pipeline/run_locate_maxima.m)
+  - 🧪 Diagnostics & Verification Tools: [tools/audit_simulation_consistency.m](tools/audit_simulation_consistency.m) (Voronoi area-weighted & unweighted FEM numerical noise floor audit; Supplementary Note S1.5, Table S2, Fig. S1)
 
 The repo enforces the orchestration pattern **Config → Workflow → (Visualize)** described in [docs/orchestration_patterns.md](docs/orchestration_patterns.md).
 

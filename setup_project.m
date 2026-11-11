@@ -40,7 +40,12 @@ function setup_project()
     % ---- Root folder -------------------------------------------------------
     rootDir = {root};
 
-    allDirs = [rootDir; srcDirs; scriptDirs; testDirs];
+    % ---- Tool folders ------------------------------------------------------
+    toolDirs = {
+        fullfile(root, "tools")
+    };
+
+    allDirs = [rootDir; srcDirs; scriptDirs; toolDirs; testDirs];
 
     for k = 1:numel(allDirs)
         addpath(allDirs{k});
