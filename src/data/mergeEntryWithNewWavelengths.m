@@ -159,12 +159,24 @@ function [mergedEntry, isUpdated] = mergeEntryWithNewWavelengths(oldEntry, newEn
     %% 4. Initialize merged entry with metadata from oldEntry
     mergedEntry = oldEntry;
 
+    geomTol = 1e-3;
+    if isfield(cfg, "geometryTolerance") && isfinite(cfg.geometryTolerance) && cfg.geometryTolerance > 0
+        geomTol = double(cfg.geometryTolerance);
+    end
+
     % Update input parameters and geometric loading factors from newEntry if present
-    updateScalars = {'period', 'radius', 'p', 'r', 'kappa_V', 'kappa_S', 'VolCorr', 'SurfCorr'};
+    updateScalars = {'period', 'radius', 'p', 'r', 'particle_r', 'gap', 'thickness', 'kappa_V', 'kappa_S', 'VolCorr', 'SurfCorr'};
     for k = 1:numel(updateScalars)
         fn = updateScalars{k};
         if isfield(newEntry, fn) && ~isempty(newEntry.(fn)) && isfinite(newEntry.(fn)(1))
-            mergedEntry.(fn) = newEntry.(fn);
+            if isfield(oldEntry, fn) && ~isempty(oldEntry.(fn)) && isfinite(oldEntry.(fn)(1))
+                % Keep old coordinate if within geomTol to prevent coordinate drift
+                if abs(double(newEntry.(fn)(1)) - double(oldEntry.(fn)(1))) > geomTol
+                    mergedEntry.(fn) = newEntry.(fn);
+                end
+            else
+                mergedEntry.(fn) = newEntry.(fn);
+            end
         end
     end
 

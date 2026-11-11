@@ -172,13 +172,20 @@ end
     reporter.complete("ExtractColumns", sprintf("Extracted %d columns.", numel(allColNames)));
 
     %% 7. Group by input parameters and process
+    geomTol = 1e-3;
+    if isfield(cfg, "geometryTolerance") && isnumeric(cfg.geometryTolerance) && isfinite(cfg.geometryTolerance) && cfg.geometryTolerance > 0
+        geomTol = double(cfg.geometryTolerance);
+    end
+
     % Build key matrix from input columns
     nInputs = numel(inputNames);
     keyMatrix = zeros(height(T), nInputs);
     for k = 1:nInputs
         keyMatrix(:, k) = cols.(inputNames{k});
     end
-    [keyPairs, ~, G] = unique(keyMatrix, "rows", "stable");
+    keyMatrixBinned = round(keyMatrix / geomTol) * geomTol;
+    [~, firstIdx, G] = unique(keyMatrixBinned, "rows", "stable");
+    keyPairs = round(keyMatrix(firstIdx, :) / geomTol) * geomTol;
     numGroups = size(keyPairs, 1);
 
     reporter.start("ProcessGroups", sprintf("Processing %d geometry groups...", numGroups));
@@ -212,8 +219,8 @@ end
             continue
         end
 
-        % Check for existing entries (generalized for N input params)
-        existingIdx = findExistingRowsGeneric(allDataStruct, inputNames, keyPairs(g, :));
+        % Check for existing entries (generalized for N input params within geomTol)
+        existingIdx = findExistingRowsGeneric(allDataStruct, inputNames, keyPairs(g, :), geomTol);
 
         if ~isempty(existingIdx)
             targetRow = existingIdx(1);
@@ -402,8 +409,11 @@ function names = schemaFieldsByRole(schema, role)
     end
 end
 
-function idx = findExistingRowsGeneric(dataStruct, inputNames, keyValues)
-    %findExistingRowsGeneric Find rows matching all input parameter values.
+function idx = findExistingRowsGeneric(dataStruct, inputNames, keyValues, geomTol)
+    %findExistingRowsGeneric Find rows matching all input parameter values within geomTol.
+    if nargin < 4 || isempty(geomTol)
+        geomTol = 1e-3;
+    end
     idx = [];
     if isempty(dataStruct) || ~isstruct(dataStruct)
         return;
@@ -432,7 +442,7 @@ function idx = findExistingRowsGeneric(dataStruct, inputNames, keyValues)
             return;
         end
 
-        tol = max(1e-12, eps(max(abs(finiteVals))));
+        tol = max(geomTol, eps(max(abs(finiteVals))));
         matchIdx = find(abs(vals - double(paramVal)) <= tol);
 
         if k == 1
@@ -444,6 +454,28 @@ function idx = findExistingRowsGeneric(dataStruct, inputNames, keyValues)
         if isempty(idx)
             return;
         end
+    end
+
+    % If multiple candidates match within geomTol, pick the closest one in Euclidean distance
+    if numel(idx) > 1
+        dists = zeros(numel(idx), 1);
+        for k = 1:numel(inputNames)
+            paramName = inputNames{k};
+            paramVal  = keyValues(k);
+            candidateList = {paramName};
+            if any(strcmpi(paramName, ["particle_r", "radius", "r"]))
+                candidateList = [candidateList, {"particle_r", "radius", "r"}];
+            elseif any(strcmpi(paramName, ["period", "p"]))
+                candidateList = [candidateList, {"period", "p"}];
+            end
+            candidateList = unique(cellstr(candidateList), 'stable');
+            vals = extractGeometryField(dataStruct, candidateList);
+            if ~isempty(vals)
+                dists = dists + (vals(idx) - double(paramVal)).^2;
+            end
+        end
+        [~, minPos] = min(dists);
+        idx = idx(minPos);
     end
 end
 

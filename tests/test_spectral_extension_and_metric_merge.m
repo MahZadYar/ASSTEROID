@@ -197,6 +197,48 @@ assert(isfield(res3.allData, "E4_broad"), "E4_broad must exist.");
 assert(all(~isnan(res3.allData.E4_broad)), "E4_broad must be finite now that all shifts are populated!");
 fprintf("  ✓ Step 3 Passed: E4 NaNs backfilled successfully without touching EE_V/EE_S/EF_max, E4_broad recomputed.\n");
 
+%% Step 4: Geometry match tolerance verification (matching p, r within 1e-3 nm)
+file4_jitter = fullfile(testDir, "batch4_jitter.dat");
+fid = fopen(file4_jitter, 'w');
+if fid < 0, error("Failed to open file: %s", file4_jitter); end
+fprintf(fid, "%% Model: Hexagonal Lattice\n");
+fprintf(fid, "%% Version: 6.4\n");
+fprintf(fid, "%% Table: Batch 4 Coordinate Jitter\n");
+fprintf(fid, "%% %-20s %-20s %-25s %-20s\n", ...
+    "period (nm)", "particle_r (nm)", "lambda0 (nm)", "EE_V (1)");
+% Jitter geometry 1 by 0.0004 nm in p and 0.0003 nm in r (both < 1e-3 nm tolerance)
+p_jitter = 400.0004;
+r_jitter = 60.0003;
+for w = 1:numel(batch1_wls)
+    lam = batch1_wls(w);
+    fprintf(fid, "  %-20.4f %-20.4f %-25.8f %-20.6f\n", p_jitter, r_jitter, lam, 999.0);
+end
+fclose(fid);
+
+cfg4 = importSweepConfig( ...
+    WorkDir             = testDir, ...
+    InputFile           = file4_jitter, ...
+    OutputFile          = "", ...
+    DatabaseFile        = dbFile, ...
+    ExistingData        = res3.allData, ...
+    LaserWavelength     = laserWl, ...
+    RamanWindow         = [100, 4200], ...
+    Mode                = "merge", ...
+    ReplaceExisting     = true, ...
+    GeometryTolerance   = 1e-3, ...
+    WavelengthTolerance = 1e-4);
+res4 = runImportSweepWorkflow(cfg4, ProgressReporter.silent());
+
+% Verify that jittered coordinates were merged into existing entry, NOT added as a 3rd geometry
+assert(res4.summary.numEntries == 2, ...
+    sprintf("Expected 2 geometries when p, r jitter is within GeometryTolerance (1e-3 nm), got %d.", res4.summary.numEntries));
+% Verify that the canonical coordinate (400, 60) was preserved without jitter drift
+assert(abs(res4.allData.period(1) - 400) < 1e-10, "Canonical period 400 must be preserved.");
+assert(abs(res4.allData.radius(1) - 60) < 1e-10, "Canonical radius 60 must be preserved.");
+% Verify that EE_V was replaced with 999.0 for geometry 1
+assert(all(res4.allData.EE_V(1, 1:26) == 999.0), "EE_V for geometry 1 must be updated to 999.0 on match!");
+fprintf("  ✓ Step 4 Passed: GeometryTolerance (1e-3 nm) correctly matched jittered (p, r) pair without duplicating rows.\n");
+
 fprintf("=== ALL SPECTRAL EXTENSION & METRIC MERGE TESTS PASSED! ===\n");
 end
 

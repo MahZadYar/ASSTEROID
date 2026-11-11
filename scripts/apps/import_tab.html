@@ -586,6 +586,7 @@ function collectConfig() {
         mode: val("mode"),
         replaceExisting: chk("replaceExisting"),
         recalculateExisting: chk("recalculateExisting"),
+        geometryTolerance: num("geometryTolerance", 0.001),
         wavelengthTolerance: num("wavelengthTolerance", 0.0001),
         metricVariants: collectMetricVariants()
     };
@@ -771,6 +772,10 @@ function toggleSection(el) {
                         <option value="merge">Merge / Append</option>
                         <option value="rebuild">Rebuild (Clean)</option>
                     </select>
+                </div>
+                <div class="field">
+                    <label>Geometry Match Tolerance &Delta;p, &Delta;r (nm)</label>
+                    <input type="number" id="geometryTolerance" value="0.001" step="0.0001" min="0">
                 </div>
                 <div class="field">
                     <label>Wavelength Match Tolerance &Delta;&lambda; (nm)</label>

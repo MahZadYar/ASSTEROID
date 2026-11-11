@@ -31,6 +31,7 @@ function cfg = importSweepConfig(options)
 %       InterpResolution     (1,1) double  — Dense interpolation resolution (1/cm)
 %       SpectralInterpMethod (1,1) string  — "makima" | "pchip" | "linear" | "spline"
 %       WavelengthTolerance  (1,1) double  — Spectral wavelength match tolerance in nm (default: 1e-4)
+%       GeometryTolerance    (1,1) double  — Geometry coordinate match tolerance in nm (default: 1e-3)
 %
 %     --- Database ---
 %       DatabaseFile         (1,1) string  — Master unified database file (default: "database.mat")
@@ -72,6 +73,7 @@ arguments
     options.SpectralInterpMethod (1,1) string {mustBeMember(options.SpectralInterpMethod, ...
                                     ["makima", "pchip", "linear", "spline"])} = "makima"
     options.WavelengthTolerance (1,1) double {mustBePositive} = 1e-4
+    options.GeometryTolerance   (1,1) double {mustBePositive} = 1e-3
 
     %% Database
     options.DatabaseFile        (1,1) string  = "database.mat"
@@ -109,6 +111,7 @@ end
     cfg.interpResolution    = options.InterpResolution;
     cfg.spectralInterpMethod = options.SpectralInterpMethod;
     cfg.wavelengthTolerance = options.WavelengthTolerance;
+    cfg.geometryTolerance   = options.GeometryTolerance;
 
     % Database
     cfg.databaseFile        = options.DatabaseFile;
