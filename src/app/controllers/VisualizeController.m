@@ -324,9 +324,9 @@ classdef VisualizeController < handle
             end
             rep.checkStop("Map2D");
 
-            method = lower(obj.safeStr(d, "renderMethod", "natural"));
-            validMethods = ["triangulated", "nearest", "natural", "linear", "grid"];
-            if ~ismember(method, validMethods), method = "natural"; end
+            method = lower(obj.safeStr(d, "renderMethod", "triangulated"));
+            validMethods = ["triangulated", "voronoi", "nearest", "natural", "linear", "grid"];
+            if ~ismember(method, validMethods), method = "triangulated"; end
             spatialRes = obj.safeNum(d, "spatialResolution", NaN);
             rasterSize = round(obj.safeNum(d, "rasterSize", 300));
             if rasterSize <= 0, rasterSize = 300; end
@@ -359,13 +359,15 @@ classdef VisualizeController < handle
             if info.isGridded
                 layout = sprintf("grid %d×%d (r × p)", info.gridSize(1), info.gridSize(2));
             elseif info.method == "triangulated"
-                layout = "triangulated Delaunay mesh";
+                layout = "unstructured Delaunay patch (exact points)";
+            elseif info.method == "voronoi"
+                layout = "unstructured Voronoi patch (exact cells)";
             else
                 resStr = "";
                 if isfield(info, "resolution") && all(isfinite(info.resolution))
                     resStr = sprintf(", ~%.2g nm res", mean(info.resolution));
                 end
-                layout = sprintf("%s rendering on %d×%d grid%s", ...
+                layout = sprintf("%s pcolor on %d×%d grid%s", ...
                     info.method, info.gridSize(1), info.gridSize(2), resStr);
             end
             msg = sprintf("2D: %s from db.%s, %d finite samples, %s.", metric, branch, info.nValid, layout);

@@ -65,6 +65,9 @@ assert(~i3.isGridded && i3.method == "nearest", "Scattered branch should use the
 i4 = plotScatteredMap2D(ax, pS, rS, Sim.EF_vol_laser, Method="natural", SpatialResolution=10);
 assert(~i4.isGridded && i4.method == "natural", "Natural neighbor should be used.");
 assert(abs(mean(i4.resolution) - 10) < 0.5, "Resolution should match requested SpatialResolution.");
+i5 = plotScatteredMap2D(ax, pS, rS, Sim.EF_vol_laser, Method="voronoi");
+assert(~i5.isGridded && i5.method == "voronoi" && ~isempty(findobj(ax, 'Type', 'patch')), ...
+    "Voronoi mode should render bounded cells as a patch.");
 close(f);
 
 uf = uifigure("Visible", "off");
@@ -115,12 +118,16 @@ send("ClearTraces", struct());
 assert(isempty(fig.UserData.visualize.traces), "ClearTraces should empty the trace store.");
 fprintf("[4a] 1D renders OK\n");
 
-% 2D: scalar on scattered Sim, spectral slice on gridded Interp
+% 2D: default scattered Sim renders via unstructured patch; gridded Interp uses pcolor
 send("Render", struct("mode", "2d", "branch", "Sim", "invertColormap", false, "metricKind", "scalar", ...
-    "metric", "EF_vol_laser", "sliceShift", 1000, "laserWavelength", 785, "renderMethod", "triangulated", ...
+    "metric", "EF_vol_laser", "sliceShift", 1000, "laserWavelength", 785, ...
     "logScale", true, "showSimPoints", true, "showOptima", true));
 ax2 = h.visualizeAx2D;
-assert(~isempty(findobj(ax2, 'Type', 'patch')), "Triangulated 2D map should contain a patch.");
+assert(~isempty(findobj(ax2, 'Type', 'patch')), "Default scattered 2D map should render as an unstructured patch.");
+send("Render", struct("mode", "2d", "branch", "Sim", "invertColormap", false, "metricKind", "scalar", ...
+    "metric", "EF_vol_laser", "sliceShift", 1000, "laserWavelength", 785, "renderMethod", "voronoi", ...
+    "logScale", true, "showSimPoints", false, "showOptima", false));
+assert(~isempty(findobj(ax2, 'Type', 'patch')), "Voronoi 2D map should render as a patch.");
 send("Render", struct("mode", "2d", "branch", "Interp", "invertColormap", true, "metricKind", "slice", ...
     "metric", "EF_vol", "sliceShift", 1000, "laserWavelength", 785, "renderMethod", "triangulated", ...
     "logScale", false, "showSimPoints", false, "showOptima", false));
@@ -128,7 +135,7 @@ assert(~isempty(findobj(ax2, 'Type', 'surface')), "Gridded slice should render a
 send("Render", struct("mode", "2d", "branch", "Sim", "invertColormap", false, "metricKind", "scalar", ...
     "metric", "EF_vol_laser", "sliceShift", 1000, "laserWavelength", 785, "renderMethod", "natural", ...
     "spatialResolution", 5, "logScale", false, "showSimPoints", false, "showOptima", false));
-assert(~isempty(findobj(ax2, 'Type', 'image')), "Natural gridded 2D map should render as an image.");
+assert(~isempty(findobj(ax2, 'Type', 'surface')), "Natural gridded 2D map should render as a pcolor surface.");
 fprintf("[4b] 2D renders OK\n");
 
 % 3D: gridded Interp renders; scattered Sim is refused

@@ -405,9 +405,10 @@ function updateBranchInfo() {
                 sel.value = "grid";
             }
         } else {
+            var wasGrid = sel && (sel.value === "grid" || sel.dataset.userSelected === "grid");
             if (optGrid) optGrid.remove();
-            if (sel && sel.value === "grid") {
-                sel.value = "natural";
+            if (sel && (wasGrid || !sel.value || !sel.dataset.userSelected)) {
+                sel.value = "triangulated";
             }
         }
     }
@@ -418,9 +419,9 @@ function onInterp2dChange() {
     var m = val("interp2d");
     var resRow = document.getElementById("gridRes2dRow");
     var hint = document.getElementById("res2dHint");
-    var isGridOnly = (m === "triangulated" || m === "grid");
-    if (resRow) resRow.style.display = isGridOnly ? "none" : "";
-    if (hint) hint.style.display = isGridOnly ? "none" : "";
+    var isUngriddedOrNative = (m === "triangulated" || m === "voronoi" || m === "grid");
+    if (resRow) resRow.style.display = isUngriddedOrNative ? "none" : "";
+    if (hint) hint.style.display = isUngriddedOrNative ? "none" : "";
     updateRes2dHint();
 }
 
@@ -428,7 +429,7 @@ function updateRes2dHint() {
     var hint = document.getElementById("res2dHint");
     if (!hint) return;
     var m = val("interp2d");
-    if (m === "triangulated" || m === "grid") {
+    if (m === "triangulated" || m === "voronoi" || m === "grid") {
         hint.textContent = "";
         return;
     }
@@ -1043,10 +1044,11 @@ document.addEventListener("DOMContentLoaded", function() {
                     <div class="field" id="interp2dRow">
                         <label class="lbl" for="interp2d">Rendering / Interpolation</label>
                         <select id="interp2d">
-                            <option value="natural" selected>Natural neighbor (smooth grid)</option>
-                            <option value="linear">Linear interpolation (grid)</option>
-                            <option value="nearest">Nearest sample (staircase grid)</option>
-                            <option value="triangulated">Triangulated mesh (Delaunay)</option>
+                            <option value="triangulated" selected>Unstructured Delaunay patch (exact points)</option>
+                            <option value="voronoi">Unstructured Voronoi patch (exact cells)</option>
+                            <option value="natural">Natural neighbor (interpolated grid, pcolor)</option>
+                            <option value="linear">Linear interpolation (interpolated grid, pcolor)</option>
+                            <option value="nearest">Nearest sample (interpolated grid, pcolor)</option>
                         </select>
                     </div>
                     <div class="field-row" id="gridRes2dRow">
