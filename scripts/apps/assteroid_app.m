@@ -688,6 +688,8 @@ function status = buildDbStatusStruct(fig)
         "paperDOI",      "", ...
         "hasSimData",    false, ...
         "simEntries",    0, ...
+        "simSpectralMetrics", {{}}, ...
+        "defaultTrainMetrics", {{}}, ...
         "hasModel",      false, ...
         "modelFile",     "", ...
         "hasPredictions", false, ...
@@ -719,6 +721,15 @@ function status = buildDbStatusStruct(fig)
         n = structRowCount(db.Sim);
         status.simEntries = n;
         status.hasSimData = n > 0;
+        if status.hasSimData
+            [specAll, specDef] = discoverSimSpectralMetrics(db.Sim);
+            if ~isempty(specAll)
+                status.simSpectralMetrics = cellstr(specAll);
+            end
+            if ~isempty(specDef)
+                status.defaultTrainMetrics = cellstr(specDef);
+            end
+        end
     end
 
     % Model branch
@@ -2941,10 +2952,11 @@ function runTrainingPipeline(src, d, fig, visPanel)
         return
     end
 
-    % Parse metrics list
-    metricsList = ["Absorptance", "EF_vol", "EF_surf"];
-    if isfield(d, "metricsToTrain") && ~isempty(d.metricsToTrain)
-        metricsList = string(d.metricsToTrain);
+    % Resolve target metrics from UI selection or dynamically from db.Sim
+    [metricsList, metricsErr] = resolveRequestedTrainMetrics(d, fig.UserData.db);
+    if strlength(metricsErr) > 0
+        sendEventToHTMLSource(src, "TrainError", metricsErr);
+        return
     end
 
     % Architecture + layer sizes (gs_tensor default; legacy resnet /

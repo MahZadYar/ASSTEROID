@@ -11,7 +11,7 @@ raw = {
     'M2_surf (1), <M2>surf'
     'EE_V (1), <EE>vol, EE_V, EF_vol (1), <EF>vol'
     'EE_S (1), <EE>surf, EE_S, EF_surf (1), <EF>surf'
-    'EF_max (1), max(EF), EF_max, M2_max (1), max(M2), M2_max, EF_laser_max'
+    'EF_max (1), max(EF), EF_max, M2_max (1), max(M2), M2_max, EF_laser_max, E4_max (1), <E4>max, E4_max'
     'kappa_V (1), kappa_V, V_corr (1), V_corr, VolCorr'
     'kappa_S (1), kappa_S, S_corr (1), S_corr, SurfCorr'
     'intW_vol (neV), <W>vol'

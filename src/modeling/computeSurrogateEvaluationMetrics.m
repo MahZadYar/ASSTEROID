@@ -123,7 +123,7 @@ else
 end
 
 %% 2. Identify Target Types (Linear vs Logarithmic)
-logCandidates = ["ee_v", "ee_s", "ef_max", "ef_vol", "ef_surf", "m_vol", "m_surf", "m2_vol", "m2_surf", "intw_vol", "intw_t"];
+logCandidates = ["ee_v", "ee_s", "ef_max", "e4_max", "m2_max", "e4", "ef_vol", "ef_surf", "m_vol", "m_surf", "m2_vol", "m2_surf", "intw_vol", "intw_t"];
 targetLogMask = false(1, numTargets);
 if isstruct(model) && isfield(model, "targetTransform") && isstruct(model.targetTransform) ...
         && isfield(model.targetTransform, "LogMask") && ~isempty(model.targetTransform.LogMask)

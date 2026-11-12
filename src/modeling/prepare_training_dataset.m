@@ -12,7 +12,9 @@ function dataset = prepare_training_dataset(allData, ri, options)
 %   ValSplit        (default 0.5) - validation fraction within holdout
 %   Shuffle         (default true) - shuffle entries before splitting
 %   RatioLimit      (default []) - optional [min max] allowed for r./p
-%   TargetFields    (default ["Absorptance","M_vol","M_surf","EF_vol","EF_surf"])
+%   TargetFields    (default "auto") - spectral target names to train on;
+%                   "auto" discovers available 2D spectral targets in allData
+%                   (prioritising Abs, EF_max, EE_V, EE_S when present)
 %   FeatureSchema   (default "v3_physics") - "v3_physics" | "v2_physics" | "v1_legacy"
 %                   v3_physics: 8 features [log P, log r, log lambda, eps1, eps2,
 %                   P/lambda, r/lambda, log g_norm] (no h_gap/lambda, which is
@@ -40,7 +42,7 @@ arguments
     options.ValSplit (1,1) double {mustBeBetween(options.ValSplit, 0, 1)} = 0.5
     options.Shuffle (1,1) logical = true
     options.RatioLimit (1,:) double = []
-    options.TargetFields (1,:) string = ["Abs", "EF_max", "EE_V", "EE_S"]
+    options.TargetFields (1,:) string = "auto"
     options.FeatureLogTransform (1,1) logical = true
     options.IncludeRatios (1,1) logical = true
     options.TargetLogTransform (1,1) logical = true
@@ -82,11 +84,22 @@ featureNames = {'p_um','r_um','lambda_um','n','k'};
 if opts.IncludeRatios
     featureNames = [featureNames, {'p_over_lambda','r_over_lambda','p_over_r'}];
 end
-supportedTargets = {'EE_V','EE_S','EF_max','Abs','ECC', ...
+supportedTargets = {'EE_V','EE_S','EF_max','E4_max','M2_max','E4','Abs','ECC', ...
                     'Absorptance','M_vol','M_surf','EF_vol','EF_surf', ...
                     'M2_vol','M2_surf','E_vol','E_surf','intW_vol','intW_t'};
 
-targetFields = opts.TargetFields(:)';
+tfRequested = string(opts.TargetFields(:)');
+tfRequested = tfRequested(strlength(strtrim(tfRequested)) > 0);
+if isempty(tfRequested) || (isscalar(tfRequested) && strcmpi(tfRequested, "auto"))
+    [~, discoveredTargets] = discoverSimSpectralMetrics(allData);
+    if isempty(discoveredTargets)
+        error('prepare_training_dataset:NoTargets', ...
+            'allData contains no discoverable 2D spectral target fields.');
+    end
+    targetFields = cellstr(discoveredTargets);
+else
+    targetFields = cellstr(tfRequested);
+end
 numTargets = numel(targetFields);
 for k = 1:numTargets
     tfName = targetFields{k};
@@ -98,7 +111,7 @@ end
 targetNames = targetFields;
 % Target-specific log transform: near-field and Enhancement Efficacy/Factor metrics use log10(1+y),
 % while bounded energy ratios (e.g. Abs / Absorptance) remain on their linear physical scale.
-logFieldNames = ["EE_V", "EE_S", "EF_max", "EF_vol", "EF_surf", ...
+logFieldNames = ["EE_V", "EE_S", "EF_max", "E4_max", "M2_max", "E4", "EF_vol", "EF_surf", ...
                  "M_vol", "M_surf", "M2_vol", "M2_surf", "intW_vol", "intW_t"];
 if islogical(opts.TargetLogTransform) && isscalar(opts.TargetLogTransform) && opts.TargetLogTransform
     targetLogMask = ismember(string(targetFields), logFieldNames);
@@ -537,25 +550,21 @@ if isfield(allData, tfName)
     resolved = tfName;
     return;
 end
-switch tfName
-    case 'EE_V'
-        if isfield(allData, 'EF_vol'), resolved = 'EF_vol'; end
-    case 'EF_vol'
-        if isfield(allData, 'EE_V'), resolved = 'EE_V'; end
-    case 'EE_S'
-        if isfield(allData, 'EF_surf'), resolved = 'EF_surf'; end
-    case 'EF_surf'
-        if isfield(allData, 'EE_S'), resolved = 'EE_S'; end
-    case 'Abs'
-        if isfield(allData, 'Absorptance'), resolved = 'Absorptance'; end
-    case 'Absorptance'
-        if isfield(allData, 'Abs'), resolved = 'Abs'; end
-    case 'EF_max'
-        if isfield(allData, 'M2_max'), resolved = 'M2_max'; end
-    case 'ECC'
-        if isfield(allData, 'ECCheck'), resolved = 'ECCheck'; end
-    case 'ECCheck'
-        if isfield(allData, 'ECC'), resolved = 'ECC'; end
+aliasGroups = { ...
+    {'EE_V', 'EF_vol'}, ...
+    {'EE_S', 'EF_surf'}, ...
+    {'Abs', 'Absorptance'}, ...
+    {'EF_max', 'M2_max', 'E4_max'}, ...
+    {'ECC', 'ECCheck'}};
+for g = 1:numel(aliasGroups)
+    grp = aliasGroups{g};
+    if ismember(tfName, grp)
+        hit = find(cellfun(@(c) isfield(allData, c), grp), 1);
+        if ~isempty(hit)
+            resolved = grp{hit};
+        end
+        return;
+    end
 end
 end
 

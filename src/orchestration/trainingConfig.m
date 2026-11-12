@@ -13,7 +13,7 @@ function cfg = trainingConfig(options)
 %       PreTrainedModelFile – Existing model for fine-tuning (string, "")
 %       ContinueTraining    – Fine-tune flag (logical, false)
 %       RatioLimit          – [min, max] r/p filter (1×2, [0 0.49])
-%       MetricsToTrain      – Target spectral fields (string array)
+%       MetricsToTrain      – Target spectral fields (string array or "auto" to discover from DB)
 %       MaxEpochs           – Training epochs (positive int, 50000)
 %       MiniBatchSize       – Mini-batch size (positive int, 1024)
 %       LearningRate        – Initial learning rate (positive, 1e-4)
@@ -84,7 +84,7 @@ arguments
     options.PreTrainedModelFile (1,1) string  = ""
     options.ContinueTraining    (1,1) logical = false
     options.RatioLimit          (1,2) double  = [0, 0.49]
-    options.MetricsToTrain      (1,:) string  = ["Abs", "EF_max", "EE_V", "EE_S"]
+    options.MetricsToTrain      (1,:) string  = "auto"
     options.MaxEpochs           (1,1) double  {mustBePositive, mustBeInteger} = 1000
     options.MiniBatchSize       (1,1) double  {mustBePositive, mustBeInteger} = 1024
     options.LearningRate        (1,1) double  {mustBePositive} = 1e-5

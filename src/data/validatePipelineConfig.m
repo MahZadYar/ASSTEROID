@@ -114,19 +114,18 @@ if isfield(config, 'ratioLimit')
     end
 end
 
-% Validate metrics
+% Validate metrics (accepts "auto" or any non-empty target field names)
 if isfield(config, 'metricsToTrain')
-    validMetrics = {'EE_V', 'EE_S', 'EF_max', 'Abs', 'ECC', ...
-                    'Absorptance', 'M_vol', 'M_surf', 'EF_vol', 'EF_surf', ...
-                    'M2_vol', 'M2_surf'};
-    metrics = string(config.metricsToTrain);
+    metrics = strtrim(string(config.metricsToTrain));
+    metrics = metrics(strlength(metrics) > 0);
     if isempty(metrics)
         errors{end+1} = 'config.metricsToTrain cannot be empty'; %#ok<AGROW>
-    end
-    for mIdx = 1:numel(metrics)
-        m = metrics(mIdx);
-        if ~ismember(m, validMetrics)
-            errors{end+1} = sprintf('Invalid metric: %s (valid: %s)', m, strjoin(validMetrics, ', ')); %#ok<AGROW>
+    else
+        for mIdx = 1:numel(metrics)
+            m = metrics(mIdx);
+            if ~strcmpi(m, "auto") && ~isvarname(m)
+                errors{end+1} = sprintf('Invalid metric identifier: %s', m); %#ok<AGROW>
+            end
         end
     end
 end

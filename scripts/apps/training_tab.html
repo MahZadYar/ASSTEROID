@@ -267,6 +267,7 @@ function setup(htmlComponent) {
     htmlComponent.addEventListener("DbStatus", function(event) {
         updateDbBanner(event.Data);
         updateRequirements(event.Data);
+        updateMetricsFromDb(event.Data);
     });
     htmlComponent.addEventListener("SaveComplete", function(event) {
         appendLog(event.Data || "Database saved.");
@@ -373,6 +374,8 @@ function setup(htmlComponent) {
 
     // Ensure vertical gap inputs are visible if default checked
     toggleVerticalGapInput();
+    // Synchronize DB requirements and available spectral metrics on startup
+    htmlComponent.sendEventToMATLAB("RefreshDbState", {});
 }
 
 function toggleFeatureSchema() {
@@ -661,6 +664,13 @@ function updateParamEstimate() {
 }
 
 function runTraining() {
+    var cfg = collectConfig();
+    if (!cfg.metricsToTrain || cfg.metricsToTrain.length === 0) {
+        setStatus("error", "No Metrics");
+        appendLog("ERROR: Select at least one target metric in Targets & Filtering before training.", "error");
+        return;
+    }
+
     enableRun(false);
     clearLog();
     setStatus("running", "Training...");
@@ -818,6 +828,106 @@ function updateRequirements(d) {
             analyteEl.style.color = "var(--text-secondary)";
         }
     }
+}
+
+function normalizeStringArray(raw) {
+    if (!raw) return [];
+    if (Array.isArray(raw)) {
+        return raw.map(function(x) { return String(x).trim(); }).filter(Boolean);
+    }
+    if (typeof raw === "string") {
+        var s = raw.trim();
+        return s ? [s] : [];
+    }
+    return [];
+}
+
+function applyMetricLabel(labelEl, fieldName) {
+    var known = {
+        "Abs": "Abs (Absorptance)",
+        "Absorptance": "Absorptance",
+        "EF_max": "EF_max (E\u2074_max)",
+        "E4_max": "E4_max (E\u2074_max)",
+        "M2_max": "M2_max (M\u00b2_max)",
+        "EE_V": "EE_V (Volumetric EE)",
+        "EF_vol": "EF_vol (Volumetric EF)",
+        "EE_S": "EE_S (Surface EE)",
+        "EF_surf": "EF_surf (Surface EF)",
+        "M_vol": "M_vol",
+        "M_surf": "M_surf",
+        "M2_vol": "M2_vol",
+        "M2_surf": "M2_surf",
+        "ECC": "ECC (Energy Check)",
+        "ECCheck": "ECCheck (Energy Check)"
+    };
+    labelEl.textContent = known[fieldName] || fieldName;
+}
+
+function updateMetricsFromDb(d) {
+    var grid = document.getElementById("metricsToTrainGrid");
+    var badge = document.getElementById("metricsSourceBadge");
+    if (!grid) return;
+
+    var available = normalizeStringArray(d && d.simSpectralMetrics);
+    var defaults = normalizeStringArray(d && d.defaultTrainMetrics);
+    var hasSim = Boolean(d && d.hasSimData);
+
+    if (!hasSim || available.length === 0) {
+        window._lastSimMetricsKey = "";
+        grid.innerHTML = "";
+        var emptyMsg = document.createElement("div");
+        emptyMsg.style.cssText = "grid-column: 1 / -1; font-size: 11px; color: var(--text-secondary); padding: 4px 0;";
+        emptyMsg.textContent = hasSim
+            ? "No 2D spectral metric fields found in db.Sim."
+            : "Load simulation data in Stage 0/1 to populate available spectral targets.";
+        grid.appendChild(emptyMsg);
+        if (badge) {
+            badge.textContent = hasSim ? "0 found" : "awaiting db.Sim";
+            badge.style.color = hasSim ? "var(--warning)" : "var(--text-secondary)";
+        }
+        updateParamEstimate();
+        return;
+    }
+
+    var newKey = available.join("|");
+    var prevChecked = new Set();
+    if (window._lastSimMetricsKey === newKey) {
+        grid.querySelectorAll(".metric-cb:checked").forEach(function(cb) {
+            prevChecked.add(cb.value);
+        });
+    } else {
+        var seedList = defaults.length > 0 ? defaults : available;
+        seedList.forEach(function(name) { prevChecked.add(name); });
+    }
+    window._lastSimMetricsKey = newKey;
+
+    grid.innerHTML = "";
+    available.forEach(function(name, idx) {
+        var row = document.createElement("div");
+        row.className = "toggle-row";
+
+        var cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.className = "metric-cb";
+        cb.value = name;
+        cb.id = "m_dyn_" + idx;
+        cb.checked = prevChecked.has(name);
+        cb.addEventListener("change", updateParamEstimate);
+
+        var lbl = document.createElement("label");
+        lbl.htmlFor = cb.id;
+        applyMetricLabel(lbl, name);
+
+        row.appendChild(cb);
+        row.appendChild(lbl);
+        grid.appendChild(row);
+    });
+
+    if (badge) {
+        badge.textContent = available.length + " in db.Sim";
+        badge.style.color = "var(--success)";
+    }
+    updateParamEstimate();
 }
 
 function setStatus(cls, text) {
@@ -1093,31 +1203,13 @@ document.addEventListener("DOMContentLoaded", function() {
         <div class="section-title open" onclick="toggleSection(this)">Targets & Filtering</div>
         <div>
             <div class="field">
-                <label>Metrics to Train</label>
-                <div class="metrics-grid">
-                    <div class="toggle-row">
-                        <input type="checkbox" class="metric-cb" value="Abs" id="m_Abs" checked>
-                        <label for="m_Abs">Abs (Absorptance)</label>
-                    </div>
-                    <div class="toggle-row">
-                        <input type="checkbox" class="metric-cb" value="EF_max" id="m_EFmax" checked>
-                        <label for="m_EFmax">EF_max (E&#8308;<sub>max</sub>)</label>
-                    </div>
-                    <div class="toggle-row">
-                        <input type="checkbox" class="metric-cb" value="EE_V" id="m_EFv" checked>
-                        <label for="m_EFv">EE_V (EF_vol)</label>
-                    </div>
-                    <div class="toggle-row">
-                        <input type="checkbox" class="metric-cb" value="EE_S" id="m_EFs" checked>
-                        <label for="m_EFs">EE_S (EF_surf)</label>
-                    </div>
-                    <div class="toggle-row">
-                        <input type="checkbox" class="metric-cb" value="M_vol" id="m_Mv">
-                        <label for="m_Mv">M_vol</label>
-                    </div>
-                    <div class="toggle-row">
-                        <input type="checkbox" class="metric-cb" value="M_surf" id="m_Ms">
-                        <label for="m_Ms">M_surf</label>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <label style="margin-bottom:0;">Metrics to Train</label>
+                    <span id="metricsSourceBadge" style="font-size:10px; color:var(--text-secondary);">awaiting db.Sim</span>
+                </div>
+                <div class="metrics-grid" id="metricsToTrainGrid">
+                    <div style="grid-column: 1 / -1; font-size: 11px; color: var(--text-secondary); padding: 4px 0;">
+                        Load simulation data in Stage 0/1 to populate available spectral targets.
                     </div>
                 </div>
             </div>

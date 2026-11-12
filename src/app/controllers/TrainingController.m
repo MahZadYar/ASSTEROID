@@ -50,10 +50,12 @@ classdef TrainingController < handle
                         obj.runTrainingPipeline(eventData);
                     case {"StopTraining", "StopProcess"}
                         obj.stopTraining();
-                    case "RefreshDbState"
+                    case {"RefreshDbState", "ClientReady"}
                         if ~isempty(fig_) && isvalid(fig_) && isfield(fig_.UserData, "app") ...
                                 && isfield(fig_.UserData.app, "broadcastDbStatus")
                             fig_.UserData.app.broadcastDbStatus();
+                        else
+                            obj.sendToHTML("DbStatus", obj.session.getStatusStruct());
                         end
                         db_ = obj.getDb();
                         if isfield(db_, "Model") && isstruct(db_.Model) && isfield(db_.Model, "PerformanceReport") ...
@@ -92,8 +94,6 @@ classdef TrainingController < handle
                         obj.sendToHTML("LatestCheckpointFound", res);
                     case {"EvaluateModelPerformance", "evaluateModelPerformance"}
                         obj.evaluateModelPerformance(eventData);
-                    case "ClientReady"
-                        % Web UI bridge handshake
                     otherwise
                         fprintf("[TrainingController] Unknown event: %s\n", eventName);
                 end
@@ -146,9 +146,10 @@ classdef TrainingController < handle
                 return;
             end
 
-            metricsList = ["Abs", "EF_max", "EE_V", "EE_S"];
-            if isfield(d, "metricsToTrain") && ~isempty(d.metricsToTrain)
-                metricsList = string(d.metricsToTrain);
+            [metricsList, metricsErr] = resolveRequestedTrainMetrics(d, obj.getDb());
+            if strlength(metricsErr) > 0
+                obj.sendToHTML("TrainError", metricsErr);
+                return;
             end
 
             % Architecture + layer sizes (gs_tensor default; legacy resnet /

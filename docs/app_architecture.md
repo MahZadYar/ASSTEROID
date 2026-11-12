@@ -10,6 +10,7 @@
 ## 1. Quick Start for Developers
 
 ### App Entry Points
+
 ```matlab
 ASSTEROID             % Canonical launcher: initializes paths and launches assteroid_app
 start_app             % Convenience alias (delegates to ASSTEROID)
@@ -41,6 +42,7 @@ flowchart TD
 ```
 
 Each stage integrates:
+
 - **HTML5/CSS3 View (`uihtml`)** ([`scripts/apps/*_tab.html`](../scripts/apps/)) — Responsive UI styled with shared design tokens
 - **Specialized MATLAB Controller** ([`src/app/controllers/*Controller.m`](../src/app/controllers/)) — Decoupled event router and workflow coordinator
 - **MATLAB Visualizer Panel** — High-performance 2D contour, training convergence, or 3D volumetric axes
@@ -84,6 +86,7 @@ graph LR
 ```
 
 ### Central Session State: `AssteroidSession`
+
 **Location:** [`src/app/state/AssteroidSession.m`](../src/app/state/AssteroidSession.m)
 
 ```matlab
@@ -99,9 +102,11 @@ session = AssteroidSession(workFolder);
 ```
 
 ### High-Performance Master Database Engine: `DatabaseEngine`
+
 **Location:** [`src/data/DatabaseEngine.m`](../src/data/DatabaseEngine.m)
 
 Designed to handle large databases scaling to **~4GB** without memory leaks or UI latency:
+
 - **Chunked In-Place Loading:** Validates SoA headers before deep loading, avoiding redundant copies of massive 2D spectral arrays (`[N_geom × 406]`).
 - **Transactional Writes:** Saves to temporary shadow files (`*.mat.tmp`) before atomic rename, preventing database corruption if a save is interrupted.
 - **Dirty-State Auditing:** Tracks state mutations; automatically signals Stage 0 and status banners across tabs when data has unsaved changes.
@@ -116,7 +121,7 @@ Visual styling across all 7 HTML views and MATLAB figure axes is governed by a u
 ### The Four Spectral Color Families
 
 | Family | Role | Primary Key (Middle Column) | Tonal Variants |
-|:---|:---|:---|:---|
+| :--- | :--- | :--- | :--- |
 | **Row A (Cobalt Blue)** | Backgrounds, Structural Borders, Info | **`A40` (`#241ec3`)** | `A10` (`#000117`) to `A90` (`#d1ddff`) |
 | **Row B (Electric Violet)** | Deep Neural Surrogates & AI Models | **`B50` (`#7f00e0`)** | `B10` (`#060011`) to `B95` (`#f1ebff`) |
 | **Row C (SERS Teal)** | Primary Brand Accent, SERS Enhancements | **`C60` (`#27928d`) / `C70` (`#48b2ac`)** | `C12` (`#000808`) to `C98` (`#e4fffc`) |
@@ -124,9 +129,11 @@ Visual styling across all 7 HTML views and MATLAB figure axes is governed by a u
 | **Row G (Neutrals)** | Contrast Hierarchy & Typography | `G10` (`#030303`) to `G98` (`#f8f8f8`) | `G10`–`G40` surfaces; `G50`–`G98` text |
 
 ### Continuous Colormap Alignment
+
 The continuous colormap used in 2D/3D surface plots ([`src/vis/AuroraAustralis.txt`](../src/vis/AuroraAustralis.txt)) directly interpolates the 12 key stops of the `Pallette.svg` spectral gradient, bridging qualitative UI tokens and physical field representations.
 
 ### Shared CSS & JavaScript Resources
+
 - [`scripts/apps/shared/css/assteroid_tokens.css`](../scripts/apps/shared/css/assteroid_tokens.css): Atomic tokens (`--pal-*`) and semantic roles (`--bg-primary: #060812;`, `--bg-secondary: #0c1020;`, `--accent: #48b2ac;`, `--border: #162038;`).
 - [`scripts/apps/shared/css/assteroid_components.css`](../scripts/apps/shared/css/assteroid_components.css): Unified buttons (`.btn-primary`, `.btn-purple`, `.btn-gold`), status badges, progress bars, cards, and custom scrollbars.
 - [`scripts/apps/shared/js/matlab_bridge.js`](../scripts/apps/shared/js/matlab_bridge.js): Unified bi-directional communication layer providing `window.matlabBridge.send()`, `on()`, and progress reporting.
@@ -136,28 +143,32 @@ The continuous colormap used in 2D/3D surface plots ([`src/vis/AuroraAustralis.t
 ## 4. Stage-by-Stage Implementation Reference
 
 ### Stage 0: Master Database Manager
+
 - **HTML View:** [`scripts/apps/database_tab.html`](../scripts/apps/database_tab.html)
 - **Controller:** [`src/app/controllers/DatabaseController.m`](../src/app/controllers/DatabaseController.m)
 - **Features:** Hierarchical dataset browser across all branches (`db.Sim`, `db.Interp`, `db.Pred`, `db.Optima`, `db.Basins`, `db.Model`, `db.RI`, `db.Schema`), schema compliance checking, dirty status tracking, transactional atomic file writes, and project metadata curation.
 - **Key Events:** `RequestDbStatus`, `LoadDatabase`, `SaveDatabase`, `BackupDatabase`.
 
 ### Stage 1: Ingestion & Sweep QA
+
 - **HTML View:** [`scripts/apps/import_tab.html`](../scripts/apps/import_tab.html)
 - **Controller:** [`src/app/controllers/ImportController.m`](../src/app/controllers/ImportController.m)
 - **Features:** Multi-file COMSOL sweep parsing, electromagnetic passivity check ($0 \leq \mathrm{Abs} \leq 1$), unit normalization, schema-aware fine-grained coordinate $(p, r, \lambda)$ merge semantics with configurable geometry coordinate match tolerance ($\Delta p, \Delta r$, default $10^{-3}\text{ nm}$) and wavelength match tolerance ($\Delta\lambda$, default $10^{-4}\text{ nm}$), dynamic NaN padding for multi-batch spectral extensions and metric introductions (e.g. `E4`), partial-batch backfilling, direct in-memory `db.Sim` synchronization, deprecated `prl_sweep.mat` file decoupling, and QA plot generation.
 - **Key Events:** `PreviewFile`, `RunImport`, `RecalculateDerived`, `BrowseFile`, `RefreshDbState`, `SaveDatabaseRequest`, `StopProcess`.
 
 ### Stage 2: Adaptive Parameter Sampling
+
 - **HTML View:** [`scripts/apps/adaptive_sampling_app.html`](../scripts/apps/adaptive_sampling_app.html)
 - **Controller:** [`src/app/controllers/SamplingController.m`](../src/app/controllers/SamplingController.m)
 - **Features:** 9-point Laplacian curvature calculation, dual-tier minimum-distance rejection sampling, failed/unconverged geometry extraction, and COMSOL batch table export.
 - **Key Events:** `ComputeDensity`, `GenerateBatch`, `HighlightNanPoints`, `ExportBatch`.
 
 ### Stage 3: DNN Surrogate Training
+
 - **HTML View:** [`scripts/apps/training_tab.html`](../scripts/apps/training_tab.html)
 - **Controller:** [`src/app/controllers/TrainingController.m`](../src/app/controllers/TrainingController.m)
-- **Features:** Physics-informed 8-input (`v3_physics`, default) surrogate configuration with four selectable backbones: the **Geometry–Spectrum Factorized Tensor Network (`"gs_tensor"`, default since v6.4, 507,268 learnables for 4 heads / 473,987 for 3 heads)** — balanced symmetric dual-stream architecture with a λ-blind Geometry Stem (`geo_slice` $\to$ `geo_fc1 [64]` $\to$ `geo_fc2 [128]`) gating a Geo-Spectral Trunk (`spec_fc1 [128]` $\to$ `spec_fc2 [256]`, with selectable `specFeatures`: `"all"`, `"no_geo_logs"`, `"spectral_only"`) through geometry-conditioned bilinear residual blocks with identity skips and decoupled physically bounded readout heads (`h1_*`..`h4_*` for $\mathrm{Abs}, \mathrm{EF}_{\max}, \mathrm{EE}_V, \mathrm{EE}_S$; `sigmoidLayer` for absorptance, `softplusLayer` for log-transformed $\mathrm{EF}_{\max}$ and $\mathrm{EE}_D$, fixed `scalingLayer` z-scoring) — its ungated ablation `"lean_resnet"` (432,260 learnables for 4 heads / 398,979 for 3 heads), and the legacy Standard Residual Network (`"resnet"`) and Low-Rank Tensor-Product ResNet (`"tensor_resnet"`, rank-$R$ Bilinear/Tucker Hadamard core). All sizes are exposed in the UI (gs/lean: model width, residual blocks, geometry and spectral encoder widths, head sizes, hidden activation, bounded heads, zero-init residual outputs; legacy: FC1a/FC1b/FC2a, rank R) with a live learnable-parameter estimate; the UI payload is converted by [`networkConfigFromUI`](../src/utils/networkConfigFromUI.m) and the network is assembled by [`buildSurrogateNetwork`](../src/modeling/buildSurrogateNetwork.m). Also: uniform `"mse"` or resonance-focused Peak-Weighted MSE (`"peak_mse"`), Duan log-normal smearing calibration, learning rate schedules (piecewise/cosine), real-time epoch-throttled log-log loss curves on the right panel, LayerNorm monitoring, Three-Tier Generalization evaluation (`EvaluateModelPerformance`), and checkpoint persistence.
-- **Key Events:** `RunTraining`, `StopTraining`, `EvaluateModelPerformance`, `BrowseCheckpointFile`, `BrowseCheckpointDir`, `FindLatestCheckpoint`, `SaveDatabaseRequest`.
+- **Features:** Dynamic target discovery from `db.Sim` via [`discoverSimSpectralMetrics`](../src/data/discoverSimSpectralMetrics.m) and [`resolveRequestedTrainMetrics`](../src/orchestration/resolveRequestedTrainMetrics.m) (`DbStatus.simSpectralMetrics` populates `#metricsToTrainGrid` automatically on load/refresh, with `"auto"` CLI target discovery and `EF_max`/`M2_max`/`E4_max` aliasing), physics-informed 8-input (`v3_physics`, default) surrogate configuration with four selectable backbones: the **Geometry–Spectrum Factorized Tensor Network (`"gs_tensor"`, default since v6.4, 507,268 learnables for 4 heads / 473,987 for 3 heads)** — balanced symmetric dual-stream architecture with a λ-blind Geometry Stem (`geo_slice` $\to$ `geo_fc1 [64]` $\to$ `geo_fc2 [128]`) gating a Geo-Spectral Trunk (`spec_fc1 [128]` $\to$ `spec_fc2 [256]`, with selectable `specFeatures`: `"all"`, `"no_geo_logs"`, `"spectral_only"`) through geometry-conditioned bilinear residual blocks with identity skips and decoupled physically bounded readout heads (`h1_*`..`h4_*` for $\mathrm{Abs}, \mathrm{EF}_{\max}, \mathrm{EE}_V, \mathrm{EE}_S$; `sigmoidLayer` for absorptance, `softplusLayer` for log-transformed $\mathrm{EF}_{\max}$ and $\mathrm{EE}_D$, fixed `scalingLayer` z-scoring) — its ungated ablation `"lean_resnet"` (432,260 learnables for 4 heads / 398,979 for 3 heads), and the legacy Standard Residual Network (`"resnet"`) and Low-Rank Tensor-Product ResNet (`"tensor_resnet"`, rank-$R$ Bilinear/Tucker Hadamard core). All sizes are exposed in the UI (gs/lean: model width, residual blocks, geometry and spectral encoder widths, head sizes, hidden activation, bounded heads, zero-init residual outputs; legacy: FC1a/FC1b/FC2a, rank R) with a live learnable-parameter estimate; the UI payload is converted by [`networkConfigFromUI`](../src/utils/networkConfigFromUI.m) and the network is assembled by [`buildSurrogateNetwork`](../src/modeling/buildSurrogateNetwork.m). Also: uniform `"mse"` or resonance-focused Peak-Weighted MSE (`"peak_mse"`), Duan log-normal smearing calibration, learning rate schedules (piecewise/cosine), real-time epoch-throttled log-log loss curves on the right panel, LayerNorm monitoring, Three-Tier Generalization evaluation (`EvaluateModelPerformance`), and checkpoint persistence.
+- **Key Events:** `RunTraining`, `StopTraining`, `RefreshDbState`, `ClientReady`, `EvaluateModelPerformance`, `BrowseCheckpointFile`, `BrowseCheckpointDir`, `FindLatestCheckpoint`, `SaveDatabaseRequest`.
 - **Execution model (background worker):** In *App Right Panel* progress mode, `trainnet` never runs on the GUI thread. `TrainingController.startWorkerTraining` submits [`runTrainingWorker`](../src/orchestration/runTrainingWorker.m) to a 1-worker local process pool (`parfeval`) and returns immediately, so the app stays fully responsive.
   - Progress streams back via `parallel.pool.DataQueue` (time-throttled to ~1 s); `afterEach` updates the loss curve without calling `drawnow`.
   - **Stop:** the first click writes a flag file and `trainnet` stops at the next iteration (the partial model is still saved); a second click force-cancels the worker.
@@ -186,18 +197,21 @@ sequenceDiagram
 ```
 
 ### Stage 4: Dense Landscape Prediction
+
 - **HTML View:** [`scripts/apps/visualization_export_tab.html`](../scripts/apps/visualization_export_tab.html)
 - **Controller:** [`src/app/controllers/PredictionController.m`](../src/app/controllers/PredictionController.m)
 - **Features:** Ultra-dense sub-nanometer inference ($> 100{,}000$ spectra/s), Makima interpolation, analyte vibrational weighting, and relational MAT/HDF5 export.
 - **Key Events:** `RunDensePrediction`, `LoadAnalyte`, `ExportLandscape`.
 
 ### Stage 5: Topology-Aware Multimodal Optimization
+
 - **HTML View:** [`scripts/apps/optimization_tab.html`](../scripts/apps/optimization_tab.html)
 - **Controller:** [`src/app/controllers/OptimizeController.m`](../src/app/controllers/OptimizeController.m)
 - **Features:** Marker-controlled topological watershed segmentation, 25% transparent alpha basin polygons, interactive basin merging, direct numerical sensitivity input, persistent modal territory management (`db.Basins`), top 50% dynamic range core starting point selection, jump-retry bound contraction, and in-basin `fmincon` gradient ascent powered by analytical neural graph automatic differentiation (`dlgradient`).
 - **Key Events:** `DetectBasins`, `MergeBasins`, `SaveBasinsToDb`, `LoadBasinsFromDb`, `SaveOptimaToDb`, `GetDbOptima`, `DeleteDbOptima`, `SetSeedsFromDbOptima`, `UpdateSeeds`, `RunFineTune`, `ExportResults`.
 
 ### Stage 6: Multi-Dimensional Scientific Visualization
+
 - **HTML View:** [`scripts/apps/visualize_tab.html`](../scripts/apps/visualize_tab.html)
 - **Controller:** [`src/app/controllers/VisualizeController.m`](../src/app/controllers/VisualizeController.m)
 - **Features:** Synchronized 1D spectra plots, 2D response heatmaps (defaulting scattered `db.Sim` data to ungridded exact-point Delaunay `patch` meshes alongside bounded Voronoi `patch` cells, native `pcolor` for regular `db.Interp`/`db.Pred` grids, and optional `pcolor` grid interpolation via natural neighbor, linear, or nearest-sample at configurable spatial resolution in nm / raster size), and interactive 3D volumetric slicing via MATLAB `viewer3d` with the `AuroraAustralis` colormap.
@@ -241,10 +255,12 @@ sequenceDiagram
 ## 6. Testing & Validation
 
 All controllers, database operations, and workflows are validated via the automated test suite runner:
+
 ```matlab
 setup_project;
 summary = run_all_tests();
 ```
+
 - **Total Test Suites:** 31
 - **Current Pass Rate:** 100% (31/31 passing)
 - **Dedicated Controller Tests:**

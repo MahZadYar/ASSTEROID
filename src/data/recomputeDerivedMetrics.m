@@ -28,25 +28,8 @@ function [simData, updatedCount] = recomputeDerivedMetrics(simData, cfg, analyte
     end
 
     nRows = structRowCount(simData);
-    baseMetrics = string.empty(1, 0);
-
     % Dynamically discover all 2D spectral metric fields in simData
-    reservedFields = ["period", "radius", "p", "r", "lambda", "lambda_nm", "lambda0", ...
-                      "f", "RamanShift", "RamanWindow", "RamanWindowEffective", ...
-                      "LaserWl", "lambda_exc_nm", "kappa_V", "kappa_S", "VolCorr", "SurfCorr", ...
-                      "Source", "Parent", "Method", "ModelRef", "StokesWindow", "Shifts"];
-    allFlds = string(fieldnames(simData));
-    for fi = 1:numel(allFlds)
-        fn = allFlds(fi);
-        if ~ismember(fn, reservedFields) && ...
-           ~endsWith(fn, ["_laser", "_broad", "_avg", "_analyte"]) && ...
-           ~ismember(fn, baseMetrics)
-            val = simData.(char(fn));
-            if (isnumeric(val) || islogical(val)) && ndims(val) == 2 && size(val, 1) >= nRows && size(val, 2) > 1
-                baseMetrics(end+1) = fn; %#ok<AGROW>
-            end
-        end
-    end
+    [baseMetrics, ~] = discoverSimSpectralMetrics(simData, IncludeLogical=true);
     updatedCount = 0;
 
     present = false(size(baseMetrics));
