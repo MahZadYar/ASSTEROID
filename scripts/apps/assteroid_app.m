@@ -690,6 +690,7 @@ function status = buildDbStatusStruct(fig)
         "simEntries",    0, ...
         "simSpectralMetrics", {{}}, ...
         "defaultTrainMetrics", {{}}, ...
+        "modelTargetNames", {{}}, ...
         "hasModel",      false, ...
         "modelFile",     "", ...
         "hasPredictions", false, ...
@@ -742,6 +743,16 @@ function status = buildDbStatusStruct(fig)
         if hasNetFile
             status.modelFile = string(m.NetFile);
         end
+    end
+
+    activeModel = [];
+    if isfield(fig.UserData, "visExport") && isstruct(fig.UserData.visExport) ...
+            && isfield(fig.UserData.visExport, "model") && ~isempty(fig.UserData.visExport.model)
+        activeModel = fig.UserData.visExport.model;
+    end
+    mTargets = discoverModelTargetMetrics(db, activeModel);
+    if ~isempty(mTargets)
+        status.modelTargetNames = cellstr(mTargets);
     end
 
     % Predictions branch
@@ -5163,6 +5174,10 @@ function runPredictInterpolate(src, d, fig)
                     sprintf("Predicted %d saved optima points.", numel(pPointsNm)));
                 allDataFiltered = allDataRaw;
             else
+                modelMetrics = discoverModelTargetMetrics(fig.UserData.db, ve.model);
+                if isempty(modelMetrics)
+                    modelMetrics = ["Abs", "EE_V", "EE_S"];
+                end
                 cfg = predictionVisConfig( ...
                     WorkDir=char(workDir), ...
                     ModelFile=char(resolvePath(modelFile, workDir)), ...
@@ -5176,7 +5191,7 @@ function runPredictInterpolate(src, d, fig)
                     StokesShiftResolution=stokesRes, ...
                     LinkMetricsToGrid=linkMetrics, ...
                     MetricsShiftLimits=[metricsMin, metricsMax], ...
-                    Metrics=["Absorptance", "EF_vol", "EF_surf", "M_vol", "M_surf"], ...
+                    Metrics=modelMetrics, ...
                     ExportPredictions=false, ...
                     ExportGraphics=false);
 
@@ -5204,18 +5219,24 @@ function runPredictInterpolate(src, d, fig)
             end
         else
             reporter.start("Interpolate");
-            dfPath = resolvePath(dataFile, workDir);
-            if ~isfile(dfPath)
-                reporter.fail("Interpolate", "Data file not found: " + dfPath);
-                sendEventToHTMLSource(src, "VisError", "Data file not found: " + dfPath);
-                return;
-            end
-            ld = load(dfPath);
-            if isfield(ld, "allData")
-                simData = ld.allData;
+            simData = [];
+            if isfield(fig.UserData.db, "Sim") && isstruct(fig.UserData.db.Sim) ...
+                    && structRowCount(fig.UserData.db.Sim) > 0
+                simData = fig.UserData.db.Sim;
             else
-                flds = fieldnames(ld);
-                simData = ld.(flds{1});
+                dfPath = resolvePath(dataFile, workDir);
+                if ~isfile(dfPath)
+                    reporter.fail("Interpolate", "Simulation data not found in db.Sim or file: " + dfPath);
+                    sendEventToHTMLSource(src, "VisError", "Simulation data required (db.Sim is empty and file not found: " + dfPath + ")");
+                    return;
+                end
+                ld = load(dfPath);
+                if isfield(ld, "allData")
+                    simData = ld.allData;
+                else
+                    flds = fieldnames(ld);
+                    simData = ld.(flds{1});
+                end
             end
 
             % Derive the minimal set of base spectral targets from selectedFields:
@@ -5452,59 +5473,6 @@ function vals = parseCellOrString(d, fieldName)
         vals = string(raw);
     end
     vals = vals(strlength(vals) > 0);
-end
-
-function baseTargets = deriveBaseTargetsFromSelection(selectedFields, simData)
-%deriveBaseTargetsFromSelection  Reduce selected UI fields to base spectral targets.
-%
-%   selectedFields may contain e.g. ["EF_vol","EF_vol_laser","EF_vol_avg",
-%   "Absorptance","Absorptance_laser","EF_surf_analyte"].
-%   This strips the derived suffixes to get ["EF_vol","Absorptance","EF_surf"]
-%   and cross-checks against actual [N x L] fields in simData.
-
-    derivedSuffixes = ["_laser", "_broad", "_avg", "_analyte", "_approx"];
-    bases = string.empty;
-
-    for i = 1:numel(selectedFields)
-        f = selectedFields(i);
-        base = f;
-        for s = derivedSuffixes
-            if endsWith(f, s)
-                base = extractBefore(f, strlength(f) - strlength(s) + 1);
-                break;
-            end
-        end
-        bases(end+1) = base; %#ok<AGROW>
-    end
-
-    bases = unique(bases, "stable");
-
-    % Keep only bases that actually exist as spectral [N x L] fields in simData.
-    if ~isempty(simData) && isstruct(simData)
-        N = size(simData.period, 1);
-        L = size(simData.lambda, 2);
-        valid = false(size(bases));
-        for i = 1:numel(bases)
-            fn = char(bases(i));
-            if isfield(simData, fn)
-                v = simData.(fn);
-                valid(i) = isnumeric(v) && isequal(size(v), [N, L]);
-            end
-        end
-        bases = bases(valid);
-    end
-
-    if isempty(bases)
-        % Fallback: standard DNN output targets
-        bases = ["Absorptance", "EF_vol", "EF_surf"];
-        % Further filter to what exists
-        if isstruct(simData)
-            exists = arrayfun(@(f) isfield(simData, char(f)), bases);
-            bases = bases(exists);
-        end
-    end
-
-    baseTargets = bases;
 end
 
 %% ########################################################################

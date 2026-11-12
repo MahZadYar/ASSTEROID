@@ -137,13 +137,10 @@ classdef PredictionController < handle
                 [ok, model, ri] = obj.ensureModelAndRi(rep);
                 if ~ok, return; end
 
-                analyteSpec = struct();
-                if strlength(analyteFile) > 0 && isfile(analyteFile)
-                    try
-                        analyteSpec = loadAndNormalizeAnalyteSpectrum(analyteFile);
-                    catch
-                        analyteSpec = struct();
-                    end
+                analyteSpec = obj.loadAnalyteSpectrum(analyteFile);
+                modelMetrics = discoverModelTargetMetrics(obj.session.db, model);
+                if isempty(modelMetrics)
+                    modelMetrics = ["Abs", "EE_V", "EE_S"];
                 end
 
                 rep.start("PredictInterpolate");
@@ -168,6 +165,11 @@ classdef PredictionController < handle
                     rList = optimaPoints(:, 2);
                     rep.info(sprintf("Predicting at %d optima locations from database...", numel(pList)));
 
+                    metricsWindow = [];
+                    if ~linkMetrics
+                        metricsWindow = [metricsMin, metricsMax];
+                    end
+
                     allDataRaw = predictPointsSurrogate( ...
                         Model=model, ...
                         Ri=ri, ...
@@ -178,6 +180,7 @@ classdef PredictionController < handle
                         StokesShiftLimits=[stokesMin, stokesMax], ...
                         InterpResolution=stokesRes, ...
                         AnalyteSpectrum=analyteSpec, ...
+                        MetricsWindow=metricsWindow, ...
                         BatchSize=batchSize, ...
                         Reporter=rep);
                 else
@@ -193,6 +196,7 @@ classdef PredictionController < handle
                         StokesShiftResolution=stokesRes, ...
                         LinkMetricsToGrid=linkMetrics, ...
                         MetricsShiftLimits=[metricsMin, metricsMax], ...
+                        Metrics=modelMetrics, ...
                         RecomputePredictions=true, ...
                         ExportPredictions=false, ...
                         ExportGraphics=false);
@@ -220,8 +224,15 @@ classdef PredictionController < handle
                     allDataRaw = loadOrGeneratePredictions(loadPredArgs{:});
                 end
 
-                if isstruct(allDataRaw) && structRowCount(allDataRaw) > 0
-                    obj.session.db.Pred = allDataRaw;
+                [allDataFiltered, includedFields] = selectPredictionFieldsCanonical(allDataRaw, selectedFields);
+                if isempty(includedFields)
+                    obj.sendToHTML("VisError", "No selected metric/variant fields were found in generated predictions.");
+                    return;
+                end
+
+                if isstruct(allDataFiltered) && structRowCount(allDataFiltered) > 0
+                    [obj.session.db, branchPath] = storePredictionResults( ...
+                        obj.session.db, allDataFiltered, dataSource, predictionTarget);
                     obj.session.markDirty();
                     if ~isempty(obj.fig) && isvalid(obj.fig)
                         obj.fig.UserData.db = obj.session.db;
@@ -230,38 +241,62 @@ classdef PredictionController < handle
                             obj.fig.UserData.visExport = struct();
                         end
                         obj.fig.UserData.visExport.predictionsLoaded = true;
-                        obj.fig.UserData.visExport.allData = allDataRaw;
+                        obj.fig.UserData.visExport.allData = allDataFiltered;
                         obj.fig.UserData.visExport.ri = ri;
                         obj.fig.UserData.visExport.model = model;
                         obj.fig.UserData.visExport.modelLoaded = true;
                         if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "markDbDirty")
                             obj.fig.UserData.app.markDbDirty();
                         end
+                        if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "broadcastDbStatus")
+                            obj.fig.UserData.app.broadcastDbStatus();
+                        end
                     end
 
-                    nPoints = structRowCount(allDataRaw);
+                    nPoints = structRowCount(allDataFiltered);
                     rep.complete("PredictInterpolate", ...
-                        sprintf("Predictions complete: %d points written to db.Pred.", nPoints));
+                        sprintf("Predictions complete: %d points written to %s.", nPoints, branchPath));
                     obj.sendToHTML("PredictComplete", struct( ...
-                        "branch", "Pred", ...
+                        "branch", char(branchPath), ...
+                        "entries", nPoints, ...
                         "count", nPoints, ...
-                        "message", sprintf("%d points predicted and saved to db.Pred", nPoints)));
+                        "fields", {cellstr(includedFields)}, ...
+                        "message", sprintf("%d points predicted and saved to %s", nPoints, branchPath)));
                 else
                     obj.sendToHTML("VisError", "Prediction output was empty.");
                 end
 
             else
                 % Interpolation mode (from raw simulation data)
-                simData = obj.session.db.Sim;
-                if isempty(simData) || structRowCount(simData) == 0
+                simData = [];
+                if isfield(obj.session.db, "Sim") && isstruct(obj.session.db.Sim) ...
+                        && structRowCount(obj.session.db.Sim) > 0
+                    simData = obj.session.db.Sim;
+                elseif strlength(dataFile) > 0 && isfile(dataFile)
+                    try
+                        ld = load(dataFile);
+                        if isfield(ld, "allData") && isstruct(ld.allData)
+                            simData = ld.allData;
+                        else
+                            flds = fieldnames(ld);
+                            if ~isempty(flds) && isstruct(ld.(flds{1}))
+                                simData = ld.(flds{1});
+                            end
+                        end
+                    catch
+                    end
+                end
+                if isempty(simData) || ~isstruct(simData) || structRowCount(simData) == 0
                     obj.sendToHTML("VisError", "No simulation data in db.Sim to interpolate.");
                     return;
                 end
 
-                rep.start("PredictInterpolate");
-                rep.info("Interpolating raw simulation data to dense grid...");
+                analyteSpec = obj.loadAnalyteSpectrum(analyteFile);
+                baseTargets = deriveBaseTargetsFromSelection(selectedFields, simData);
 
-                % Execute gridded interpolation
+                rep.start("PredictInterpolate");
+                rep.info(sprintf("Interpolating simulation targets [%s]...", strjoin(baseTargets, ", ")));
+
                 gp = computeDenseGridParams( ...
                     LambdaLaser=laserWl, ...
                     PLimits=[periodMin, periodMax], ...
@@ -270,13 +305,55 @@ classdef PredictionController < handle
                     Resolution=spatialRes, ...
                     StokesShiftResolution=stokesRes);
 
-                interpData = interpolateRawSimulationData(simData, gp, ...
-                    SpatialMethod=interpMethod, ...
-                    SpectralMethod=spectralMethod, ...
-                    Reporter=rep);
+                derivedWindow = [stokesMin, stokesMax];
+                metricsWindowInterp = [];
+                if ~linkMetrics
+                    derivedWindow = [metricsMin, metricsMax];
+                    metricsWindowInterp = derivedWindow;
+                end
 
-                if isstruct(interpData) && structRowCount(interpData) > 0
-                    obj.session.db.Interp = interpData;
+                if pointMode
+                    optimaPoints = obj.resolveOptimaPoints();
+                    if isempty(optimaPoints) || size(optimaPoints, 1) == 0
+                        obj.sendToHTML("VisError", ...
+                            "No saved optima in db.Optima. Run optimisation (Stage 5) first.");
+                        return;
+                    end
+                    predictor = createDataPredictor(simData, ...
+                        TargetNames=baseTargets, ...
+                        InterpMethod=interpMethod, ...
+                        SpectralMethod=spectralMethod, ...
+                        LaserWavelength=laserWl);
+                    allDataRaw = buildPointPredictionSoA( ...
+                        predictor, optimaPoints(:, 1), optimaPoints(:, 2), gp.lambdaSamples, ...
+                        laserWl, [stokesMin, stokesMax], stokesRes, ...
+                        analyteSpec, rep, "PredictInterpolate", metricsWindowInterp);
+                else
+                    allDataRaw = interpolateRawSimulationData(simData, gp, ...
+                        TargetNames=baseTargets, ...
+                        SpatialMethod=interpMethod, ...
+                        SpectralMethod=spectralMethod, ...
+                        Reporter=rep, ...
+                        BatchSize=batchSize);
+                    derivedCfg = importSweepConfig( ...
+                        WorkDir=workDir, ...
+                        LaserWavelength=laserWl, ...
+                        RamanWindow=derivedWindow, ...
+                        DetectShiftWindow=false, ...
+                        InterpResolution=stokesRes, ...
+                        SpectralInterpMethod="makima");
+                    [allDataRaw, ~] = recomputeDerivedMetrics(allDataRaw, derivedCfg, analyteSpec, rep);
+                end
+
+                [interpDataFiltered, includedFields] = selectPredictionFieldsCanonical(allDataRaw, selectedFields);
+                if isempty(includedFields)
+                    obj.sendToHTML("VisError", "No selected metric/variant fields were found in interpolated data.");
+                    return;
+                end
+
+                if isstruct(interpDataFiltered) && structRowCount(interpDataFiltered) > 0
+                    [obj.session.db, branchPath] = storePredictionResults( ...
+                        obj.session.db, interpDataFiltered, dataSource, predictionTarget);
                     obj.session.markDirty();
                     if ~isempty(obj.fig) && isvalid(obj.fig)
                         obj.fig.UserData.db = obj.session.db;
@@ -285,19 +362,24 @@ classdef PredictionController < handle
                             obj.fig.UserData.visExport = struct();
                         end
                         obj.fig.UserData.visExport.interpLoaded = true;
-                        obj.fig.UserData.visExport.allData = interpData;
+                        obj.fig.UserData.visExport.allData = interpDataFiltered;
                         if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "markDbDirty")
                             obj.fig.UserData.app.markDbDirty();
                         end
+                        if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "broadcastDbStatus")
+                            obj.fig.UserData.app.broadcastDbStatus();
+                        end
                     end
 
-                    nPoints = structRowCount(interpData);
+                    nPoints = structRowCount(interpDataFiltered);
                     rep.complete("PredictInterpolate", ...
-                        sprintf("Interpolation complete: %d points written to db.Interp.", nPoints));
+                        sprintf("Interpolation complete: %d points written to %s.", nPoints, branchPath));
                     obj.sendToHTML("PredictComplete", struct( ...
-                        "branch", "Interp", ...
+                        "branch", char(branchPath), ...
+                        "entries", nPoints, ...
                         "count", nPoints, ...
-                        "message", sprintf("%d points interpolated and saved to db.Interp", nPoints)));
+                        "fields", {cellstr(includedFields)}, ...
+                        "message", sprintf("%d points interpolated and saved to %s", nPoints, branchPath)));
                 else
                     obj.sendToHTML("VisError", "Interpolation output was empty.");
                 end
@@ -326,6 +408,17 @@ classdef PredictionController < handle
                 if isfield(g, "SurrogateModelFile"), modelFile = string(g.SurrogateModelFile); end
                 if isfield(g, "RefractiveIndexFile"), riCsvFile = string(g.RefractiveIndexFile); end
                 if isfield(g, "SimulationDataFile"), dataFile = string(g.SimulationDataFile); end
+            end
+        end
+
+        function analyteSpec = loadAnalyteSpectrum(~, analyteFile)
+            analyteSpec = struct();
+            if strlength(analyteFile) > 0 && isfile(analyteFile)
+                try
+                    analyteSpec = loadAndNormalizeAnalyteSpectrum(analyteFile);
+                catch
+                    analyteSpec = struct();
+                end
             end
         end
 

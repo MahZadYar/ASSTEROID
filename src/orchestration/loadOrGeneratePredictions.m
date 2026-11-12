@@ -216,10 +216,11 @@ function allData = localNormalizePredictionFieldNames(allData)
         [~, laserCol] = min(abs(shRow));
     end
 
-    laserFields = {"EE_V", "EE_S", "EF_max", "Abs", "Absorptance", "EF_vol", "EF_surf"};
+    discoveredBase = discoverSimSpectralMetrics(allData);
+    laserFields = unique([discoveredBase, "EE_V", "EE_S", "EF_max", "E4_max", "M2_max", "Abs", "Absorptance", "EF_vol", "EF_surf"], "stable");
     for k = 1:numel(laserFields)
-        baseName = laserFields{k};
-        laserName = baseName + "_laser";
+        baseName = char(laserFields(k));
+        laserName = [baseName, '_laser'];
         if ~isfield(allData, laserName) && isfield(allData, baseName)
             v = allData.(baseName);
             if isnumeric(v)

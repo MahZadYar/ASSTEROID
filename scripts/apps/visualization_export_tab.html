@@ -259,6 +259,7 @@ function setup(htmlComponent) {
     htmlComponent.addEventListener("DbStatus", function(event) {
         updateDbBanner(event.Data);
         updateVisRequirements(event.Data);
+        updatePredictMetricsFromDb(event.Data);
     });
     htmlComponent.addEventListener("SaveComplete", function(event) {
         appendLog(event.Data || "Database saved.");
@@ -282,6 +283,11 @@ function setup(htmlComponent) {
         enableButtons(true);
         resetStopButtons();
     });
+
+    updatePredictMetricsFromDb(window._lastDbStatus || {});
+    try {
+        htmlComponent.sendEventToMATLAB("RefreshDbState", {});
+    } catch (e) {}
 }
 
 function stopProcess() {
@@ -344,7 +350,9 @@ function toggleDataSource() {
     if (simRow) simRow.style.display = (src === "interpolation") ? "" : "none";
     var interpBlock = document.getElementById("interpOptionsBlock");
     if (interpBlock) interpBlock.style.display = (src === "interpolation") ? "" : "none";
-    updateVisRequirements(window._lastDbStatus || {});
+    var status = window._lastDbStatus || {};
+    updateVisRequirements(status);
+    updatePredictMetricsFromDb(status);
 }
 
 function togglePredictionTarget() {
@@ -555,6 +563,157 @@ function toggleSection(el) {
     content.style.display = content.style.display === "none" ? "block" : "none";
 }
 
+function normalizeStringArray(raw) {
+    if (!raw) return [];
+    if (Array.isArray(raw)) {
+        return raw.map(function(x) { return String(x).trim(); }).filter(Boolean);
+    }
+    if (typeof raw === "string") {
+        var s = raw.trim();
+        return s ? [s] : [];
+    }
+    return [];
+}
+
+function formatPredictMetricLabel(fieldName) {
+    var known = {
+        "Abs": "Abs (Absorptance)",
+        "Absorptance": "Absorptance",
+        "EF_max": "EF_max (E\u2074_max)",
+        "E4_max": "E4_max (E\u2074_max)",
+        "M2_max": "M2_max (M\u00b2_max)",
+        "E4": "E4 (E\u2074_max)",
+        "EE_V": "EE_V (Volumetric EE)",
+        "EF_vol": "EF_vol (Volumetric EF)",
+        "EE_S": "EE_S (Surface EE)",
+        "EF_surf": "EF_surf (Surface EF)",
+        "ECC": "ECC (Energy Check)",
+        "ECCheck": "ECCheck (Energy Check)"
+    };
+    return known[fieldName] || fieldName;
+}
+
+function getDefaultVariantMask(metricName) {
+    var low = String(metricName || "").toLowerCase();
+    // Diagnostic metrics stay unchecked unless explicitly selected
+    if (low === "ecc" || low === "eccheck" || low === "skindepth") {
+        return { spectral: false, laser: false, broad: false, analyte: false };
+    }
+    // Scalar/pointwise or bounded optical benchmarks default to spectral + _laser
+    if (low === "abs" || low === "absorptance" ||
+        low === "ef_max" || low === "e4_max" || low === "m2_max" || low === "e4") {
+        return { spectral: true, laser: true, broad: false, analyte: false };
+    }
+    // Primary Enhancement Efficacy metrics (EE_V, EE_S) and custom targets default to all 4
+    return { spectral: true, laser: true, broad: true, analyte: true };
+}
+
+function updatePredictMetricsFromDb(d) {
+    var tbody = document.getElementById("predictMetricsBody");
+    var badge = document.getElementById("predictMetricsSourceBadge");
+    if (!tbody) return;
+
+    var status = d || {};
+    var src = getDataSource();
+    var metrics = [];
+    var sourceLabel = "";
+    var isAvailable = false;
+
+    if (src === "model") {
+        metrics = normalizeStringArray(status.modelTargetNames);
+        if (metrics.length > 0) {
+            sourceLabel = metrics.length + " in db.Model";
+            isAvailable = true;
+        } else if (status.hasModel) {
+            // Legacy model saved without TargetNames metadata: fall back to db.Sim defaults
+            var defSim = normalizeStringArray(status.defaultTrainMetrics);
+            metrics = defSim.length > 0 ? defSim : normalizeStringArray(status.simSpectralMetrics);
+            sourceLabel = metrics.length > 0 ? (metrics.length + " (inferred from db.Sim)") : "awaiting db.Model";
+            isAvailable = metrics.length > 0;
+        } else {
+            sourceLabel = "awaiting db.Model";
+        }
+    } else {
+        metrics = normalizeStringArray(status.simSpectralMetrics);
+        if (status.hasSimData && metrics.length > 0) {
+            sourceLabel = metrics.length + " in db.Sim";
+            isAvailable = true;
+        } else {
+            sourceLabel = status.hasSimData ? "0 found" : "awaiting db.Sim";
+        }
+    }
+
+    if (!isAvailable || metrics.length === 0) {
+        window._lastPredictMetricsKey = "";
+        tbody.innerHTML = "";
+        var trEmpty = document.createElement("tr");
+        var tdEmpty = document.createElement("td");
+        tdEmpty.colSpan = 5;
+        tdEmpty.style.cssText = "padding:8px 6px;font-size:11px;color:var(--text-secondary);";
+        if (src === "model") {
+            tdEmpty.textContent = "Load or train a model in Stage 0/3 to populate model target metrics.";
+        } else {
+            tdEmpty.textContent = status.hasSimData
+                ? "No 2D spectral metric fields found in db.Sim."
+                : "Load simulation data (db.Sim) in Stage 0/1 to populate spectral metrics.";
+        }
+        trEmpty.appendChild(tdEmpty);
+        tbody.appendChild(trEmpty);
+        if (badge) {
+            badge.textContent = sourceLabel;
+            badge.style.color = "var(--text-secondary)";
+        }
+        return;
+    }
+
+    var newKey = src + "::" + metrics.join("|");
+    var prevChecked = new Set();
+    if (window._lastPredictMetricsKey === newKey) {
+        tbody.querySelectorAll(".metric-variant-cb:checked").forEach(function(cb) {
+            prevChecked.add(cb.dataset.field);
+        });
+    } else {
+        metrics.forEach(function(name) {
+            var defs = getDefaultVariantMask(name);
+            if (defs.spectral) prevChecked.add(name);
+            if (defs.laser)    prevChecked.add(name + "_laser");
+            if (defs.broad)    prevChecked.add(name + "_broad");
+            if (defs.analyte)  prevChecked.add(name + "_analyte");
+        });
+    }
+    window._lastPredictMetricsKey = newKey;
+
+    tbody.innerHTML = "";
+    var variants = ["", "_laser", "_broad", "_analyte"];
+    metrics.forEach(function(name) {
+        var tr = document.createElement("tr");
+        var tdLabel = document.createElement("td");
+        tdLabel.style.padding = "4px 6px";
+        tdLabel.textContent = formatPredictMetricLabel(name);
+        tr.appendChild(tdLabel);
+
+        variants.forEach(function(sfx) {
+            var field = name + sfx;
+            var td = document.createElement("td");
+            td.style.textAlign = "center";
+            var cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.className = "metric-variant-cb";
+            cb.dataset.field = field;
+            cb.checked = prevChecked.has(field);
+            td.appendChild(cb);
+            tr.appendChild(td);
+        });
+
+        tbody.appendChild(tr);
+    });
+
+    if (badge) {
+        badge.textContent = sourceLabel;
+        badge.style.color = "var(--success)";
+    }
+}
+
 document.addEventListener("DOMContentLoaded", function() {
     toggleDataSource();
     togglePredictionTarget();
@@ -748,7 +907,10 @@ document.addEventListener("DOMContentLoaded", function() {
                     <div class="section">
                         <div class="section-title open" onclick="toggleSection(this)">Predict / Interpolate</div>
                         <div>
-                            <div style="font-size:11px;color:var(--text-secondary);margin-bottom:6px;">Select metric/variant fields to store in the target branch (`Pred` for DNN, `Interp` for interpolation).</div>
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;">
+                                <span style="font-size:11px;color:var(--text-secondary);">Select metric/variant fields to store in the target branch (<code style="font-size:10px;">Pred</code> for DNN, <code style="font-size:10px;">Interp</code> for interpolation).</span>
+                                <span id="predictMetricsSourceBadge" style="font-size:10px;color:var(--text-secondary);white-space:nowrap;">awaiting db.Model</span>
+                            </div>
                             <table style="width:100%;font-size:11px;border-collapse:collapse;">
                                 <thead>
                                     <tr>
@@ -759,52 +921,13 @@ document.addEventListener("DOMContentLoaded", function() {
                                         <th style="text-align:center;padding:4px 6px;color:var(--text-secondary);">Analyte (_analyte)</th>
                                     </tr>
                                 </thead>
-                                <tbody>
+                                <tbody id="predictMetricsBody">
                                     <tr>
-                                        <td style="padding:4px 6px;">Abs (Absorptance)</td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="Abs" checked></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="Abs_laser" checked></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="Abs_broad"></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="Abs_analyte"></td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding:4px 6px;">EF_max</td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EF_max"></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EF_max_laser"></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EF_max_broad"></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EF_max_analyte"></td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding:4px 6px;">EE_V (EF_vol)</td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EE_V" checked></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EE_V_laser" checked></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EE_V_broad" checked></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EE_V_analyte" checked></td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding:4px 6px;">EE_S (EF_surf)</td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EE_S" checked></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EE_S_laser" checked></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EE_S_broad" checked></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="EE_S_analyte" checked></td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding:4px 6px;">M_vol</td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="M_vol"></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="M_vol_laser"></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="M_vol_broad"></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="M_vol_analyte"></td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding:4px 6px;">M_surf</td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="M_surf"></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="M_surf_laser"></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="M_surf_broad"></td>
-                                        <td style="text-align:center;"><input type="checkbox" class="metric-variant-cb" data-field="M_surf_analyte"></td>
+                                        <td colspan="5" style="padding:8px 6px;font-size:11px;color:var(--text-secondary);">Load or train a model in Stage 0/3 to populate model target metrics.</td>
                                     </tr>
                                 </tbody>
                             </table>
-                            <p class="hint">Default selection: spectral + _laser for Abs, EE_V, EE_S; plus _broad + _analyte for EE_V and EE_S.</p>
+                            <p class="hint">Metrics synchronize automatically with <code>db.Model</code> (DNN mode) or <code>db.Sim</code> (Interpolation mode).</p>
                             <div class="btn-row">
                                 <button id="btnPredict" class="btn-primary" onclick="predictInterpolate()">Predict / Interpolate (Populate DB)</button>
                             </div>

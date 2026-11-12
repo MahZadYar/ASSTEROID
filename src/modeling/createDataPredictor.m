@@ -130,20 +130,31 @@ function predictor = createDataPredictor(allData, options)
     interpMethod = char(options.InterpMethod);
     spectralMethod = char(options.SpectralMethod);
 
-    aliasMap = struct("EE_V","EF_vol", "EF_vol","EE_V", ...
-                      "EE_S","EF_surf", "EF_surf","EE_S", ...
-                      "Abs","Absorptance", "Absorptance","Abs", ...
-                      "ECC","ECCheck", "ECCheck","ECC");
+    aliasGroups = { ...
+        ["EE_V", "EF_vol"], ...
+        ["EE_S", "EF_surf"], ...
+        ["Abs", "Absorptance"], ...
+        ["EF_max", "E4_max", "M2_max", "E4"], ...
+        ["ECC", "ECCheck"]};
     for t = 1:numTargets
         tName = targetNames{t};
-        actualField = tName;
-        if ~isfield(allData, actualField)
-            if isfield(aliasMap, actualField) && isfield(allData, aliasMap.(actualField))
-                actualField = aliasMap.(actualField);
-            else
-                error("createDataPredictor:MissingField", ...
-                    "Target field '%s' not found in allData.", tName);
+        actualField = '';
+        if isfield(allData, tName)
+            actualField = tName;
+        else
+            for g = 1:numel(aliasGroups)
+                if any(strcmp(tName, aliasGroups{g}))
+                    hit = find(arrayfun(@(c) isfield(allData, char(c)), aliasGroups{g}), 1);
+                    if ~isempty(hit)
+                        actualField = char(aliasGroups{g}(hit));
+                        break;
+                    end
+                end
             end
+        end
+        if isempty(actualField)
+            error("createDataPredictor:MissingField", ...
+                "Target field '%s' not found in allData.", tName);
         end
         rawFull = double(allData.(actualField));  % [N x Lpadded]
         resampled = zeros(N_sim, numLcommon);
@@ -647,27 +658,8 @@ end
 %% ========================================================================
 function targets = detectSpectralTargets(allData)
     %detectSpectralTargets  Find [N x L] spectral fields in SoA struct.
-
-    exclude = ["period", "radius", "lambda", "lambda_nm", "RamanShift", ...
-               "LaserWl", "lambda_exc_nm", "RamanWindow", "RamanWindowEffective", ...
-               "p", "r", "particle_r", "f", ...
-               "kappa_V", "kappa_S", "VolCorr", "SurfCorr", "V_corr", "S_corr"];
-    flds = fieldnames(allData);
-    N = numel(allData.period);
-    L = size(allData.lambda, 2);
-    targets = {};
-
-    for i = 1:numel(flds)
-        fn = string(flds{i});
-        if ismember(fn, exclude), continue; end
-        if endsWith(fn, ["_broad", "_avg", "_laser", "_analyte", "_approx"]) || startsWith(fn, ["BEE_", "AEE_"])
-            continue;
-        end
-        v = allData.(fn);
-        if isnumeric(v) && isequal(size(v), [N, L])
-            targets{end+1} = fn; %#ok<AGROW>
-        end
-    end
+    [specMetrics, ~] = discoverSimSpectralMetrics(allData);
+    targets = cellstr(specMetrics);
 end
 
 %% ========================================================================

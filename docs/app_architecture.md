@@ -200,8 +200,8 @@ sequenceDiagram
 
 - **HTML View:** [`scripts/apps/visualization_export_tab.html`](../scripts/apps/visualization_export_tab.html)
 - **Controller:** [`src/app/controllers/PredictionController.m`](../src/app/controllers/PredictionController.m)
-- **Features:** Ultra-dense sub-nanometer inference ($> 100{,}000$ spectra/s), Makima interpolation, analyte vibrational weighting, and relational MAT/HDF5 export.
-- **Key Events:** `RunDensePrediction`, `LoadAnalyte`, `ExportLandscape`.
+- **Features:** Dynamic metric/variant table synchronized automatically from `db.Model` (`modelTargetNames` via [`discoverModelTargetMetrics`](../src/data/discoverModelTargetMetrics.m)) in DNN mode or `db.Sim` (`simSpectralMetrics` via [`discoverSimSpectralMetrics`](../src/data/discoverSimSpectralMetrics.m)) in Interpolation mode, base target derivation via [`deriveBaseTargetsFromSelection`](../src/data/deriveBaseTargetsFromSelection.m), canonical/alias field selection (`Abs`/`E4_max`/`EF_max`/`EE_V`/`EE_S` and custom fields) via [`selectPredictionFieldsCanonical`](../src/data/selectPredictionFieldsCanonical.m), ultra-dense sub-nanometer inference ($> 100{,}000$ spectra/s), Makima/linear/Pchip spectral interpolation, analyte vibrational weighting, and target branch routing (`db.Pred`, `db.Optima.Pred`, `db.Interp`, `db.Optima.Interp`).
+- **Key Events:** `PredictInterpolate`, `OpenInVisualize`, `RefreshDbState`, `SaveDatabaseRequest`, `StopProcess`.
 
 ### Stage 5: Topology-Aware Multimodal Optimization
 
