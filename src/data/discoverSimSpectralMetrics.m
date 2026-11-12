@@ -92,3 +92,4 @@ function [allMetrics, defaultTargets] = discoverSimSpectralMetrics(simData, opti
         defaultTargets = allMetrics;
     end
 end
+

@@ -216,19 +216,19 @@ function [mergedEntry, isUpdated] = mergeEntryWithNewWavelengths(oldEntry, newEn
 
                 if ~existedInOld
                     % New wavelength coordinate
-                    if ~isnan(vNew)
+                    if isfinite(vNew)
                         mergedData(idxM) = vNew;
                         isUpdated = true;
                     end
                 else
-                    % Overlapping wavelength coordinate (e.g. laser wl, or NaN backfill)
-                    if isnan(mergedData(idxM))
-                        if ~isnan(vNew)
+                    % Overlapping wavelength coordinate (e.g. laser wl, or NaN/Inf backfill)
+                    if ~isfinite(mergedData(idxM))
+                        if isfinite(vNew)
                             mergedData(idxM) = vNew;
                             isUpdated = true;
                         end
                     elseif replaceExisting || recalculateExisting
-                        if ~isnan(vNew) && (isnan(mergedData(idxM)) || abs(mergedData(idxM) - vNew) > eps(vNew))
+                        if isfinite(vNew) && (~isfinite(mergedData(idxM)) || abs(mergedData(idxM) - vNew) > eps(vNew))
                             mergedData(idxM) = vNew;
                             isUpdated = true;
                         end

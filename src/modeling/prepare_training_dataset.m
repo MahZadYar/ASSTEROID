@@ -196,6 +196,18 @@ metricStack = nan(numRowsExpected, maxLambdaWidth, numTargets);
 for k = 1:numTargets
     rawTargetData = getColumn(allData, resolvedDataFields{k});
     paddedTargetData = padSpectra(rawTargetData, maxLambdaWidth, numRowsExpected);
+
+    % Data QA: replace non-finite (+/-Inf from failed COMSOL probe evaluations) with NaN
+    % before row/wavelength masking so they never leak into YRaw or get clamped to 0 by max(y, 0).
+    infMaskTarget = isinf(paddedTargetData);
+    if any(infMaskTarget(:))
+        nInfTarget = nnz(infMaskTarget);
+        warning('prepare_training_dataset:NonFiniteTargetValues', ...
+            ['Found %d Inf/-Inf entry(ies) in target field %s (e.g. failed COMSOL probe evaluation). ', ...
+             'Converting to NaN so affected (geometry, wavelength) points are excluded.'], ...
+            nInfTarget, targetFields{k});
+        paddedTargetData(infMaskTarget) = NaN;
+    end
     metricStack(:, :, k) = paddedTargetData;
 
     % Data QA: absorptance is stored in percent; values outside [0, 100]% violate optical passivity.
@@ -240,11 +252,11 @@ for idx = 1:numRows
     % Find valid wavelengths
     validMask = ~isnan(lambdaVec) & (lambdaVec > 0);
     
-    % Check all target metrics are valid at these wavelengths
+    % Check all target metrics are finite at these wavelengths
     metricsAtRow = reshape(metricStack(idx, :, :), [maxLambdaWidth, numTargets]);  % [L × numTargets]
     for k = 1:numTargets
         metricVec = reshape(metricsAtRow(:, k), size(validMask));
-        validMask = validMask & ~isnan(metricVec);
+        validMask = validMask & isfinite(metricVec);
     end
     
     % Skip if no valid wavelengths remain
@@ -287,6 +299,7 @@ for idx = 1:numRows
         
         if any(logInput(:) < 0)
             logInput = max(logInput, 0);
+            targetMatrixRaw(:, targetLogMask) = logInput;
         end
         
         targetMatrix(:, targetLogMask) = log10(1 + logInput);
@@ -327,7 +340,7 @@ if size(X,1) ~= size(Y,1)
         'Feature/target row mismatch (%d vs %d).', size(X,1), size(Y,1));
 end
 
-invalidMask = ~all(isfinite([X, Y]), 2);
+invalidMask = ~all(isfinite([X, Y, YRaw]), 2);
 if any(invalidMask)
     nanInX = sum(any(isnan(X), 2));
     infInX = sum(any(isinf(X), 2));

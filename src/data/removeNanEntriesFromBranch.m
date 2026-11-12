@@ -142,11 +142,11 @@ end
             continue;
         end
 
-        % Check if 1D or multi-dimensional
+        % Check if 1D or multi-dimensional (treat both NaN and +/-Inf as invalid)
         if ismatrix(val) && size(val, 2) > 1
-            fMask = any(isnan(double(val)), 2);
+            fMask = any(~isfinite(double(val)), 2);
         else
-            fMask = isnan(double(val(:)));
+            fMask = ~isfinite(double(val(:)));
         end
 
         c = nnz(fMask);

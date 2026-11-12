@@ -515,7 +515,8 @@ function entry = processGeometryGroup(idx, cols, keyValues, ...
     for k = 1:numel(metricNames)
         mn = metricNames{k};
         if isfield(cols, mn)
-            rawVals = cols.(mn)(idx);
+            rawVals = double(cols.(mn)(idx));
+            rawVals(~isfinite(rawVals)) = NaN;
             sortedVals = rawVals(ord);
             if ~isempty(uniqueIdx)
                 sortedVals = sortedVals(1:numel(spectralSorted));

@@ -83,6 +83,27 @@ assert(errResolved == "" && isequal(mResolved, ["Abs", "EE_V", "EE_S"]), ...
 assert(strlength(errEmpty) > 0, "Empty UI selection should produce explicit validation error");
 fprintf("  [5] Session status & resolveRequestedTrainMetrics verified.\n");
 
+%% 6. Non-finite (-Inf/+Inf) COMSOL probe outliers in E4_max
+simInf = simE4;
+simInf.E4_max(3, 2) = -Inf;
+simInf.E4_max(7, 4) = +Inf;
+dsInf = prepare_training_dataset(simInf, ri, TargetFields=["Abs", "E4_max", "EE_V", "EE_S"]);
+assert(all(isfinite(dsInf.YTrainRaw(:))) && all(isfinite(dsInf.YValidationRaw(:))) && all(isfinite(dsInf.YTestRaw(:))), ...
+    "prepare_training_dataset must exclude +/-Inf entries from Y*Raw splits");
+
+% Also verify computeSurrogateEvaluationMetrics guards against legacy -Inf in YTestRaw
+dsCorrupt = dsInf;
+dsCorrupt.YPred = dsCorrupt.YTestRaw * 0.98 + 1e-2;
+dsCorrupt.YTestRaw(1, 2) = -Inf;
+repCorrupt = computeSurrogateEvaluationMetrics([], dsCorrupt, [], Verbose=false);
+assert(all(isfinite(repCorrupt.globalBiased.NRMSE_Pct)) && all(isfinite(repCorrupt.globalBiased.R2)), ...
+    "computeSurrogateEvaluationMetrics must produce finite NRMSE and R2 even when YTestRaw has -Inf");
+assert(all(isfinite(repCorrupt.globalUnbiased.IDW_NRMSE_Pct)) && all(isfinite(repCorrupt.globalUnbiased.IDW_R2)), ...
+    "computeSurrogateEvaluationMetrics must produce finite IDW NRMSE and R2 even when YTestRaw has -Inf");
+assert(contains(repCorrupt.latexSummary, "\mathrm{EF}_{\max}"), ...
+    "LaTeX summary must format E4_max header as \mathrm{EF}_{\max}");
+fprintf("  [6] Non-finite (-Inf/+Inf) E4_max filtering and evaluation guard verified.\n");
+
 fprintf("=== test_dynamic_training_metrics PASSED ===\n");
 
 function deleteIfExists(p)

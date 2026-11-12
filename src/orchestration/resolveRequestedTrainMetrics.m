@@ -35,3 +35,4 @@ function [metricsList, errMsg] = resolveRequestedTrainMetrics(d, db)
 
     metricsList = "auto";
 end
+

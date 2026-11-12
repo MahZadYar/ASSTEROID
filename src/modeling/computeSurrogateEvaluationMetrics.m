@@ -150,8 +150,16 @@ r2Biased      = zeros(numTargets, 1);
 maxErrBiased  = zeros(numTargets, 1);
 
 for k = 1:numTargets
-    yT = YTrue(:, k);
-    yP = YPred(:, k);
+    yT_raw = YTrue(:, k);
+    yP_raw = YPred(:, k);
+    validK = isfinite(yT_raw) & isfinite(yP_raw);
+    yT = yT_raw(validK);
+    yP = yP_raw(validK);
+    if isempty(yT)
+        maeBiased(k) = NaN; rmseBiased(k) = NaN; nrmseBiased(k) = NaN;
+        nrmsleBiased(k) = NaN; r2Biased(k) = NaN; maxErrBiased(k) = NaN;
+        continue;
+    end
     diff_k = yP - yT;
     
     maeBiased(k)  = mean(abs(diff_k), 'omitnan');
@@ -286,12 +294,22 @@ nrmsleIdw = zeros(numTargets, 1);
 r2Idw     = zeros(numTargets, 1);
 
 for k = 1:numTargets
-    yT = YTrue_idw(:, k);
-    yP = YPred_idw(:, k);
+    yT_raw = YTrue_idw(:, k);
+    yP_raw = YPred_idw(:, k);
+    validK = isfinite(yT_raw) & isfinite(yP_raw) & isfinite(idwWeights);
+    yT = yT_raw(validK);
+    yP = yP_raw(validK);
+    if isempty(yT)
+        maeIdw(k) = NaN; rmseIdw(k) = NaN; nrmseIdw(k) = NaN;
+        nrmsleIdw(k) = NaN; r2Idw(k) = NaN;
+        continue;
+    end
+    wK = idwWeights(validK);
+    wK = wK / max(sum(wK), eps);
     diff_k = yP - yT;
     
-    maeIdw(k)  = sum(idwWeights .* abs(diff_k), 'omitnan');
-    rmse_k     = sqrt(sum(idwWeights .* (diff_k.^2), 'omitnan'));
+    maeIdw(k)  = sum(wK .* abs(diff_k), 'omitnan');
+    rmse_k     = sqrt(sum(wK .* (diff_k.^2), 'omitnan'));
     rmseIdw(k) = rmse_k;
     
     yRange = max(yT, [], 'omitnan') - min(yT, [], 'omitnan');
@@ -299,13 +317,13 @@ for k = 1:numTargets
     
     logT = log10(max(yT, 0) + 1);
     logP = log10(max(yP, 0) + 1);
-    rmsle_k = sqrt(sum(idwWeights .* ((logP - logT).^2), 'omitnan'));
+    rmsle_k = sqrt(sum(wK .* ((logP - logT).^2), 'omitnan'));
     logRange = max(logT, [], 'omitnan') - min(logT, [], 'omitnan');
     nrmsleIdw(k) = (rmsle_k / max(logRange, eps)) * 100;
     
-    yMean_w = sum(idwWeights .* yT, 'omitnan');
-    ssTot_w = sum(idwWeights .* (yT - yMean_w).^2, 'omitnan');
-    ssRes_w = sum(idwWeights .* (diff_k.^2), 'omitnan');
+    yMean_w = sum(wK .* yT, 'omitnan');
+    ssTot_w = sum(wK .* (yT - yMean_w).^2, 'omitnan');
+    ssRes_w = sum(wK .* (diff_k.^2), 'omitnan');
     r2Idw(k) = 1 - ssRes_w / max(ssTot_w, eps);
 end
 
@@ -351,15 +369,22 @@ if ~isempty(dbOptima) && isstruct(dbOptima) && isfield(dbOptima, "period") && ~i
         
         if nPointsJ > 0
             for k = 1:numTargets
-                yT_roi = YTrue(inRoiJ, k);
-                yP_roi = YPred(inRoiJ, k);
+                yT_roi_raw = YTrue(inRoiJ, k);
+                yP_roi_raw = YPred(inRoiJ, k);
+                validRoiK = isfinite(yT_roi_raw) & isfinite(yP_roi_raw);
+                yT_roi = yT_roi_raw(validRoiK);
+                yP_roi = yP_roi_raw(validRoiK);
+                if isempty(yT_roi)
+                    continue;
+                end
                 diff_roi = yP_roi - yT_roi;
+                yT_global = YTrue(isfinite(YTrue(:, k)), k);
                 
                 rmse_roi = sqrt(mean(diff_roi.^2, 'omitnan'));
                 yRange = max(yT_roi, [], 'omitnan') - min(yT_roi, [], 'omitnan');
-                if yRange < 1e-6
+                if yRange < 1e-6 && ~isempty(yT_global)
                     % Fall back to global test range if local basin is very tight
-                    yRange = max(YTrue(:, k), [], 'omitnan') - min(YTrue(:, k), [], 'omitnan');
+                    yRange = max(yT_global, [], 'omitnan') - min(yT_global, [], 'omitnan');
                 end
                 nrmse_roi = (rmse_roi / max(yRange, eps)) * 100;
                 
@@ -367,8 +392,9 @@ if ~isempty(dbOptima) && isstruct(dbOptima) && isfield(dbOptima, "period") && ~i
                 logP = log10(max(yP_roi, 0) + 1);
                 rmsle_roi = sqrt(mean((logP - logT).^2, 'omitnan'));
                 logRange = max(logT, [], 'omitnan') - min(logT, [], 'omitnan');
-                if logRange < 1e-4
-                    logRange = max(log10(max(YTrue(:, k), 0) + 1), [], 'omitnan') - min(log10(max(YTrue(:, k), 0) + 1), [], 'omitnan');
+                if logRange < 1e-4 && ~isempty(yT_global)
+                    logGlobal = log10(max(yT_global, 0) + 1);
+                    logRange = max(logGlobal, [], 'omitnan') - min(logGlobal, [], 'omitnan');
                 end
                 nrmsle_roi = (rmsle_roi / max(logRange, eps)) * 100;
                 
@@ -382,7 +408,7 @@ if ~isempty(dbOptima) && isstruct(dbOptima) && isfield(dbOptima, "period") && ~i
                     'BasinTag', basinTags(j), ...
                     'OptPeriodNm', optP(j), ...
                     'OptRadiusNm', optR(j), ...
-                    'NumSamples', nPointsJ, ...
+                    'NumSamples', numel(yT_roi), ...
                     'Target', targetNames(k), ...
                     'LocalRMSE', rmse_roi, ...
                     'LocalNRMSE_Pct', nrmse_roi, ...
@@ -401,18 +427,26 @@ if ~isempty(dbOptima) && isstruct(dbOptima) && isfield(dbOptima, "period") && ~i
     if any(roiMaskAll)
         combRows = {};
         for k = 1:numTargets
-            yT_c = YTrue(roiMaskAll, k);
-            yP_c = YPred(roiMaskAll, k);
+            yT_c_raw = YTrue(roiMaskAll, k);
+            yP_c_raw = YPred(roiMaskAll, k);
+            validCK = isfinite(yT_c_raw) & isfinite(yP_c_raw);
+            yT_c = yT_c_raw(validCK);
+            yP_c = yP_c_raw(validCK);
+            if isempty(yT_c)
+                continue;
+            end
             diff_c = yP_c - yT_c;
+            yT_global = YTrue(isfinite(YTrue(:, k)), k);
             
             rmse_c = sqrt(mean(diff_c.^2, 'omitnan'));
-            yRange = max(YTrue(:, k), [], 'omitnan') - min(YTrue(:, k), [], 'omitnan');
+            yRange = max(yT_global, [], 'omitnan') - min(yT_global, [], 'omitnan');
             nrmse_c = (rmse_c / max(yRange, eps)) * 100;
             
             logT = log10(max(yT_c, 0) + 1);
             logP = log10(max(yP_c, 0) + 1);
             rmsle_c = sqrt(mean((logP - logT).^2, 'omitnan'));
-            logRange = max(log10(max(YTrue(:, k), 0) + 1), [], 'omitnan') - min(log10(max(YTrue(:, k), 0) + 1), [], 'omitnan');
+            logGlobal = log10(max(yT_global, 0) + 1);
+            logRange = max(logGlobal, [], 'omitnan') - min(logGlobal, [], 'omitnan');
             nrmsle_c = (rmsle_c / max(logRange, eps)) * 100;
             
             ssTot = sum((yT_c - mean(yT_c, 'omitnan')).^2, 'omitnan');
@@ -422,7 +456,7 @@ if ~isempty(dbOptima) && isstruct(dbOptima) && isfield(dbOptima, "period") && ~i
             
             combRows{end+1, 1} = struct( ...
                 'Target', targetNames(k), ...
-                'TotalRoiSamples', nnz(roiMaskAll), ...
+                'TotalRoiSamples', numel(yT_c), ...
                 'RoI_RMSE', rmse_c, ...
                 'RoI_NRMSE_Pct', nrmse_c, ...
                 'RoI_N_RMSLE_Pct', nrmsle_c, ...
@@ -439,7 +473,7 @@ for k = 1:numTargets
     tName = targetNames(k);
     if any(strcmpi(tName, ["Abs", "Absorptance"]))
         targetHeaders(k) = "\textbf{Absorptance} $\mathrm{Abs}$";
-    elseif strcmpi(tName, "EF_max")
+    elseif any(strcmpi(tName, ["EF_max", "E4_max", "M2_max", "E4"]))
         targetHeaders(k) = "\textbf{Max Hotspot EF} $\mathrm{EF}_{\max}$";
     elseif any(strcmpi(tName, ["EE_V", "EF_vol"]))
         targetHeaders(k) = "\textbf{Volumetric EE} $\mathrm{EE}_V$";
