@@ -303,6 +303,9 @@ function setup(htmlComponent) {
         appendLog("ERROR: " + (event.Data || "Unknown error"));
         enableRun(true);
     });
+    htmlComponent.addEventListener("ImportWarning", function(event) {
+        appendLog("WARNING: " + (event.Data || ""));
+    });
     htmlComponent.addEventListener("BrowseResult", function(event) {
         if (event.Data && event.Data.field && event.Data.path) {
             var el = document.getElementById(event.Data.field);
@@ -588,6 +591,8 @@ function collectConfig() {
         recalculateExisting: chk("recalculateExisting"),
         geometryTolerance: num("geometryTolerance", 0.001),
         wavelengthTolerance: num("wavelengthTolerance", 0.0001),
+        targetBranch: val("targetBranch") || "Sim",
+        optimaMatchTolerance: num("optimaMatchTolerance", 0.5),
         metricVariants: collectMetricVariants()
     };
 
@@ -617,6 +622,12 @@ function recalculateDerived() {
     clearLog();
     setStatus("running", "Recalculating...");
     window.htmlComponent.sendEventToMATLAB("RecalculateDerived", collectConfig());
+}
+
+function onTargetBranchChange() {
+    var isOptima = val("targetBranch") === "Optima.Sim";
+    var box = document.getElementById("optimaTargetOptions");
+    if (box) box.style.display = isOptima ? "block" : "none";
 }
 
 function browse(fieldId, type) {
@@ -766,6 +777,22 @@ function toggleSection(el) {
         <div class="section">
             <div class="section-title open" onclick="toggleSection(this)">Import Options</div>
             <div>
+                <div class="field">
+                    <label>Target Branch</label>
+                    <select id="targetBranch" onchange="onTargetBranchChange()">
+                        <option value="Sim" selected>db.Sim — main simulation database</option>
+                        <option value="Optima.Sim">db.Optima.Sim — FEM verification of saved optima</option>
+                    </select>
+                </div>
+                <div id="optimaTargetOptions" style="display:none;">
+                    <div class="field">
+                        <label>Optima Match Tolerance &Delta;(P, r) (nm)</label>
+                        <input type="number" id="optimaMatchTolerance" value="0.5" step="0.05" min="0">
+                    </div>
+                    <div style="font-size:10px; color:var(--text-secondary); margin-bottom:6px;">
+                        Each imported geometry is matched to the nearest saved optimum in <code>db.Optima</code> (Euclidean (P, r) distance &le; tolerance) and stored row-aligned in <code>db.Optima.Sim</code>; <code>db.Sim</code> and the surrogate training set are left untouched. Merge mode assembles multi-batch sweeps (wavelength union); Rebuild replaces <code>db.Optima.Sim</code>. Use the same Raman window as <code>db.Sim</code>.
+                    </div>
+                </div>
                 <div class="field">
                     <label>Import Mode</label>
                     <select id="mode">

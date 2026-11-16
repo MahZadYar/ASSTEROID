@@ -314,6 +314,19 @@ Dual-mode behavior:
 - `DataSource="model"`: continuous predictor comes from the DNN
 - `DataSource="interpolation"`: predictor is makima interpolants built from raw imported SoA
 
+### 8.1 Full-wave FEM verification of the optima (`db.Optima.Sim`, v6.5)
+
+Paper intent: every surrogate-proposed optimum (per metric $\times$ per basin; currently 11 basins `A`–`K` $\times$ 8 metrics = 88 optima) is re-simulated with a spectrally dense FEM sweep, and the verified values — not the surrogate estimates — are reported.
+
+Code implementation:
+
+- Import: Stage 1 with `TargetBranch="Optima.Sim"` ([src/orchestration/importSweepConfig.m](src/orchestration/importSweepConfig.m), [src/orchestration/runImportSweepWorkflow.m](src/orchestration/runImportSweepWorkflow.m)) → [src/data/mergeOptimaVerificationData.m](src/data/mergeOptimaVerificationData.m). Imported geometries are matched to the saved `db.Optima` rows (Euclidean $(P, r)$ distance $\le$ `OptimaMatchTolerance`, default $0.5\text{ nm}$) and stored row-aligned in `db.Optima.Sim`; `db.Sim` (the 30-wavelength training database) is never padded or modified, so the verification set stays strictly out-of-sample.
+- Evaluation: Tier 4 of [src/modeling/computeSurrogateEvaluationMetrics.m](src/modeling/computeSurrogateEvaluationMetrics.m) via [src/modeling/computeOptimaFemVerificationMetrics.m](src/modeling/computeOptimaFemVerificationMetrics.m):
+  - spectral fidelity per channel ($\mathrm{Abs}$, $\mathrm{EF}_{\max}$, $\mathrm{EE}_V$, $\mathrm{EE}_S$) for wavelength subsets *training grid* ($|\lambda - \lambda_{\text{train}}| \le 0.05\text{ nm}$), *unseen* (between training wavelengths) and *extrapolated*;
+  - the eight integrated metrics ($\mathrm{Abs}^L$, $\mathrm{EF}_{\max}^L$, $\mathrm{EE}_S^L$, $\mathrm{EE}_V^L$, $\mathrm{EE}_S^{\text{broad}}$, $\mathrm{EE}_V^{\text{broad}}$, $\mathrm{EE}_S^{\text{analyte}}$, $\mathrm{EE}_V^{\text{analyte}}$), computed from FEM and surrogate spectra on the same grid with the same `recomputeDerivedMetrics` integration, Raman window (`db.Optima.Sim.StokesWindow`) and analyte spectrum (`db.Optima.Sim.AnalyteSpectrum`); median/max absolute percentage error and Spearman $\rho$ over unique geometries;
+  - basin-ranking agreement per optimized metric: Spearman $\rho_{\text{basin}}$, top-basin agreement and regret $= (\mathrm{EE}^{\text{FEM}}_{\text{best}} - \mathrm{EE}^{\text{FEM}}_{\text{surrogate pick}}) / \mathrm{EE}^{\text{FEM}}_{\text{best}}$.
+- Tier 3 (RoI, holdout geometries within $R_{\text{roi}} = 20\text{ nm}$ of an optimum) evaluates optima sharing one geometry once and normalizes NRMSE by the global test range of each channel.
+
 ## 9) Units and common pitfalls
 
 - Canonical geometry/wavelengths are stored in **nm** in SoA.
@@ -326,3 +339,4 @@ Dual-mode behavior:
 - Add a new metric name → update metric normalization/aliases in [src/utils/normalizeMetricNames.m](src/utils/normalizeMetricNames.m), [src/utils/resolveDerivedMetricField.m](src/utils/resolveDerivedMetricField.m), and [src/utils/defaultComsolVarNames.m](src/utils/defaultComsolVarNames.m), and ensure it becomes a valid SoA field.
 - Change Raman window logic → update import spectral averaging in [src/orchestration/runImportSweepWorkflow.m](src/orchestration/runImportSweepWorkflow.m), [src/data/recomputeDerivedMetrics.m](src/data/recomputeDerivedMetrics.m), and any prediction-time averaging in [src/modeling/predict_dense_spectrum.m](src/modeling/predict_dense_spectrum.m).
 - Change optimization behavior → adjust candidate detection knobs in [src/orchestration/localizeMaximaConfig.m](src/orchestration/localizeMaximaConfig.m) and the detection in `detectCandidateMaxima()` in [src/orchestration/runLocalizationWorkflow.m](src/orchestration/runLocalizationWorkflow.m).
+- Change the optima verification schema (`db.Optima.Sim` columns) → update [src/data/mergeOptimaVerificationData.m](src/data/mergeOptimaVerificationData.m) and the reader in [src/modeling/computeOptimaFemVerificationMetrics.m](src/modeling/computeOptimaFemVerificationMetrics.m), then run `tests/test_optima_verification_import.m`.

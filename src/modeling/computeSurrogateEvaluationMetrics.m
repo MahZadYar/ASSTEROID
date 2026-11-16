@@ -2,10 +2,16 @@ function perfReport = computeSurrogateEvaluationMetrics(model, dataset, dbOptima
 % COMPUTESTURROGATEEVALUATIONMETRICS Comprehensive three-tier surrogate evaluation.
 %
 %   perfReport = computeSurrogateEvaluationMetrics(model, dataset, dbOptima)
-%   computes statistical performance metrics across three evaluation tiers:
+%   computes statistical performance metrics across four evaluation tiers:
 %     1. Tier 1: Global Empirical (Biased) Holdout Test Split
 %     2. Tier 2: Global Unbiased Expectation via Inverse Density Weighting (IDW)
 %     3. Tier 3: Region of Interest (RoI) Localized Accuracy around Modal Optima
+%                (holdout test geometries within RoiRadiusNm of a saved optimum;
+%                optima sharing one geometry are evaluated once)
+%     4. Tier 4: Full-wave FEM verification of the saved optima (db.Optima.Sim):
+%                spectral fidelity on training-grid vs unseen wavelengths, the
+%                eight integrated metrics, and basin-ranking agreement
+%                (computeOptimaFemVerificationMetrics). Skipped when absent.
 %
 %   Arguments:
 %     model    - Struct containing trained surrogate network (net, targetNames,
@@ -22,14 +28,20 @@ function perfReport = computeSurrogateEvaluationMetrics(model, dataset, dbOptima
 %     KNearestNeighbors (1,1) double = 15
 %     RoiRadiusNm       (1,1) double = 20
 %     Verbose           (1,1) logical = true
+%     IdwScope          (1,1) string = "holdout"
+%     Ri                RI struct (nFunc/kFunc) used to evaluate the surrogate in Tier 4
+%     AnalyteSpectrum   analyte struct for Tier 4 (default: db.Optima.Sim metadata)
+%     OptimaPredictedSoA precomputed surrogate SoA on the db.Optima.Sim grid (Tier 4)
 %
 %   Returns:
 %     perfReport - Struct containing:
 %       .globalBiased    - table of Tier 1 holdout test metrics
 %       .globalUnbiased  - table of Tier 2 IDW unbiased metrics
-%       .roiOptima       - table of Tier 3 per-mode optima metrics
+%       .roiOptima       - table of Tier 3 per-geometry optima metrics
 %       .roiCombined     - table of Tier 3 pooled optima basin metrics
+%       .optimaFem       - Tier 4 struct (see computeOptimaFemVerificationMetrics)
 %       .latexSummary    - string containing journal-ready LaTeX table
+%       .latexOptimaSummary - Tier 4 eight-metric LaTeX table ("" when absent)
 %       .summaryText     - formatted ASCII summary table
 %       .raw             - raw evaluation struct with weights and intermediate vectors
 %
@@ -43,6 +55,13 @@ arguments
     options.RoiRadiusNm       (1,1) double {mustBePositive} = 20
     options.Verbose           (1,1) logical                 = true
     options.IdwScope          (1,1) string {mustBeMember(options.IdwScope, ["holdout", "all"])} = "holdout"
+    options.Ri                                              = []
+    options.AnalyteSpectrum   (1,1) struct                  = struct()
+    options.OptimaPredictedSoA (1,1) struct                 = struct()
+end
+
+if istable(dbOptima)
+    dbOptima = table2struct(dbOptima, "ToScalar", true);
 end
 
 if isempty(dataset) || ~isstruct(dataset)
@@ -331,98 +350,129 @@ tblUnbiased = table(targetNames(:), maeIdw, rmseIdw, nrmseIdw, nrmsleIdw, r2Idw,
     'VariableNames', {'Target', 'IDW_MAE', 'IDW_RMSE', 'IDW_NRMSE_Pct', 'IDW_N_RMSLE_Pct', 'IDW_R2'});
 
 %% 5. Tier 3: Region of Interest (RoI) Around Modal Optima
+% Optima that share one (P, r) geometry (e.g. the broadband and analyte-weighted
+% optima of the same basin) are evaluated once. Local NRMSE is normalised by the
+% GLOBAL test range of each channel so per-optimum, pooled and Tier 1 values are
+% directly comparable (a local range collapses near flat resonance tops).
 tblRoiOptima = table();
 tblRoiCombined = table();
 roiMaskAll = false(N_test, 1);
+numRoiOptima = 0;
+numRoiCovered = 0;
 
 if ~isempty(dbOptima) && isstruct(dbOptima) && isfield(dbOptima, "period") && ~isempty(dbOptima.period) ...
         && ~isempty(XTest)
     optP = double(dbOptima.period(:));
     optR = double(dbOptima.radius(:));
     nOpt = numel(optP);
-    
+
+    basinTags = "Optimum_" + string(1:nOpt)';
     if isfield(dbOptima, "basinTag") && ~isempty(dbOptima.basinTag)
-        basinTags = string(dbOptima.basinTag(:));
-    else
-        basinTags = "Optimum_" + string(1:nOpt)';
+        tagVals = string(dbOptima.basinTag(:));
+        nT = min(nOpt, numel(tagVals));
+        okTag = ~ismissing(tagVals(1:nT)) & strlength(tagVals(1:nT)) > 0;
+        basinTags(okTag) = tagVals(okTag);
     end
-    
+    optMetrics = strings(nOpt, 1);
+    if isfield(dbOptima, "optimizedMetric") && ~isempty(dbOptima.optimizedMetric)
+        mVals = string(dbOptima.optimizedMetric(:));
+        nM = min(nOpt, numel(mVals));
+        optMetrics(1:nM) = mVals(1:nM);
+        optMetrics(ismissing(optMetrics)) = "";
+    end
+
+    % Unique optimum geometries (1e-3 nm key)
+    [~, firstOpt, optGroup] = unique(round([optP, optR] * 1e3), "rows", "stable");
+    numRoiOptima = numel(firstOpt);
+
     % Coordinate units check: if XTest is in micrometers (values < 10) and optP is in nm (> 100)
     pTest = XTest(:, 1);
     rTest = XTest(:, 2);
     if max(pTest) < 10 && max(optP) > 100
-        optP_testUnits = optP * 1e-3;
-        optR_testUnits = optR * 1e-3;
-        rRoi_testUnits = options.RoiRadiusNm * 1e-3;
+        unitScale = 1e-3;
     else
-        optP_testUnits = optP;
-        optR_testUnits = optR;
-        rRoi_testUnits = options.RoiRadiusNm;
+        unitScale = 1;
     end
-    
-    roiRows = {};
-    for j = 1:nOpt
-        distJ = sqrt((pTest - optP_testUnits(j)).^2 + (rTest - optR_testUnits(j)).^2);
-        inRoiJ = distJ <= rRoi_testUnits;
-        roiMaskAll = roiMaskAll | inRoiJ;
-        nPointsJ = nnz(inRoiJ);
-        
-        if nPointsJ > 0
-            for k = 1:numTargets
-                yT_roi_raw = YTrue(inRoiJ, k);
-                yP_roi_raw = YPred(inRoiJ, k);
-                validRoiK = isfinite(yT_roi_raw) & isfinite(yP_roi_raw);
-                yT_roi = yT_roi_raw(validRoiK);
-                yP_roi = yP_roi_raw(validRoiK);
-                if isempty(yT_roi)
-                    continue;
-                end
-                diff_roi = yP_roi - yT_roi;
-                yT_global = YTrue(isfinite(YTrue(:, k)), k);
-                
-                rmse_roi = sqrt(mean(diff_roi.^2, 'omitnan'));
-                yRange = max(yT_roi, [], 'omitnan') - min(yT_roi, [], 'omitnan');
-                if yRange < 1e-6 && ~isempty(yT_global)
-                    % Fall back to global test range if local basin is very tight
-                    yRange = max(yT_global, [], 'omitnan') - min(yT_global, [], 'omitnan');
-                end
-                nrmse_roi = (rmse_roi / max(yRange, eps)) * 100;
-                
-                logT = log10(max(yT_roi, 0) + 1);
-                logP = log10(max(yP_roi, 0) + 1);
-                rmsle_roi = sqrt(mean((logP - logT).^2, 'omitnan'));
-                logRange = max(logT, [], 'omitnan') - min(logT, [], 'omitnan');
-                if logRange < 1e-4 && ~isempty(yT_global)
-                    logGlobal = log10(max(yT_global, 0) + 1);
-                    logRange = max(logGlobal, [], 'omitnan') - min(logGlobal, [], 'omitnan');
-                end
-                nrmsle_roi = (rmsle_roi / max(logRange, eps)) * 100;
-                
-                meanRelDev = mean(abs(diff_roi) ./ max(abs(yT_roi), 1e-4), 'omitnan') * 100;
-                
-                ssTot = sum((yT_roi - mean(yT_roi, 'omitnan')).^2, 'omitnan');
-                ssRes = sum(diff_roi.^2, 'omitnan');
-                r2_roi = 1 - ssRes / max(ssTot, eps);
-                
-                roiRows{end+1, 1} = struct( ...
-                    'BasinTag', basinTags(j), ...
-                    'OptPeriodNm', optP(j), ...
-                    'OptRadiusNm', optR(j), ...
-                    'NumSamples', numel(yT_roi), ...
-                    'Target', targetNames(k), ...
-                    'LocalRMSE', rmse_roi, ...
-                    'LocalNRMSE_Pct', nrmse_roi, ...
-                    'LocalN_RMSLE_Pct', nrmsle_roi, ...
-                    'MeanRelDev_Pct', meanRelDev, ...
-                    'LocalR2', r2_roi);
-            end
+    rRoi_testUnits = options.RoiRadiusNm * unitScale;
+
+    % Global test range per channel (linear and log10(1+y))
+    globalRange = nan(1, numTargets);
+    globalLogRange = nan(1, numTargets);
+    for k = 1:numTargets
+        yG = YTrue(isfinite(YTrue(:, k)), k);
+        if ~isempty(yG)
+            globalRange(k) = max(yG) - min(yG);
+            lG = log10(max(yG, 0) + 1);
+            globalLogRange(k) = max(lG) - min(lG);
         end
     end
-    
+
+    roiRows = {};
+    for g = 1:numRoiOptima
+        j = firstOpt(g);
+        members = find(optGroup == g);
+        distJ = sqrt((pTest - optP(j) * unitScale).^2 + (rTest - optR(j) * unitScale).^2);
+        inRoiJ = distJ <= rRoi_testUnits;
+        roiMaskAll = roiMaskAll | inRoiJ;
+        if ~any(inRoiJ)
+            continue;
+        end
+        numRoiCovered = numRoiCovered + 1;
+        nGeomJ = size(unique(round([pTest(inRoiJ), rTest(inRoiJ)] * 1e6), "rows"), 1);
+        tagList = unique(basinTags(members), "stable");
+        tagStr = strjoin(tagList(:)', "/");
+        metricList = unique(optMetrics(members(strlength(optMetrics(members)) > 0)), "stable");
+        metricStr = "";
+        if ~isempty(metricList)
+            metricStr = strjoin(metricList(:)', ", ");
+        end
+
+        for k = 1:numTargets
+            yT_roi_raw = YTrue(inRoiJ, k);
+            yP_roi_raw = YPred(inRoiJ, k);
+            validRoiK = isfinite(yT_roi_raw) & isfinite(yP_roi_raw);
+            yT_roi = yT_roi_raw(validRoiK);
+            yP_roi = yP_roi_raw(validRoiK);
+            if isempty(yT_roi)
+                continue;
+            end
+            diff_roi = yP_roi - yT_roi;
+
+            rmse_roi = sqrt(mean(diff_roi.^2, 'omitnan'));
+            nrmse_roi = (rmse_roi / max(globalRange(k), eps)) * 100;
+
+            logT = log10(max(yT_roi, 0) + 1);
+            logP = log10(max(yP_roi, 0) + 1);
+            rmsle_roi = sqrt(mean((logP - logT).^2, 'omitnan'));
+            nrmsle_roi = (rmsle_roi / max(globalLogRange(k), eps)) * 100;
+
+            meanRelDev = mean(abs(diff_roi) ./ max(abs(yT_roi), 1e-4), 'omitnan') * 100;
+
+            ssTot = sum((yT_roi - mean(yT_roi, 'omitnan')).^2, 'omitnan');
+            ssRes = sum(diff_roi.^2, 'omitnan');
+            r2_roi = 1 - ssRes / max(ssTot, eps);
+
+            roiRows{end+1, 1} = struct( ...
+                'BasinTag', tagStr, ...
+                'OptimizedMetrics', metricStr, ...
+                'NumOptima', numel(members), ...
+                'OptPeriodNm', optP(j), ...
+                'OptRadiusNm', optR(j), ...
+                'NumTestGeometries', nGeomJ, ...
+                'NumSamples', numel(yT_roi), ...
+                'Target', targetNames(k), ...
+                'LocalRMSE', rmse_roi, ...
+                'LocalNRMSE_Pct', nrmse_roi, ...
+                'LocalN_RMSLE_Pct', nrmsle_roi, ...
+                'MeanRelDev_Pct', meanRelDev, ...
+                'LocalR2', r2_roi); %#ok<AGROW>
+        end
+    end
+
     if ~isempty(roiRows)
         tblRoiOptima = struct2table(vertcat(roiRows{:}));
     end
-    
+
     % Combined RoI metrics across all basins
     if any(roiMaskAll)
         combRows = {};
@@ -436,24 +486,20 @@ if ~isempty(dbOptima) && isstruct(dbOptima) && isfield(dbOptima, "period") && ~i
                 continue;
             end
             diff_c = yP_c - yT_c;
-            yT_global = YTrue(isfinite(YTrue(:, k)), k);
-            
+
             rmse_c = sqrt(mean(diff_c.^2, 'omitnan'));
-            yRange = max(yT_global, [], 'omitnan') - min(yT_global, [], 'omitnan');
-            nrmse_c = (rmse_c / max(yRange, eps)) * 100;
-            
+            nrmse_c = (rmse_c / max(globalRange(k), eps)) * 100;
+
             logT = log10(max(yT_c, 0) + 1);
             logP = log10(max(yP_c, 0) + 1);
             rmsle_c = sqrt(mean((logP - logT).^2, 'omitnan'));
-            logGlobal = log10(max(yT_global, 0) + 1);
-            logRange = max(logGlobal, [], 'omitnan') - min(logGlobal, [], 'omitnan');
-            nrmsle_c = (rmsle_c / max(logRange, eps)) * 100;
-            
+            nrmsle_c = (rmsle_c / max(globalLogRange(k), eps)) * 100;
+
             ssTot = sum((yT_c - mean(yT_c, 'omitnan')).^2, 'omitnan');
             ssRes = sum(diff_c.^2, 'omitnan');
             r2_c = 1 - ssRes / max(ssTot, eps);
             meanRel = mean(abs(diff_c) ./ max(abs(yT_c), 1e-4), 'omitnan') * 100;
-            
+
             combRows{end+1, 1} = struct( ...
                 'Target', targetNames(k), ...
                 'TotalRoiSamples', numel(yT_c), ...
@@ -461,11 +507,36 @@ if ~isempty(dbOptima) && isstruct(dbOptima) && isfield(dbOptima, "period") && ~i
                 'RoI_NRMSE_Pct', nrmse_c, ...
                 'RoI_N_RMSLE_Pct', nrmsle_c, ...
                 'RoI_MeanRelDev_Pct', meanRel, ...
-                'RoI_R2', r2_c);
+                'RoI_R2', r2_c); %#ok<AGROW>
         end
         tblRoiCombined = struct2table(vertcat(combRows{:}));
     end
 end
+numRoiGeometries = 0;
+if any(roiMaskAll)
+    numRoiGeometries = size(unique(round(XTest(roiMaskAll, 1:2) * 1e6), "rows"), 1);
+end
+
+%% 5b. Tier 4: Full-wave FEM verification of the saved optima (db.Optima.Sim)
+optimaFem = struct("available", false, "message", "No FEM verification data in db.Optima.Sim.");
+if isstruct(dbOptima) && isfield(dbOptima, "Sim") && isstruct(dbOptima.Sim) && ~isempty(fieldnames(dbOptima.Sim))
+    try
+        optimaFem = computeOptimaFemVerificationMetrics(model, dbOptima, ...
+            Ri = options.Ri, ...
+            Dataset = dataset, ...
+            PredictedSoA = options.OptimaPredictedSoA, ...
+            AnalyteSpectrum = options.AnalyteSpectrum, ...
+            Verbose = options.Verbose);
+    catch ME_fem
+        optimaFem = struct("available", false, "message", string(ME_fem.message));
+        if options.Verbose
+            warning("computeSurrogateEvaluationMetrics:Tier4Failed", ...
+                "Tier 4 (FEM-verified optima) skipped: %s", ME_fem.message);
+        end
+    end
+end
+hasTier4 = isfield(optimaFem, "available") && optimaFem.available ...
+    && isfield(optimaFem, "spectralSummary") && ~isempty(optimaFem.spectralSummary);
 
 %% 6. Generate Journal-Ready LaTeX Table (Transposed Layout)
 targetHeaders = strings(1, numTargets);
@@ -500,24 +571,65 @@ t2NrmseRow = "    Density-compensated $\text{NRMSE}_{\text{IDW}}$ (\%) & " + ...
 t2R2Row = "    Density-compensated $R^2_{\text{IDW}}$               & " + ...
     strjoin(arrayfun(@(k) sprintf("%.4f", r2Idw(k)), 1:numTargets), "  & ") + "  \\";
 
-% Build Tier 3 row
-roiVals = strings(1, numTargets);
+% Build Tier 3 rows
+roiVals = repmat("---", 1, numTargets);
+roiR2Vals = repmat("---", 1, numTargets);
 for k = 1:numTargets
     tName = targetNames(k);
-    roiVals(k) = "---";
     if ~isempty(tblRoiCombined) && ismember("RoI_NRMSE_Pct", tblRoiCombined.Properties.VariableNames)
         roiIdx = find(string(tblRoiCombined.Target) == tName, 1);
         if ~isempty(roiIdx) && isfinite(tblRoiCombined.RoI_NRMSE_Pct(roiIdx))
             roiVals(k) = sprintf("%.2f\\%%", tblRoiCombined.RoI_NRMSE_Pct(roiIdx));
         end
+        if ~isempty(roiIdx) && isfinite(tblRoiCombined.RoI_R2(roiIdx))
+            roiR2Vals(k) = sprintf("%.4f", tblRoiCombined.RoI_R2(roiIdx));
+        end
     end
 end
 t3NrmseRow = "    Local resonance basin $\text{NRMSE}_{\text{RoI}}$ (\%)\textsuperscript{$a$} & " + ...
     strjoin(roiVals, " & ") + " \\";
+t3R2Row = "    Local resonance basin $R^2_{\text{RoI}}$ & " + strjoin(roiR2Vals, " & ") + " \\";
+
+% Build Tier 4 rows (FEM-verified optima)
+t4All = repmat("---", 1, numTargets);
+t4Unseen = repmat("---", 1, numTargets);
+t4R2 = repmat("---", 1, numTargets);
+if hasTier4
+    ss = optimaFem.spectralSummary;
+    for k = 1:numTargets
+        j = find(string(ss.Target) == canonicalChannel(targetNames(k)), 1);
+        if isempty(j), continue; end
+        if isfinite(ss.NRMSE_All_Pct(j)),    t4All(k) = sprintf("%.2f\\%%", ss.NRMSE_All_Pct(j)); end
+        if isfinite(ss.NRMSE_Unseen_Pct(j)), t4Unseen(k) = sprintf("%.2f\\%%", ss.NRMSE_Unseen_Pct(j)); end
+        if isfinite(ss.R2_All(j)),           t4R2(k) = sprintf("%.4f", ss.R2_All(j)); end
+    end
+end
+
+roiFootnote = sprintf(['  \\textsuperscript{$a$}\\,Tier 3 pools the holdout test samples whose geometry lies within ', ...
+    '$R_{\\text{roi}} = %g \\, \\text{nm}$ of a saved optimum (%d unique optimum geometries, %d covered by %d test geometries, %d spectral samples); ', ...
+    'NRMSE is normalized by the global test range of each channel.'], ...
+    options.RoiRadiusNm, numRoiOptima, numRoiCovered, numRoiGeometries, nnz(roiMaskAll));
+
+tier4Lines = strings(0, 1);
+tier4Footnote = strings(0, 1);
+captionTiers = "three-tier evaluation framework: Tier 1 (Holdout Test Split), Tier 2 (Unbiased Inverse Density Weighting, IDW), and Tier 3 (Modal Optima Region of Interest, RoI)";
+if hasTier4
+    captionTiers = "four-tier evaluation framework: Tier 1 (Holdout Test Split), Tier 2 (Unbiased Inverse Density Weighting, IDW), Tier 3 (Modal Optima Region of Interest, RoI), and Tier 4 (full-wave FEM verification of the surrogate-proposed optima)";
+    tier4Lines = [
+        "    \midrule"
+        "    \multicolumn{" + (numTargets + 1) + "}{l}{\textit{Tier 4: Full-Wave FEM Verification of Surrogate-Proposed Optima}} \\"
+        "    Spectral $\text{NRMSE}_{\text{FEM}}$, all wavelengths (\%)\textsuperscript{$b$} & " + strjoin(t4All, " & ") + " \\"
+        "    Spectral $\text{NRMSE}_{\text{FEM}}$, unseen wavelengths (\%) & " + strjoin(t4Unseen, " & ") + " \\"
+        "    Spectral $R^2_{\text{FEM}}$, all wavelengths & " + strjoin(t4R2, " & ") + " \\"
+    ];
+    tier4Footnote = string(sprintf(['  \\\\\\textsuperscript{$b$}\\,Tier 4 compares the surrogate with independent full-wave FEM spectra of %d optima ', ...
+        '(%d unique geometries, %g wavelengths each, of which those not on the %d-wavelength training grid are counted as unseen).'], ...
+        optimaFem.numVerified, optimaFem.numUniqueGeometries, optimaFem.numWavelengthsMedian, optimaFem.numTrainLambda));
+end
 
 latexLines = [
     "\begin{table}[htbp]"
-    "  \caption{Surrogate model generalization across the three-tier evaluation framework: Tier 1 (Holdout Test Split), Tier 2 (Unbiased Inverse Density Weighting, IDW), and Tier 3 (Modal Optima Region of Interest, RoI).}"
+    "  \caption{Surrogate model generalization across the " + captionTiers + ".}"
     "  \label{tab:surrogate-generalization}"
     "  \centering"
     "  \small"
@@ -537,14 +649,21 @@ latexLines = [
     "    \midrule"
     "    \multicolumn{" + (numTargets + 1) + "}{l}{\textit{Tier 3: Modal Optima Region of Interest (RoI) Local Accuracy}} \\"
     t3NrmseRow
+    t3R2Row
+    tier4Lines
     "    \bottomrule"
     "  \end{tabular}"
     "  \vspace{0.4em}"
     "  \raggedright\footnotesize"
-    "  \textsuperscript{$a$}\,Tier 3 Region of Interest (RoI) metrics are populated tentatively pending final multi-start local basin clustering ($R_{\text{roi}} = 20 \, \text{nm}$)."
+    string(roiFootnote)
+    tier4Footnote
     "\end{table}"
 ];
 latexSummary = strjoin(latexLines, newline);
+latexOptimaSummary = "";
+if hasTier4 && isfield(optimaFem, "latexTable")
+    latexOptimaSummary = string(optimaFem.latexTable);
+end
 
 %% 7. Formatted ASCII Summary Text (Transposed Layout)
 targetHdrsAscii = strings(1, numTargets);
@@ -562,6 +681,8 @@ t1R2Ascii = strings(1, numTargets);
 t2NrmseAscii = strings(1, numTargets);
 t2R2Ascii = strings(1, numTargets);
 t3NrmseAscii = strings(1, numTargets);
+t4AllAscii = repmat("|               --- ", 1, numTargets);
+t4UnseenAscii = repmat("|               --- ", 1, numTargets);
 
 for k = 1:numTargets
     t1NrmseAscii(k) = sprintf("| %17.2f%%", nrmseBiased(k));
@@ -580,6 +701,18 @@ for k = 1:numTargets
         t3NrmseAscii(k) = sprintf("| %17.2f%%", val);
     else
         t3NrmseAscii(k) = "|               --- ";
+    end
+
+    if hasTier4
+        j = find(string(optimaFem.spectralSummary.Target) == canonicalChannel(tName), 1);
+        if ~isempty(j)
+            if isfinite(optimaFem.spectralSummary.NRMSE_All_Pct(j))
+                t4AllAscii(k) = sprintf("| %17.2f%%", optimaFem.spectralSummary.NRMSE_All_Pct(j));
+            end
+            if isfinite(optimaFem.spectralSummary.NRMSE_Unseen_Pct(j))
+                t4UnseenAscii(k) = sprintf("| %17.2f%%", optimaFem.spectralSummary.NRMSE_Unseen_Pct(j));
+            end
+        end
     end
 end
 
@@ -600,10 +733,20 @@ asciiLines = [
     sprintf("  • Compensated NRMSE (%%)             ") + strjoin(t2NrmseAscii, "")
     sprintf("  • Compensated R^2                   ") + strjoin(t2R2Ascii, "")
     sepLineAscii
-    sprintf("%-38s", "Tier 3: Modal Optima RoI (20 nm)") + emptyColPads
+    sprintf("%-38s", sprintf("Tier 3: Modal Optima RoI (%g nm)", options.RoiRadiusNm)) + emptyColPads
     sprintf("  • Local Basin NRMSE (%%)             ") + strjoin(t3NrmseAscii, "")
-    equalLineAscii
 ];
+if hasTier4
+    asciiLines = [asciiLines
+        sepLineAscii
+        sprintf("%-38s", sprintf("Tier 4: FEM-verified optima (%d)", optimaFem.numVerified)) + emptyColPads
+        sprintf("  • Spectral NRMSE, all wl (%%)        ") + strjoin(t4AllAscii, "")
+        sprintf("  • Spectral NRMSE, unseen wl (%%)     ") + strjoin(t4UnseenAscii, "")];
+end
+asciiLines = [asciiLines; equalLineAscii];
+if hasTier4 && isfield(optimaFem, "summaryText")
+    asciiLines = [asciiLines; string(optimaFem.summaryText)];
+end
 summaryText = strjoin(asciiLines, newline);
 
 if options.Verbose
@@ -616,12 +759,34 @@ perfReport.globalBiased   = tblBiased;
 perfReport.globalUnbiased = tblUnbiased;
 perfReport.roiOptima      = tblRoiOptima;
 perfReport.roiCombined    = tblRoiCombined;
+perfReport.optimaFem      = optimaFem;
 perfReport.latexSummary   = latexSummary;
+perfReport.latexOptimaSummary = latexOptimaSummary;
 perfReport.summaryText    = summaryText;
 perfReport.timestamp      = string(datetime('now', 'Format', 'yyyy-MM-dd HH:mm:ss'));
 perfReport.numTestSamples = N_test;
 perfReport.numIdwSamples  = N_idw;
 perfReport.idwScope       = options.IdwScope;
 perfReport.numRoiSamples  = nnz(roiMaskAll);
+perfReport.numRoiGeometries = numRoiGeometries;
+perfReport.numRoiOptima   = numRoiOptima;
+perfReport.numRoiOptimaCovered = numRoiCovered;
+perfReport.roiRadiusNm    = options.RoiRadiusNm;
 perfReport.idwWeights     = idwWeights;
+end
+
+function canon = canonicalChannel(name)
+%canonicalChannel Map legacy channel aliases to the canonical Tier 4 channel names.
+    switch lower(string(name))
+        case {"abs", "absorptance"}
+            canon = "Abs";
+        case {"ef_max", "e4_max", "m2_max", "e4"}
+            canon = "EF_max";
+        case {"ee_v", "ef_vol"}
+            canon = "EE_V";
+        case {"ee_s", "ef_surf"}
+            canon = "EE_S";
+        otherwise
+            canon = string(name);
+    end
 end

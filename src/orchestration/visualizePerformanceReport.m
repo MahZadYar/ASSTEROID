@@ -62,6 +62,7 @@ end
         colT1     = [72, 178, 172]/255;  % ASSTEROID Teal (#48b2ac) (Tier 1: Holdout)
         colT2     = [153, 78, 243]/255;  % ASSTEROID Purple (#994ef3) (Tier 2: IDW)
         colT3     = [235, 179, 79]/255;  % ASSTEROID Gold (#ebb34f) (Tier 3: Optima RoI)
+        colT4     = [128, 154, 236]/255; % ASSTEROID Blue A70 (#809aec) (Tier 4: FEM-verified optima)
     else
         colBg     = [0.98, 0.98, 0.99];
         colAxBg   = [1.00, 1.00, 1.00];
@@ -71,12 +72,19 @@ end
         colT1     = [39, 146, 141]/255;  % Teal base
         colT2     = [127, 0, 224]/255;   % Purple base
         colT3     = [201, 148, 44]/255;  % Gold base
+        colT4     = [36, 30, 195]/255;   % Blue A40 base
     end
 
     %% 2. Extract Data Matrices
-    % Columns: Tier 1 (Holdout), Tier 2 (IDW), Tier 3 (RoI)
-    nrmseMat = nan(numTargets, 3);
-    r2Mat    = nan(numTargets, 3);
+    % Columns: Tier 1 (Holdout), Tier 2 (IDW), Tier 3 (RoI), Tier 4 (FEM-verified optima)
+    tblF = [];
+    if isfield(perfReport, "optimaFem") && isstruct(perfReport.optimaFem) && isfield(perfReport.optimaFem, "available") ...
+            && perfReport.optimaFem.available && ~isempty(perfReport.optimaFem.spectralSummary)
+        tblF = perfReport.optimaFem.spectralSummary;
+    end
+    nTiers = 3 + ~isempty(tblF);
+    nrmseMat = nan(numTargets, nTiers);
+    r2Mat    = nan(numTargets, nTiers);
 
     for k = 1:numTargets
         tName = targets(k);
@@ -101,6 +109,15 @@ end
                 end
             end
         end
+
+        % Tier 4
+        if ~isempty(tblF)
+            fIdx = find(string(tblF.Target) == canonicalChannel(tName), 1);
+            if ~isempty(fIdx)
+                nrmseMat(k, 4) = double(tblF.NRMSE_All_Pct(fIdx));
+                r2Mat(k, 4)    = double(tblF.R2_All(fIdx));
+            end
+        end
     end
 
     %% 3. Layout Construction
@@ -117,15 +134,19 @@ end
     if isprop(tTitle, "Color"), tTitle.Color = colText; end
 
     seriesLabels = ["Tier 1: Holdout Split", "Tier 2: IDW Unbiased", "Tier 3: Optima RoI"];
+    if nTiers >= 4
+        seriesLabels(4) = sprintf("Tier 4: FEM-verified optima (%d)", perfReport.optimaFem.numVerified);
+    end
+    tierColors = {colT1, colT2, colT3, colT4};
     catTargets = categorical(targets, targets);
 
     %% 4. Tile 1: NRMSE (%) Grouped Bars (Logarithmic Y-Axis)
     ax1 = nexttile(t, 1);
     hold(ax1, "on");
     b1 = bar(ax1, catTargets, nrmseMat, "grouped");
-    if numel(b1) >= 1, b1(1).FaceColor = colT1; b1(1).EdgeColor = "none"; end
-    if numel(b1) >= 2, b1(2).FaceColor = colT2; b1(2).EdgeColor = "none"; end
-    if numel(b1) >= 3, b1(3).FaceColor = colT3; b1(3).EdgeColor = "none"; end
+    for i = 1:numel(b1)
+        b1(i).FaceColor = tierColors{i}; b1(i).EdgeColor = "none";
+    end
 
     set(ax1, "YScale", "log");
     ylabel(ax1, "Normalized RMSE (%) [Log Scale]", "FontWeight", "bold");
@@ -172,9 +193,9 @@ end
     ax2 = nexttile(t, 2);
     hold(ax2, "on");
     b2 = bar(ax2, catTargets, r2Mat, "grouped");
-    if numel(b2) >= 1, b2(1).FaceColor = colT1; b2(1).EdgeColor = "none"; end
-    if numel(b2) >= 2, b2(2).FaceColor = colT2; b2(2).EdgeColor = "none"; end
-    if numel(b2) >= 3, b2(3).FaceColor = colT3; b2(3).EdgeColor = "none"; end
+    for i = 1:numel(b2)
+        b2(i).FaceColor = tierColors{i}; b2(i).EdgeColor = "none";
+    end
 
     % Ideal reference line at R^2 = 1.0
     yline(ax2, 1.0, "--", "Ideal (R^2 = 1.0)", "Color", [1.0, 0.4, 0.4], ...
@@ -251,3 +272,18 @@ function val = extractTableCol(tbl, candidates, rowIdx)
     end
 end
 
+function canon = canonicalChannel(name)
+%canonicalChannel Map legacy channel aliases to canonical Tier 4 channel names.
+    switch lower(string(name))
+        case {"abs", "absorptance"}
+            canon = "Abs";
+        case {"ef_max", "e4_max", "m2_max", "e4"}
+            canon = "EF_max";
+        case {"ee_v", "ef_vol"}
+            canon = "EE_V";
+        case {"ee_s", "ef_surf"}
+            canon = "EE_S";
+        otherwise
+            canon = string(name);
+    end
+end

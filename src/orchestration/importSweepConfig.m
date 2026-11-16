@@ -41,6 +41,14 @@ function cfg = importSweepConfig(options)
 %       ReplaceExisting      (1,1) logical — Replace matching (p, r, lambda) points for imported metrics (default: false)
 %       RecalculateExisting  (1,1) logical — Legacy merge alias
 %
+%     --- Target Branch ---
+%       TargetBranch         (1,1) string  — "Sim" (default) | "Optima.Sim"
+%           "Optima.Sim" imports a FEM verification sweep of the saved optima:
+%           each imported geometry is matched to a db.Optima row and stored
+%           row-aligned in db.Optima.Sim (db.Sim is left untouched).
+%       ExistingDb           (1,1) struct  — In-memory unified db used as packing base
+%       OptimaMatchTolerance (1,1) double  — (P, r) match radius in nm (default: 0.5)
+%
 %   Output:
 %       cfg — struct with all configuration fields
 %
@@ -84,6 +92,19 @@ arguments
     options.ReplaceExisting     (1,1) logical = false
     options.RecalculateExisting (1,1) logical = false
 
+    %% Target branch
+    % "Sim"        — main simulation database (db.Sim, default)
+    % "Optima.Sim" — FEM verification sweep of the saved optima (db.Optima.Sim);
+    %                every imported geometry is matched to a saved db.Optima row
+    options.TargetBranch        (1,1) string {mustBeMember(options.TargetBranch, ...
+                                    ["Sim", "Optima.Sim"])} = "Sim"
+    % In-memory unified database used as the base for packing (preserves unsaved
+    % session state such as db.Optima). When empty, DatabaseFile is loaded.
+    options.ExistingDb          (:,:) struct  = struct([])
+    % Max Euclidean (P, r) distance in nm between an imported geometry and a
+    % saved optimum for them to be considered the same design.
+    options.OptimaMatchTolerance (1,1) double {mustBePositive} = 0.5
+
     %% Metric variant selection
     % Struct with boolean fields controlling which scalar variants to compute.
     % Each field follows the pattern <BaseMetric>_<variant> e.g. EF_vol_laser.
@@ -120,6 +141,11 @@ end
     cfg.mode                = options.Mode;
     cfg.replaceExisting     = options.ReplaceExisting;
     cfg.recalculateExisting = options.RecalculateExisting;
+
+    % Target branch
+    cfg.targetBranch         = options.TargetBranch;
+    cfg.existingDb           = options.ExistingDb;
+    cfg.optimaMatchTolerance = options.OptimaMatchTolerance;
 
     % Metric variant selection
     cfg.metricVariants      = options.MetricVariants;

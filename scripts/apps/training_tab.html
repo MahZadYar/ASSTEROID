@@ -1053,10 +1053,31 @@ function renderPerformanceReport(data) {
     addRow("Local Resonance Basin R²", function(t) {
         return (t.roiR2 != null && !isNaN(t.roiR2)) ? Number(t.roiR2).toFixed(4) : "—";
     }, false);
+
+    // Tier 4 (FEM-verified optima, db.Optima.Sim)
+    var fem = data.optimaFem || {};
+    if (fem.available) {
+        addSectionBanner("Tier 4: Full-Wave FEM Verification of Optima (" + (fem.numVerified || 0) + " optima, " +
+            (fem.numUnique || 0) + " geometries, " + (fem.numWavelengths || 0) + " λ)");
+        addRow("Spectral NRMSE, all λ (%)", function(t) {
+            return (t.femNRMSE != null && !isNaN(t.femNRMSE)) ? Number(t.femNRMSE).toFixed(2) + "%" : "—";
+        }, false);
+        addRow("Spectral NRMSE, unseen λ (%)", function(t) {
+            return (t.femUnseenNRMSE != null && !isNaN(t.femUnseenNRMSE)) ? Number(t.femUnseenNRMSE).toFixed(2) + "%" : "—";
+        }, false);
+        addRow("Spectral R², all λ", function(t) {
+            return (t.femR2 != null && !isNaN(t.femR2)) ? Number(t.femR2).toFixed(4) : "—";
+        }, true);
+    }
+    renderOptimaFemTable(fem);
     
     var meta = document.getElementById("perfReportMeta");
     if (meta) {
-        meta.textContent = "Evaluated on " + (data.numTestSamples || 0) + " test holdout points (" + (data.numRoiSamples || 0) + " within modal optima basins).";
+        var txt = "Evaluated on " + (data.numTestSamples || 0) + " test holdout points (" + (data.numRoiSamples || 0) +
+            " samples from " + (data.numRoiGeometries || 0) + " geometries near " + (data.numRoiOptimaCovered || 0) +
+            "/" + (data.numRoiOptima || 0) + " optimum geometries).";
+        if (!fem.available && fem.message) txt += " Tier 4: " + fem.message;
+        meta.textContent = txt;
     }
 
     var btn = document.getElementById("btnEvalModel");
@@ -1064,6 +1085,36 @@ function renderPerformanceReport(data) {
     if (btn) btn.disabled = false;
     if (btnHead) btnHead.disabled = false;
     setStatus("idle", "Ready");
+}
+
+function renderOptimaFemTable(fem) {
+    var box = document.getElementById("perfOptimaFemBox");
+    var body = document.getElementById("perfOptimaFemBody");
+    if (!box || !body) return;
+    body.innerHTML = "";
+    var rows = (fem && fem.available && fem.metrics) ? fem.metrics : [];
+    if (!Array.isArray(rows)) rows = [rows];
+    if (rows.length === 0) { box.style.display = "none"; return; }
+    box.style.display = "block";
+    var labels = {
+        "Abs_laser": "Abs<sup>L</sup>", "EF_max_laser": "EF<sub>max</sub><sup>L</sup>",
+        "EE_S_laser": "EE<sub>S</sub><sup>L</sup>", "EE_V_laser": "EE<sub>V</sub><sup>L</sup>",
+        "EE_S_broad": "EE<sub>S</sub><sup>broad</sup>", "EE_V_broad": "EE<sub>V</sub><sup>broad</sup>",
+        "EE_S_analyte": "EE<sub>S</sub><sup>analyte</sup>", "EE_V_analyte": "EE<sub>V</sub><sup>analyte</sup>"
+    };
+    function f(v, d, suffix) { return (v != null && !isNaN(v)) ? Number(v).toFixed(d) + (suffix || "") : "—"; }
+    rows.forEach(function(r) {
+        var tr = document.createElement("tr");
+        tr.style.cssText = "border-bottom:1px solid rgba(255,255,255,0.05);";
+        var agree = r.topAgree === "yes" ? "<span style='color:var(--success);'>✓</span>" :
+                    (r.topAgree === "no" ? "<span style='color:var(--warning);'>✗</span>" : "—");
+        var cells = [labels[r.metric] || r.metric, f(r.medianAPE, 2, "%"), f(r.maxAPE, 2, "%"),
+                     f(r.rhoGeom, 3), f(r.rhoBasin, 3), agree, f(r.regret, 2, "%")];
+        tr.innerHTML = cells.map(function(c, i) {
+            return "<td style='padding:4px 6px; font-size:11px;" + (i > 0 ? " text-align:center;" : "") + "'>" + c + "</td>";
+        }).join("");
+        body.appendChild(tr);
+    });
 }
 
 function evaluateMetricsNow() {
@@ -1826,7 +1877,7 @@ document.addEventListener("DOMContentLoaded", function() {
         </div>
         <div>
             <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;">
-                Evaluates surrogate fidelity across: <strong>Tier 1</strong> (Holdout Test Split), <strong>Tier 2</strong> (Unbiased Inverse Density Weighting, IDW), and <strong>Tier 3</strong> (Modal Optima Region of Interest, RoI).
+                Evaluates surrogate fidelity across: <strong>Tier 1</strong> (Holdout Test Split), <strong>Tier 2</strong> (Unbiased Inverse Density Weighting, IDW), <strong>Tier 3</strong> (Modal Optima Region of Interest, RoI), and — when <code>db.Optima.Sim</code> holds the FEM verification sweep — <strong>Tier 4</strong> (full-wave FEM verification of the optima).
             </div>
             
             <div id="perfReportEmptyState" style="background:var(--bg-tertiary);border:1px dashed var(--border);border-radius:6px;padding:14px;text-align:center;margin-top:4px;">
@@ -1854,6 +1905,26 @@ document.addEventListener("DOMContentLoaded", function() {
                         <tbody id="perfReportBody">
                             <!-- Populated dynamically -->
                         </tbody>
+                    </table>
+                </div>
+
+                <div id="perfOptimaFemBox" style="display:none; overflow-x:auto; margin-top:10px;">
+                    <div style="font-size:10.5px; font-weight:700; color:var(--accent); font-style:italic; margin-bottom:4px;">
+                        Tier 4: Integrated metrics at the FEM-verified optima (surrogate vs. full-wave FEM, identical spectral integration)
+                    </div>
+                    <table style="width:100%; border-collapse:collapse; font-size:11px; text-align:left;">
+                        <thead>
+                            <tr style="border-bottom:1px solid var(--border); background:var(--bg-tertiary);">
+                                <th style="padding:5px 6px;">Metric</th>
+                                <th style="padding:5px 6px; text-align:center;" title="Median absolute percentage error over unique optima geometries">Median APE</th>
+                                <th style="padding:5px 6px; text-align:center;">Max APE</th>
+                                <th style="padding:5px 6px; text-align:center;" title="Spearman rank correlation across optima geometries">ρ<sub>geom</sub></th>
+                                <th style="padding:5px 6px; text-align:center;" title="Spearman correlation of FEM vs surrogate basin ranking for optima optimized for this metric">ρ<sub>basin</sub></th>
+                                <th style="padding:5px 6px; text-align:center;" title="Surrogate and FEM pick the same best basin">Top basin</th>
+                                <th style="padding:5px 6px; text-align:center;" title="FEM performance lost by trusting the surrogate-selected basin">Regret</th>
+                            </tr>
+                        </thead>
+                        <tbody id="perfOptimaFemBody"></tbody>
                     </table>
                 </div>
 

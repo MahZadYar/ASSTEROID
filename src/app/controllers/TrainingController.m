@@ -1129,6 +1129,14 @@ classdef TrainingController < handle
                 nTargets = height(tblB);
                 targetRows = cell(nTargets, 1);
 
+                femSS = table();
+                hasFem = isfield(perfReport, "optimaFem") && isstruct(perfReport.optimaFem) ...
+                    && isfield(perfReport.optimaFem, "available") && perfReport.optimaFem.available ...
+                    && isfield(perfReport.optimaFem, "spectralSummary") && ~isempty(perfReport.optimaFem.spectralSummary);
+                if hasFem
+                    femSS = perfReport.optimaFem.spectralSummary;
+                end
+
                 for k = 1:nTargets
                     tName = string(tblB.Target{k});
                     rowStruct = struct( ...
@@ -1139,7 +1147,10 @@ classdef TrainingController < handle
                         'idwNRMSE', round(double(tblU.IDW_NRMSE_Pct(k)), 2), ...
                         'idwR2', round(double(tblU.IDW_R2(k)), 4), ...
                         'roiNRMSE', NaN, ...
-                        'roiR2', NaN);
+                        'roiR2', NaN, ...
+                        'femNRMSE', NaN, ...
+                        'femUnseenNRMSE', NaN, ...
+                        'femR2', NaN);
 
                     if ~isempty(tblR) && ismember("Target", tblR.Properties.VariableNames)
                         rIdx = find(string(tblR.Target) == tName, 1);
@@ -1148,7 +1159,50 @@ classdef TrainingController < handle
                             rowStruct.roiR2 = round(double(tblR.RoI_R2(rIdx)), 4);
                         end
                     end
+                    if hasFem
+                        fIdx = find(string(femSS.Target) == localCanonicalChannel(tName), 1);
+                        if ~isempty(fIdx)
+                            rowStruct.femNRMSE = round(double(femSS.NRMSE_All_Pct(fIdx)), 2);
+                            rowStruct.femUnseenNRMSE = round(double(femSS.NRMSE_Unseen_Pct(fIdx)), 2);
+                            rowStruct.femR2 = round(double(femSS.R2_All(fIdx)), 4);
+                        end
+                    end
                     targetRows{k} = rowStruct;
+                end
+
+                % Tier 4 integrated eight-metric table (one row per metric)
+                femPayload = struct('available', false, 'numVerified', 0, 'numUnique', 0, ...
+                    'numWavelengths', 0, 'message', "", 'metrics', {cell(0, 1)});
+                if isfield(perfReport, "optimaFem") && isstruct(perfReport.optimaFem) && isfield(perfReport.optimaFem, "message")
+                    femPayload.message = string(perfReport.optimaFem.message);
+                end
+                if hasFem
+                    of = perfReport.optimaFem;
+                    femPayload.available = true;
+                    femPayload.numVerified = double(of.numVerified);
+                    femPayload.numUnique = double(of.numUniqueGeometries);
+                    femPayload.numWavelengths = double(of.numWavelengthsMedian);
+                    mRows = cell(0, 1);
+                    if ~isempty(of.scalar)
+                        for k = 1:height(of.scalar)
+                            mName = string(of.scalar.Metric(k));
+                            mr = struct('metric', mName, ...
+                                'medianAPE', round(double(of.scalar.MedianAPE_Pct(k)), 2), ...
+                                'maxAPE', round(double(of.scalar.MaxAPE_Pct(k)), 2), ...
+                                'rhoGeom', round(double(of.scalar.SpearmanRho(k)), 3), ...
+                                'rhoBasin', NaN, 'topAgree', "", 'regret', NaN);
+                            if ~isempty(of.basinRanking)
+                                j = find(of.basinRanking.OptimizedMetric == mName, 1);
+                                if ~isempty(j)
+                                    mr.rhoBasin = round(double(of.basinRanking.SpearmanRho(j)), 3);
+                                    if of.basinRanking.TopBasinAgree(j), mr.topAgree = "yes"; else, mr.topAgree = "no"; end
+                                    mr.regret = round(double(of.basinRanking.RegretPct(j)), 2);
+                                end
+                            end
+                            mRows{end+1, 1} = mr; %#ok<AGROW>
+                        end
+                    end
+                    femPayload.metrics = mRows;
                 end
 
                 ts = "";
@@ -1159,13 +1213,24 @@ classdef TrainingController < handle
                 if isfield(perfReport, "numRoiSamples"), numRoi = double(perfReport.numRoiSamples); end
                 latex = "";
                 if isfield(perfReport, "latexSummary"), latex = string(perfReport.latexSummary); end
+                if isfield(perfReport, "latexOptimaSummary") && strlength(string(perfReport.latexOptimaSummary)) > 0
+                    latex = latex + newline + newline + string(perfReport.latexOptimaSummary);
+                end
+                numRoiOpt = 0; numRoiCov = 0; numRoiGeom = 0;
+                if isfield(perfReport, "numRoiOptima"), numRoiOpt = double(perfReport.numRoiOptima); end
+                if isfield(perfReport, "numRoiOptimaCovered"), numRoiCov = double(perfReport.numRoiOptimaCovered); end
+                if isfield(perfReport, "numRoiGeometries"), numRoiGeom = double(perfReport.numRoiGeometries); end
 
                 payload = struct( ...
                     'hasReport', true, ...
                     'timestamp', ts, ...
                     'numTestSamples', numTest, ...
                     'numRoiSamples', numRoi, ...
+                    'numRoiOptima', numRoiOpt, ...
+                    'numRoiOptimaCovered', numRoiCov, ...
+                    'numRoiGeometries', numRoiGeom, ...
                     'latexSummary', latex, ...
+                    'optimaFem', femPayload, ...
                     'targets', {targetRows});
 
                 obj.sendToHTML("TrainingPerformanceReport", payload);
@@ -1280,8 +1345,29 @@ classdef TrainingController < handle
                     dbOptima = db_.Optima;
                 end
 
-                obj.sendToHTML("Progress", struct("status", "Evaluating", "message", "Computing Tier 1 (Holdout), Tier 2 (IDW), and Tier 3 (Optima RoI) metrics..."));
-                perfReport = computeSurrogateEvaluationMetrics(model, ds, dbOptima, Verbose=true);
+                % Tier 4 analyte: active app analyte file, else db.Optima.Sim metadata (import-time spectrum)
+                analyteSpec = struct();
+                try
+                    if ~isempty(obj.fig) && isvalid(obj.fig) && isfield(obj.fig.UserData, "app") ...
+                            && isfield(obj.fig.UserData.app, "resolveAnalyteFile")
+                        aFile = string(obj.fig.UserData.app.resolveAnalyteFile());
+                        if strlength(aFile) > 0 && isfile(aFile)
+                            analyteSpec = loadAndNormalizeAnalyteSpectrum(aFile);
+                        end
+                    end
+                catch
+                    analyteSpec = struct();
+                end
+
+                hasOptimaSim = isstruct(dbOptima) && isfield(dbOptima, "Sim") && isstruct(dbOptima.Sim) ...
+                    && ~isempty(fieldnames(dbOptima.Sim));
+                progressMsg = "Computing Tier 1 (Holdout), Tier 2 (IDW), and Tier 3 (Optima RoI) metrics...";
+                if hasOptimaSim
+                    progressMsg = "Computing Tier 1 (Holdout), Tier 2 (IDW), Tier 3 (Optima RoI) and Tier 4 (FEM-verified optima) metrics...";
+                end
+                obj.sendToHTML("Progress", struct("status", "Evaluating", "message", progressMsg));
+                perfReport = computeSurrogateEvaluationMetrics(model, ds, dbOptima, Verbose=true, ...
+                    Ri=ri, AnalyteSpectrum=analyteSpec);
 
                 % Update session and database state
                 if ~isfield(obj.session.db, "Model") || ~isstruct(obj.session.db.Model)
@@ -1326,5 +1412,21 @@ classdef TrainingController < handle
                 obj.sendToHTML("Progress", struct("status", "Error", "message", "Evaluation failed: " + string(ME_eval.message)));
             end
         end
+    end
+end
+
+function canon = localCanonicalChannel(name)
+%localCanonicalChannel Map legacy channel aliases to canonical Tier 4 channel names.
+    switch lower(string(name))
+        case {"abs", "absorptance"}
+            canon = "Abs";
+        case {"ef_max", "e4_max", "m2_max", "e4"}
+            canon = "EF_max";
+        case {"ee_v", "ef_vol"}
+            canon = "EE_V";
+        case {"ee_s", "ef_surf"}
+            canon = "EE_S";
+        otherwise
+            canon = string(name);
     end
 end

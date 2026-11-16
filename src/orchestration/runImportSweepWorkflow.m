@@ -71,8 +71,18 @@ end
     end
 
     %% 3. Load existing database (merge mode)
+    targetBranch = string(getConfigField(cfg, "targetBranch", "Sim"));
+    isOptimaTarget = (targetBranch == "Optima.Sim");
+    if isOptimaTarget
+        reporter.info("Target branch: db.Optima.Sim (FEM verification of saved optima; db.Sim untouched).");
+    end
+
     allDataStruct = struct();
-    if cfg.mode == "merge"
+    if isOptimaTarget
+        % The sweep is first parsed into unique geometries; matching to the saved
+        % optima and merging with any previous db.Optima.Sim batch happen in step 7b.
+        reporter.complete("LoadExisting", "Parsing verification sweep into a fresh geometry table.");
+    elseif cfg.mode == "merge"
         reporter.start("LoadExisting", "Loading existing database...");
         if isfield(cfg, "existingData") && isstruct(cfg.existingData) && ~isempty(fieldnames(cfg.existingData))
             allDataStruct = stripBranchMetadata(cfg.existingData, {}, cfg.metricVariants);
@@ -254,9 +264,43 @@ end
         reporter.warn("ProcessGroups", sprintf("%d groups had <2 spectral points; proceeded with limited data.", fewPointsGroups));
     end
 
+    %% 7b. Base unified database (prefer in-memory session db over disk)
+    dbFile = cfg.databaseFile;
+    existingDb = getConfigField(cfg, "existingDb", struct([]));
+    hasExistingDb = isstruct(existingDb) && isscalar(existingDb) && ~isempty(fieldnames(existingDb));
+
+    optimaReport = struct();
+    if isOptimaTarget
+        reporter.start("MatchOptima", "Matching imported geometries to saved optima (db.Optima)...");
+        db = resolveBaseDatabase(existingDb, hasExistingDb, dbFile, reporter);
+        if ~isfield(db, "Optima") || ~isstruct(db.Optima)
+            db.Optima = struct();
+        end
+        existingOptSim = struct();
+        if cfg.mode == "merge" && isfield(db.Optima, "Sim") && isstruct(db.Optima.Sim) ...
+                && ~isempty(fieldnames(db.Optima.Sim))
+            existingOptSim = stripBranchMetadata(extractBranchAsSoA(db.Optima, "Sim"), {}, struct());
+        end
+        [allDataStruct, optimaReport] = mergeOptimaVerificationData(db.Optima, allDataStruct, ...
+            existingOptSim, cfg, analyteSpectrum, metricNames, c);
+        reporter.complete("MatchOptima", optimaReport.summaryText);
+        if height(optimaReport.unmatchedOptima) > 0 || optimaReport.nUnusedGeometries > 0
+            reporter.warn("MatchOptima", optimaReport.summaryText);
+        end
+
+        % Spectral-integration settings must match the main database for a fair comparison
+        if isfield(db, "Sim") && isstruct(db.Sim) && isfield(db.Sim, "StokesWindow") ...
+                && numel(db.Sim.StokesWindow) == 2 && ~cfg.detectShiftWindow ...
+                && any(abs(double(db.Sim.StokesWindow(:)') - double(cfg.ramanWindow(:)')) > 1e-6)
+            reporter.warn("MatchOptima", sprintf( ...
+                "Raman window [%g, %g] cm^-1 differs from db.Sim.StokesWindow [%g, %g] cm^-1; derived _broad/_analyte metrics will not be comparable.", ...
+                cfg.ramanWindow(1), cfg.ramanWindow(2), db.Sim.StokesWindow(1), db.Sim.StokesWindow(2)));
+        end
+    end
+
     %% 8. Save output (legacy SoA format only if explicitly requested)
     totalEntries = structRowCount(allDataStruct);
-    if strlength(string(cfg.outputFile)) > 0 && (entriesWritten > 0 || replacedDuplicates > 0)
+    if ~isOptimaTarget && strlength(string(cfg.outputFile)) > 0 && (entriesWritten > 0 || replacedDuplicates > 0)
         reporter.start("Save", sprintf("Saving legacy SoA dataset to %s...", cfg.outputFile));
         allData = allDataStruct; %#ok<NASGU>
         w = whos("allData");
@@ -272,29 +316,36 @@ end
 
     %% 9. Pack into unified database
     reporter.start("PackDB", "Packing into unified database (in-memory)...");
-    dbFile = cfg.databaseFile;
-    db = createDatabaseStruct();
-    if isfile(dbFile)
-        try
-            loaded = load(dbFile, "db");
-            if isfield(loaded, "db") && isstruct(loaded.db)
-                db = loaded.db;
-            else
-                reporter.warn("PackDB", "database.mat exists but contains no valid 'db'; using fresh in-memory DB.");
-            end
-        catch ME
-            reporter.warn("PackDB", "Could not load existing database.mat: " + ME.message + ". Using fresh in-memory DB.");
-        end
+    if ~isOptimaTarget
+        db = resolveBaseDatabase(existingDb, hasExistingDb, dbFile, reporter);
     end
 
-    db.Sim = populateBranch(allDataStruct, "Simulation.FEM.COMSOL", ...
-        "LaserWl", cfg.laserWavelength, ...
-        "StokesWindow", cfg.ramanWindow);
+    analyteArgs = {};
+    if isstruct(analyteSpectrum) && isfield(analyteSpectrum, "shift_cm") && isfield(analyteSpectrum, "intensity")
+        analyteArgs = {"AnalyteSpectrum", double(analyteSpectrum.intensity(:)'), ...
+                       "AnalyteShifts",   double(analyteSpectrum.shift_cm(:)')};
+    end
 
-    % Store the column schema in the database
-    db.Schema = schema;
+    if isOptimaTarget
+        db.Optima.Sim = populateBranch(allDataStruct, "Simulation.FEM.COMSOL.OptimaVerification", ...
+            "Parent", "Optima", ...
+            "LaserWl", cfg.laserWavelength, ...
+            "StokesWindow", cfg.ramanWindow, ...
+            analyteArgs{:});
+        db.Optima.Sim.Method = "matched:" + string(cfg.optimaMatchTolerance) + "nm";
+    else
+        db.Sim = populateBranch(allDataStruct, "Simulation.FEM.COMSOL", ...
+            "LaserWl", cfg.laserWavelength, ...
+            "StokesWindow", cfg.ramanWindow);
+
+        % Store the column schema in the database
+        db.Schema = schema;
+    end
 
     % Populate RI branch if not already present
+    if ~isfield(db, "RI") || ~isstruct(db.RI)
+        db.RI = struct();
+    end
     if isempty(fieldnames(db.RI))
         try
             riData = load_gold_refractive_index();
@@ -308,7 +359,12 @@ end
         end
     end
 
-    reporter.complete("PackDB", sprintf("Prepared db.Sim (%d entries) in memory.", totalEntries));
+    if isOptimaTarget
+        reporter.complete("PackDB", sprintf("Prepared db.Optima.Sim (%d optima rows, %d verified) in memory.", ...
+            totalEntries, optimaReport.nVerified));
+    else
+        reporter.complete("PackDB", sprintf("Prepared db.Sim (%d entries) in memory.", totalEntries));
+    end
 
     %% Assemble results
     allData = allDataStruct;
@@ -322,6 +378,7 @@ end
     summary.inputFile          = inputPath;
     summary.outputFile         = cfg.outputFile;
     summary.databaseFile       = dbFile;
+    summary.targetBranch       = targetBranch;
 
     results = struct();
     results.allData      = allData;
@@ -329,6 +386,7 @@ end
     results.summary      = summary;
     results.cfg          = cfg;
     results.schema       = schema;
+    results.optimaReport = optimaReport;
     results.elapsedTotal = toc(totalTimer);
 
     reporter.info(sprintf("Import complete in %.1f s. Total entries: %d", ...
@@ -338,6 +396,27 @@ end
 %% ========================================================================
 %  LOCAL HELPERS
 %  ========================================================================
+
+function db = resolveBaseDatabase(existingDb, hasExistingDb, dbFile, reporter)
+    %resolveBaseDatabase In-memory session db if provided, else database file, else fresh.
+    if hasExistingDb
+        db = existingDb;
+        return;
+    end
+    db = createDatabaseStruct();
+    if strlength(string(dbFile)) > 0 && isfile(dbFile)
+        try
+            loaded = load(dbFile, "db");
+            if isfield(loaded, "db") && isstruct(loaded.db)
+                db = loaded.db;
+            else
+                reporter.warn("PackDB", "database.mat exists but contains no valid 'db'; using fresh in-memory DB.");
+            end
+        catch ME
+            reporter.warn("PackDB", "Could not load existing database.mat: " + ME.message + ". Using fresh in-memory DB.");
+        end
+    end
+end
 
 function inputPath = resolveInputFile(cfg)
     %resolveInputFile Find the sweep data file.

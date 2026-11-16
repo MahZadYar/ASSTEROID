@@ -69,7 +69,77 @@ assert(abs(yLegacy(1, 1) - (exp(1.0) - 1)) < 1e-10, "Legacy expm1 denormalizatio
 
 fprintf("  ✓ Target-specific and legacy denormalization verified.\n");
 
-%% 4. Print Summary Table preview
+%% 4. Tier 3 de-duplication and Tier 4 (FEM-verified optima) integration
+fprintf("Testing Tier 3 de-duplication and Tier 4 FEM verification...\n");
+rng(7);
+Nt = 400;
+Pt = 600 + 600 * rand(Nt, 1);
+Rt = 0.1 * Pt + 0.3 * Pt .* rand(Nt, 1);
+lamT = 0.80 + 0.3 * rand(Nt, 1);                      % um
+XT = [Pt * 1e-3, Rt * 1e-3, lamT];
+yT4 = [50 + 40 * rand(Nt, 1), 10.^(2 + 3 * rand(Nt, 1)), 10.^(1 + 2 * rand(Nt, 1)), 10.^(2 + 2 * rand(Nt, 1))];
+yP4 = yT4 .* (1 + 0.03 * randn(Nt, 4));
+names4 = ["Abs", "EF_max", "EE_V", "EE_S"];
+
+% Three basins x two metrics; the EE_V_broad and EE_V_analyte optima of basin A share a geometry
+basins = ["A"; "A"; "B"; "B"; "C"; "C"];
+metrics = ["EE_V_broad"; "EE_V_analyte"; "EE_V_broad"; "EE_V_analyte"; "EE_V_broad"; "EE_V_analyte"];
+optP4 = [800; 800; 1000; 1005; 1150; 1150];
+optR4 = [200; 200; 300; 310; 400; 405];
+laserWl = 785;
+shifts = linspace(0, 4200, 61);
+lam61 = 1 ./ (1 / (laserWl * 1e-7) - shifts) * 1e7;   % nm
+nOpt = numel(optP4);
+x = (lam61 - 900) / 80;
+amp = [3; 3; 2; 2.1; 1; 1.05];                          % FEM ranking A > B > C
+femSim = struct("Source", "Simulation.FEM.COMSOL.OptimaVerification", "LaserWl", laserWl, ...
+    "StokesWindow", [100, 4200], "period", optP4, "radius", optR4, ...
+    "lambda", repmat(lam61, nOpt, 1), "isVerified", ones(nOpt, 1), ...
+    "basinTag", basins, "optimizedMetric", metrics);
+femSim.Abs    = 60 + 10 * amp .* exp(-x.^2);
+femSim.EF_max = 1e3 * amp .* (1 + exp(-x.^2));
+femSim.EE_V   = 100 * amp .* (1 + exp(-(x - 0.5).^2));
+femSim.EE_S   = 500 * amp .* (1 + exp(-(x + 0.5).^2));
+dbOpt4 = struct("period", optP4, "radius", optR4, "basinTag", basins, "optimizedMetric", metrics, "Sim", femSim);
+
+% Surrogate: +2% everywhere, but it over-rates basin C so that it would pick C for EE_V_analyte
+pred4 = struct();
+for fn = names4
+    pred4.(fn) = femSim.(fn) * 1.02;
+end
+pred4.EE_V(6, :) = femSim.EE_V(6, :) * 4;
+
+trainLam = lam61(1:2:end)' * 1e-3;                     % every second wavelength was "trained"
+ds4 = struct("XTest", XT, "YTest", yT4, "YPred", yP4, "targetNames", names4, ...
+    "XTrain", [repmat([0.9, 0.2], numel(trainLam), 1), trainLam], ...
+    "XValidation", zeros(0, 3));
+rep4 = computeSurrogateEvaluationMetrics([], ds4, dbOpt4, OptimaPredictedSoA=pred4, Verbose=false);
+
+assert(rep4.numRoiOptima == 5, "Tier 3 must evaluate 5 unique optimum geometries (A shared).");
+assert(isfield(rep4, "optimaFem") && rep4.optimaFem.available, "Tier 4 must be available.");
+of = rep4.optimaFem;
+assert(of.numVerified == 6 && of.numUniqueGeometries == 5, "6 optima on 5 geometries expected.");
+assert(any(of.spectral.Subset == "unseen"), "Unseen wavelength subset expected.");
+eeRow = of.spectralSummary(of.spectralSummary.Target == "Abs", :);
+assert(eeRow.R2_All > 0.9, "Abs spectra with a 2%% bias must keep R^2 > 0.9.");
+rk = of.basinRanking;
+broad = rk(rk.OptimizedMetric == "EE_V_broad", :);
+analyte = rk(rk.OptimizedMetric == "EE_V_analyte", :);
+assert(broad.TopBasinAgree && broad.FemBestBasin == "A", "EE_V_broad: surrogate and FEM agree on basin A.");
+assert(~analyte.TopBasinAgree && analyte.SurrogateBestBasin == "C", "EE_V_analyte: surrogate wrongly prefers C.");
+assert(analyte.RegretPct > 50, "Choosing basin C instead of A must cost > 50%% of FEM EE_V_analyte.");
+assert(contains(rep4.latexSummary, "Tier 4") && strlength(rep4.latexOptimaSummary) > 0, ...
+    "LaTeX summaries must include Tier 4.");
+assert(~contains(rep4.latexSummary, "tentatively"), "Tentative Tier 3 footnote must be replaced.");
+fprintf("  ✓ Tier 3 de-duplication, Tier 4 spectral/scalar fidelity and basin regret verified.\n");
+
+% Without db.Optima.Sim, Tier 4 is reported as unavailable (no error)
+rep5 = computeSurrogateEvaluationMetrics([], ds4, rmfield(dbOpt4, "Sim"), Verbose=false);
+assert(~rep5.optimaFem.available && contains(rep5.latexSummary, "three-tier"), ...
+    "Without db.Optima.Sim the report must stay three-tier.");
+fprintf("  ✓ Tier 4 skipped cleanly without db.Optima.Sim.\n");
+
+%% 5. Print Summary Table preview
 disp(report.globalBiased);
 
 fprintf("=== ALL EVALUATION METRIC TESTS PASSED! ===\n");

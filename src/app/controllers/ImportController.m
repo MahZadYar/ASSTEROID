@@ -145,8 +145,24 @@ classdef ImportController < handle
             analyteFile = obj.resolveAnalyteFile();
             outputFile = obj.resolveOutputFile();
 
+            targetBranch = obj.safeStr(d, "targetBranch", "Sim");
+            if ~ismember(targetBranch, ["Sim", "Optima.Sim"])
+                targetBranch = "Sim";
+            end
+            isOptimaTarget = (targetBranch == "Optima.Sim");
+            if isOptimaTarget
+                outputFile = "";   % never write the legacy allData file for verification sweeps
+                hasOptima = isfield(obj.session.db, "Optima") && isstruct(obj.session.db.Optima) ...
+                    && isfield(obj.session.db.Optima, "period") && ~isempty(obj.session.db.Optima.period);
+                if ~hasOptima
+                    obj.sendToHTML("ImportError", ...
+                        "No saved optima in db.Optima. Save the optima in Stage 5 (or load the database) before importing their FEM verification sweep.");
+                    return;
+                end
+            end
+
             existingSimData = struct();
-            if isfield(obj.session.db, "Sim") && isstruct(obj.session.db.Sim) && ~isempty(fieldnames(obj.session.db.Sim))
+            if ~isOptimaTarget && isfield(obj.session.db, "Sim") && isstruct(obj.session.db.Sim) && ~isempty(fieldnames(obj.session.db.Sim))
                 try
                     existingSimData = extractBranchAsSoA(obj.session.db, "Sim");
                 catch
@@ -210,7 +226,10 @@ classdef ImportController < handle
                 WavelengthTolerance = obj.safeNum(d, "wavelengthTolerance", 1e-4), ...
                 GeometryTolerance   = obj.safeNum(d, "geometryTolerance", 1e-3), ...
                 ExistingData        = existingSimData, ...
-                DatabaseFile        = obj.session.dbFile);
+                DatabaseFile        = obj.session.dbFile, ...
+                TargetBranch        = targetBranch, ...
+                ExistingDb          = obj.session.db, ...
+                OptimaMatchTolerance = obj.safeNum(d, "optimaMatchTolerance", 0.5));
 
             results = runImportSweepWorkflow(cfg, rep);
 
@@ -230,7 +249,7 @@ classdef ImportController < handle
             if isfield(results, "db") && isstruct(results.db)
                 obj.session.db = results.db;
             end
-            if isfield(cfg, "outputFile") && strlength(string(cfg.outputFile)) > 0
+            if ~isOptimaTarget && isfield(cfg, "outputFile") && strlength(string(cfg.outputFile)) > 0
                 if ~isfield(obj.session.db, "Global") || ~isstruct(obj.session.db.Global)
                     obj.session.db.Global = struct();
                 end
@@ -255,6 +274,18 @@ classdef ImportController < handle
 
             obj.refreshDbState();
 
+            if isOptimaTarget && isfield(results, "optimaReport") && isfield(results.optimaReport, "summaryText")
+                rpt = results.optimaReport;
+                fprintf("[ImportController] %s\n", rpt.summaryText);
+                if height(rpt.unmatchedOptima) > 0 || rpt.nUnusedGeometries > 0
+                    obj.sendToHTML("ImportWarning", rpt.summaryText);
+                end
+                obj.sendToHTML("ImportComplete", ...
+                    sprintf("db.Optima.Sim: %d/%d optima verified (%d imported geometries, %d unused) in %.1f s", ...
+                        rpt.nVerified, rpt.nOptima, rpt.nImportedGeometries, rpt.nUnusedGeometries, results.elapsedTotal));
+                return;
+            end
+
             obj.sendToHTML("ImportComplete", ...
                 sprintf("%d entries imported in %.1f s", ...
                     results.summary.numEntries, results.elapsedTotal));
@@ -266,7 +297,8 @@ classdef ImportController < handle
             obj.setRunning(true);
             cObj = onCleanup(@() obj.setRunning(false));
 
-            if ~isfield(obj.session.db, "Sim") || ~isstruct(obj.session.db.Sim) || structRowCount(obj.session.db.Sim) == 0
+            if obj.safeStr(d, "targetBranch", "Sim") ~= "Optima.Sim" && ...
+                    (~isfield(obj.session.db, "Sim") || ~isstruct(obj.session.db.Sim) || structRowCount(obj.session.db.Sim) == 0)
                 obj.sendToHTML("ImportError", "No simulation data in database (db.Sim is empty).");
                 return;
             end
@@ -294,13 +326,35 @@ classdef ImportController < handle
                 analyteSpectrum = getDefaultAnalyteSpectrum();
             end
 
-            soaData = extractBranchAsSoA(obj.session.db, "Sim");
-            [soaData, updatedCount] = recomputeDerivedMetrics(soaData, cfg, analyteSpectrum, rep);
+            if obj.safeStr(d, "targetBranch", "Sim") == "Optima.Sim"
+                if ~isfield(obj.session.db, "Optima") || ~isstruct(obj.session.db.Optima) ...
+                        || ~isfield(obj.session.db.Optima, "Sim") || structRowCount(obj.session.db.Optima.Sim) == 0
+                    obj.sendToHTML("ImportError", "No FEM verification data in db.Optima.Sim.");
+                    return;
+                end
+                optBranch = obj.session.db.Optima.Sim;
+                soaData = extractBranchAsSoA(obj.session.db.Optima, "Sim");
+                for fn = ["AnalyteSpectrum", "AnalyteShifts"]
+                    if isfield(soaData, fn), soaData = rmfield(soaData, fn); end
+                end
+                [soaData, updatedCount] = recomputeDerivedMetrics(soaData, cfg, analyteSpectrum, rep);
+                soaFields = fieldnames(soaData);
+                for kf = 1:numel(soaFields)
+                    optBranch.(soaFields{kf}) = soaData.(soaFields{kf});
+                end
+                optBranch.StokesWindow = cfg.ramanWindow;
+                optBranch.AnalyteSpectrum = double(analyteSpectrum.intensity(:)');
+                optBranch.AnalyteShifts = double(analyteSpectrum.shift_cm(:)');
+                obj.session.db.Optima.Sim = optBranch;
+            else
+                soaData = extractBranchAsSoA(obj.session.db, "Sim");
+                [soaData, updatedCount] = recomputeDerivedMetrics(soaData, cfg, analyteSpectrum, rep);
 
-            % Write updated fields back to db.Sim preserving metadata
-            soaFields = fieldnames(soaData);
-            for kf = 1:numel(soaFields)
-                obj.session.db.Sim.(soaFields{kf}) = soaData.(soaFields{kf});
+                % Write updated fields back to db.Sim preserving metadata
+                soaFields = fieldnames(soaData);
+                for kf = 1:numel(soaFields)
+                    obj.session.db.Sim.(soaFields{kf}) = soaData.(soaFields{kf});
+                end
             end
 
             obj.session.markDirty();

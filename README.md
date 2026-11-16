@@ -3,7 +3,7 @@
 **Adaptive Sampling, Surrogate Training, Exploration and Refinement for Optimal Inverse Design**
 
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2026a%20%7C%20R2026b-blue.svg)](https://www.mathworks.com/products/matlab.html)
-[![Version](https://img.shields.io/badge/Version-6.4-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
+[![Version](https://img.shields.io/badge/Version-6.5-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.1021%2Facsnano.XXXXXXX-orange.svg)](#citation)
 [![Zenodo](https://img.shields.io/badge/Data-10.5281%2Fzenodo.XXXXXXX-blue.svg)](#dataset--trained-models)
@@ -319,6 +319,11 @@ Comprehensive architectural specifications, mathematical formalisms, and user ma
 * [Surrogate Checkpoint Guide](docs/checkpoint_guide.md): Checkpointing, training interruption handling, and fine-tuning procedures.
 
 ---
+
+## What's New in Version 6.5
+
+* 🎯 **FEM Verification Branch for Optima (`db.Optima.Sim`)**: Stage 1 gains a *Target Branch* selector. With `"Optima.Sim"`, a dense COMSOL verification sweep of the saved optima is matched geometry-by-geometry to `db.Optima` (Euclidean $(P, r)$ tolerance, default $0.5\text{ nm}$) and stored row-aligned with the optima, keeping `db.Sim` (the training database) free of NaN padding and the verification set strictly out-of-sample. Multi-batch sweeps merge incrementally; unmatched optima and unused geometries are reported ([`mergeOptimaVerificationData`](src/data/mergeOptimaVerificationData.m)).
+* 🧪 **Tier 4 Surrogate Evaluation**: `EvaluateModelPerformance` adds full-wave FEM verification of the optima ([`computeOptimaFemVerificationMetrics`](src/modeling/computeOptimaFemVerificationMetrics.m)): spectral fidelity on training-grid vs. unseen wavelengths, the eight integrated metrics computed with identical spectral integration, per-optimum errors, and basin-ranking agreement with regret. Tier 3 now evaluates shared optimum geometries once and normalizes NRMSE by the global test range.
 
 ## What's New in Version 6.4
 
