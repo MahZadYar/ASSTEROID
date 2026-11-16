@@ -267,7 +267,7 @@ function [mergedEntry, isUpdated] = mergeEntryWithNewWavelengths(oldEntry, newEn
     RamanShift_cm = (1 ./ (laserWl_nm * 1e-9) - 1 ./ lambda_m) / 100;
     mergedEntry.RamanShift = RamanShift_cm;
 
-    ramanWindow = [100, 3600];
+    ramanWindow = [100, 4200];
     if isfield(cfg, "ramanWindow") && numel(cfg.ramanWindow) == 2
         ramanWindow = double(cfg.ramanWindow);
     end

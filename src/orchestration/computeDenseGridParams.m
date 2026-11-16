@@ -35,7 +35,7 @@ function gridParams = computeDenseGridParams(options)
     %
     %   Example:
     %       gp = computeDenseGridParams(LambdaLaser=785, PLimits=[750,950], ...
-    %           RLimits=[50,450], StokesShiftLimits=[100,3600], Resolution=0.75);
+    %           RLimits=[50,450], StokesShiftLimits=[100,4200], Resolution=0.75);
     %       % gp.pSamples in µm, gp.lambdaSamples in µm
     %
     %   See also: predict_dense_spectrum, runLocalizationWorkflow
@@ -44,7 +44,7 @@ function gridParams = computeDenseGridParams(options)
         options.LambdaLaser (1,1) double {mustBePositive} = 785
         options.PLimits (1,2) double {mustBePositive} = [750, 950]
         options.RLimits (1,2) double {mustBePositive} = [50, 700]
-        options.StokesShiftLimits (1,2) double = [100, 3600]
+        options.StokesShiftLimits (1,2) double = [100, 4200]
         options.Resolution (1,1) double {mustBePositive} = 0.75
         options.StokesShiftResolution (1,1) double {mustBePositive} = 2
         options.OutputUnit (1,1) string {mustBeMember(options.OutputUnit, ["nm", "um"])} = "um"

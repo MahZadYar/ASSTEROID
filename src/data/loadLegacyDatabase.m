@@ -5,7 +5,7 @@ function db = loadLegacyDatabase(matFile, options)
 %   an 'allData' variable and converts it into the unified hierarchical
 %   database structure as the Sim branch.
 %
-%   db = loadLegacyDatabase(matFile, LaserWl=785, StokesWindow=[100 3600])
+%   db = loadLegacyDatabase(matFile, LaserWl=785, StokesWindow=[100 4200])
 %   attaches branch-level metadata.
 %
 %   Input:
@@ -13,7 +13,7 @@ function db = loadLegacyDatabase(matFile, options)
 %
 %   Name-Value Arguments:
 %       LaserWl      - scalar (nm), excitation wavelength (default: 785)
-%       StokesWindow - [1x2] (cm^-1), Raman window (default: [100 3600])
+%       StokesWindow - [1x2] (cm^-1), Raman window (default: [100 4200])
 %       BranchName   - string, target branch name (default: "Sim")
 %       SourceTag    - string, provenance tag (default: "Simulation.FEM.COMSOL")
 %
@@ -25,7 +25,7 @@ function db = loadLegacyDatabase(matFile, options)
     arguments
         matFile (1,1) string {mustBeFile}
         options.LaserWl (1,1) double {mustBePositive} = 785
-        options.StokesWindow (1,2) double = [100, 3600]
+        options.StokesWindow (1,2) double = [100, 4200]
         options.BranchName (1,1) string = "Sim"
         options.SourceTag (1,1) string = "Simulation.FEM.COMSOL"
     end

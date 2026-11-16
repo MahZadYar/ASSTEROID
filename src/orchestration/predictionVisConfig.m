@@ -31,13 +31,13 @@ arguments
     options.LambdaLaser           (1,1) double {mustBePositive} = 785
     options.PLimits               (1,2) double = [750, 950]
     options.RLimits               (1,2) double = [50, 700]
-    options.StokesShiftLimits     (1,2) double = [100, 3600]
+    options.StokesShiftLimits     (1,2) double = [100, 4200]
     options.Resolution            (1,1) double {mustBePositive} = 0.75
     options.StokesShiftResolution (1,1) double {mustBePositive} = 2
 
     %% Metrics window (independent of spectral grid)
     options.LinkMetricsToGrid     (1,1) logical = true
-    options.MetricsShiftLimits    (1,2) double  = [100, 3600]
+    options.MetricsShiftLimits    (1,2) double  = [100, 4200]
 
     %% Metrics
     options.Metrics (1,:) string = ["Absorptance", "EF_vol", "EF_surf"]

@@ -60,6 +60,8 @@ classdef PredictionController < handle
                         obj.sendToHTML("SaveComplete", "Database saved.");
                     case {"StopProcess", "StopPrediction"}
                         obj.stopPrediction();
+                    case "PurgePredictions"
+                        obj.purgePredictions();
                     otherwise
                         fprintf("[PredictionController] Unknown event: %s\n", eventName);
                 end
@@ -89,7 +91,7 @@ classdef PredictionController < handle
             radiusMax = obj.safeNum(d, "radiusMax", 700);
             spatialRes = obj.safeNum(d, "spatialResolution", 2);
             stokesMin = obj.safeNum(d, "stokesShiftMin", 100);
-            stokesMax = obj.safeNum(d, "stokesShiftMax", 3600);
+            stokesMax = obj.safeNum(d, "stokesShiftMax", 4200);
             stokesRes = obj.safeNum(d, "stokesShiftResolution", 5);
             batchSize = obj.safeNum(d, "batchSize", 1000);
             interpMethod = obj.safeStr(d, "interpMethod", "linear");
@@ -339,7 +341,7 @@ classdef PredictionController < handle
                         WorkDir=workDir, ...
                         LaserWavelength=laserWl, ...
                         RamanWindow=derivedWindow, ...
-                        DetectShiftWindow=false, ...
+                        DetectShiftWindow=true, ...
                         InterpResolution=stokesRes, ...
                         SpectralInterpMethod="makima");
                     [allDataRaw, ~] = recomputeDerivedMetrics(allDataRaw, derivedCfg, analyteSpec, rep);
@@ -519,6 +521,23 @@ classdef PredictionController < handle
             if ~stopReq
                 stopReq = obj.session.isStopRequested();
             end
+        end
+
+        function purgePredictions(obj)
+        % PURGEPREDICTIONS Remove db.Pred from session database and update UI.
+            if ~isstruct(obj.session.db) || ~isfield(obj.session.db, "Pred")
+                obj.sendToHTML("VisStatus", "No predictions (db.Pred) found in database.");
+                return;
+            end
+            obj.session.db = rmfield(obj.session.db, "Pred");
+            obj.session.markDirty();
+            if ~isempty(obj.fig) && isvalid(obj.fig)
+                obj.fig.UserData.db = obj.session.db;
+                if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "broadcastDbStatus")
+                    obj.fig.UserData.app.broadcastDbStatus();
+                end
+            end
+            obj.sendToHTML("VisStatus", "Purged predictions (db.Pred) from database.");
         end
 
         function stopPrediction(obj)

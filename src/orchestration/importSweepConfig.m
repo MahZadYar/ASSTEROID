@@ -75,8 +75,8 @@ arguments
 
     %% Physical parameters
     options.LaserWavelength     (1,1) double {mustBePositive} = 785
-    options.RamanWindow         (1,2) double = [100, 3600]
-    options.DetectShiftWindow   (1,1) logical = false
+    options.RamanWindow         (1,2) double = [100, 4200]
+    options.DetectShiftWindow   (1,1) logical = true
     options.InterpResolution    (1,1) double {mustBePositive} = 1
     options.SpectralInterpMethod (1,1) string {mustBeMember(options.SpectralInterpMethod, ...
                                     ["makima", "pchip", "linear", "spline"])} = "makima"

@@ -558,7 +558,7 @@ classdef VisualizeController < handle
             lamMax = obj.safeNum(d, "lambdaMax", NaN);
             step = obj.safeNum(d, "lambdaStep", 1);
             if ~(step > 0), step = 1; end
-            defRange = [laserWl, 1 / (1 / laserWl - 3600e-7)];
+            defRange = [laserWl, 1 / (1 / laserWl - 4200e-7)];
             if isstruct(S) && isfield(S, "lambda") && ~isempty(S.lambda)
                 l = double(S.lambda(isfinite(S.lambda)));
                 if ~isempty(l)

@@ -729,6 +729,7 @@ function collectConfig() {
         radiusMax: num("radiusMax"),
         stokesShiftMin: sMin,
         stokesShiftMax: sMax,
+        detectShiftWindow: chk("detectShiftWindow"),
         spatialResolution: num("spatialResolution"),
         stokesShiftResolution: sRes,
         fineTuneSpectralResolution: sRes,
@@ -800,11 +801,19 @@ function toggleMetricsWindow() {
         block.style.opacity = "1";
         minInput.disabled = false;
         maxInput.disabled = false;
-        if (parseFloat(minInput.value) === 100 && parseFloat(maxInput.value) === 3600) {
+        if (parseFloat(minInput.value) === 100 && parseFloat(maxInput.value) === 4200) {
             minInput.value = document.getElementById("stokesShiftMin").value;
             maxInput.value = document.getElementById("stokesShiftMax").value;
         }
     }
+}
+
+function toggleDetectShiftWindow() {
+    var auto = chk("detectShiftWindow");
+    ["stokesShiftMin", "stokesShiftMax", "fineTuneStokesMin", "fineTuneStokesMax"].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.disabled = auto;
+    });
 }
 
 function toggleDataSource() {
@@ -1702,6 +1711,12 @@ function setSeedsFromDbOptima() {
     switchBottomTab("current");
 }
 
+function exportDbOptimaComsol() {
+    var indices = getSelectedDbOptimaIndices();
+    setStatus("running", "Exporting COMSOL...");
+    window.htmlComponent.sendEventToMATLAB("ExportDbOptimaComsol", {indices: indices});
+}
+
 function getSelectedDbOptimaIndices() {
     var cbs = document.querySelectorAll("#dbOptimaTable tbody .db-optima-cb:checked");
     var indices = [];
@@ -1857,11 +1872,17 @@ function toggleAllDbOptima(masterCb) {
                             <div class="field-row">
                                 <div class="field">
                                     <label>Stokes Min (cm⁻¹)</label>
-                                    <input type="number" id="stokesShiftMin" value="100" step="10" onchange="syncStokesMin(this.value)">
+                                    <input type="number" id="stokesShiftMin" value="100" step="10" onchange="syncStokesMin(this.value)" disabled>
                                 </div>
                                 <div class="field">
                                     <label>Stokes Max (cm⁻¹)</label>
-                                    <input type="number" id="stokesShiftMax" value="3600" step="10" onchange="syncStokesMax(this.value)">
+                                    <input type="number" id="stokesShiftMax" value="4200" step="10" onchange="syncStokesMax(this.value)" disabled>
+                                </div>
+                            </div>
+                            <div class="field-row" style="margin-top:2px;">
+                                <div class="field" style="display:flex;align-items:center;gap:6px;">
+                                    <input type="checkbox" id="detectShiftWindow" checked onchange="toggleDetectShiftWindow()">
+                                    <label for="detectShiftWindow" style="cursor:pointer;font-size:11px;">Auto-detect shift window from data</label>
                                 </div>
                             </div>
                             <div class="field">
@@ -1882,7 +1903,7 @@ function toggleAllDbOptima(masterCb) {
                                     </div>
                                     <div class="field">
                                         <label>Metrics Max (cm⁻¹)</label>
-                                        <input type="number" id="metricsShiftMax" value="3600" step="10" disabled>
+                                        <input type="number" id="metricsShiftMax" value="4200" step="10" disabled>
                                     </div>
                                 </div>
                             </div>
@@ -2006,8 +2027,8 @@ function toggleAllDbOptima(masterCb) {
                                 <div class="field">
                                     <label>Stokes Window (cm⁻¹)</label>
                                     <div style="display:flex;gap:4px;">
-                                        <input type="number" id="fineTuneStokesMin" value="100" step="10" style="width:50%;" title="Stokes Min (cm⁻¹)" onchange="syncStokesMin(this.value)">
-                                        <input type="number" id="fineTuneStokesMax" value="3600" step="10" style="width:50%;" title="Stokes Max (cm⁻¹)" onchange="syncStokesMax(this.value)">
+                                        <input type="number" id="fineTuneStokesMin" value="100" step="10" style="width:50%;" title="Stokes Min (cm⁻¹)" onchange="syncStokesMin(this.value)" disabled>
+                                        <input type="number" id="fineTuneStokesMax" value="4200" step="10" style="width:50%;" title="Stokes Max (cm⁻¹)" onchange="syncStokesMax(this.value)" disabled>
                                     </div>
                                 </div>
                             </div>
@@ -2190,6 +2211,7 @@ function toggleAllDbOptima(masterCb) {
                             <button class="btn-secondary" onclick="refreshDbOptima()">Refresh</button>
                             <button class="btn-secondary" onclick="deleteSelectedDbOptima()">Delete Selected</button>
                             <button class="btn-secondary" onclick="setSeedsFromDbOptima()">Set as Seeds</button>
+                            <button class="btn-secondary" onclick="exportDbOptimaComsol()">Export COMSOL (.txt)</button>
                         </div>
                     </div>
                     <div class="seeds-table-container">

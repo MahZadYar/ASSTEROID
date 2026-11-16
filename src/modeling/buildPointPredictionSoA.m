@@ -24,7 +24,7 @@ function allData = buildPointPredictionSoA(predictor, periodNm, radiusNm, lambda
         radiusNm double
         lambdaSamples double
         laserWl double = 785
-        stokesShiftLimits double = [100, 3600]
+        stokesShiftLimits double = [100, 4200]
         stokesRes double = 5
         analyteSpectrum struct = struct()
         reporter = []

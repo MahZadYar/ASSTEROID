@@ -65,8 +65,8 @@ function [simData, updatedCount] = recomputeDerivedMetrics(simData, cfg, analyte
 
     % Extract config values using safe field access
     laserWavelength = getConfigField(cfg, "laserWavelength", 785);
-    ramanWindow = getConfigField(cfg, "ramanWindow", [100 3600]);
-    detectShiftWindow = getConfigField(cfg, "detectShiftWindow", false);
+    ramanWindow = getConfigField(cfg, "ramanWindow", [100 4200]);
+    detectShiftWindow = getConfigField(cfg, "detectShiftWindow", true);
     interpResolution = getConfigField(cfg, "interpResolution", 1);
     spectralInterpMethod = getConfigField(cfg, "spectralInterpMethod", "makima");
 

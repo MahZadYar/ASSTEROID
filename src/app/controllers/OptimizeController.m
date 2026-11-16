@@ -63,6 +63,8 @@ classdef OptimizeController < handle
                         obj.deleteDbOptima(eventData);
                     case "SetSeedsFromDbOptima"
                         obj.setSeedsFromDbOptima(eventData);
+                    case "ExportDbOptimaComsol"
+                        obj.exportDbOptimaComsol(eventData);
                     case "RefreshDbState"
                         obj.refreshDbState();
                     case "SaveDatabaseRequest"
@@ -122,8 +124,7 @@ classdef OptimizeController < handle
                     end
                 end
             end
-            sMin = obj.safeNum(d, "stokesShiftMin", 100);
-            sMax = obj.safeNum(d, "stokesShiftMax", 3600);
+            [sMin, sMax] = obj.resolveShiftLimits(d, obj.safeStr(d, "dataSource", "model"), laserWl);
             sRes = obj.safeNum(d, "fineTuneSpectralResolution", obj.safeNum(d, "stokesShiftResolution", 5));
             if metricVariant == "laser"
                 sMin = 0;
@@ -221,8 +222,7 @@ classdef OptimizeController < handle
                     end
                 end
             end
-            sMin = obj.safeNum(d, "stokesShiftMin", 100);
-            sMax = obj.safeNum(d, "stokesShiftMax", 3600);
+            [sMin, sMax] = obj.resolveShiftLimits(d, obj.safeStr(d, "dataSource", "model"), laserWl);
             sRes = obj.safeNum(d, "fineTuneSpectralResolution", obj.safeNum(d, "stokesShiftResolution", 5));
             if metricVariant == "laser"
                 sMin = 0;
@@ -1078,6 +1078,62 @@ classdef OptimizeController < handle
             obj.updateSeeds(struct("seeds", {seeds}));
         end
 
+        function exportDbOptimaComsol(obj, d)
+        % EXPORTDBOPTIMACOMSOL Export saved db.Optima (or selected rows) to COMSOL parameter .txt format.
+            db_ = obj.session.db;
+            if ~isfield(db_, "Optima") || ~isstruct(db_.Optima) || ...
+                    ~isfield(db_.Optima, "period") || ~isfield(db_.Optima, "radius") || ...
+                    isempty(db_.Optima.period)
+                obj.sendError("No saved optima in db.Optima to export.");
+                obj.sendToHTML("ExportCanceled", struct());
+                return;
+            end
+
+            nTotal = numel(db_.Optima.period);
+            if isfield(d, "indices") && ~isempty(d.indices)
+                idx = double(d.indices);
+                idx = idx(idx >= 1 & idx <= nTotal);
+            else
+                idx = 1:nTotal;
+            end
+
+            if isempty(idx)
+                obj.sendError("No valid optima selected to export.");
+                obj.sendToHTML("ExportCanceled", struct());
+                return;
+            end
+
+            outPath = "";
+            if isfield(d, "path") && strlength(string(d.path)) > 0
+                outPath = string(d.path);
+            else
+                defaultFile = fullfile(obj.session.workDir, "optima_comsol.txt");
+                [file, path] = uiputfile("*.txt", "Export Saved Optima (COMSOL Format)", defaultFile);
+                if isequal(file, 0) || isequal(path, 0)
+                    obj.sendToHTML("ExportCanceled", struct());
+                    return;
+                end
+                outPath = string(fullfile(path, file));
+            end
+
+            periods = double(db_.Optima.period(idx));
+            radii   = double(db_.Optima.radius(idx));
+
+            periodStr = strjoin(compose("%.6g", periods(:)'), ", ");
+            radiusStr = strjoin(compose("%.6g", radii(:)'), ", ");
+
+            fid = fopen(outPath, "w");
+            if fid == -1
+                error("exportDbOptimaComsol:FileOpenError", ...
+                    "Could not open file for writing: %s", outPath);
+            end
+            cleanupObj = onCleanup(@() fclose(fid));
+            fprintf(fid, "period ""%s"" [nm]\n", periodStr);
+            fprintf(fid, "particle_r ""%s"" [nm]\n", radiusStr);
+
+            obj.sendToHTML("ExportComplete", struct("path", outPath, "count", numel(idx)));
+        end
+
         function importSeedsCsv(obj, d)
         % IMPORTSEEDSCSV Load seed coordinates from external CSV file.
             csvPath = "";
@@ -1258,8 +1314,7 @@ classdef OptimizeController < handle
             pMax = obj.safeNum(d, "periodMax", 1400);
             rMin = obj.safeNum(d, "radiusMin", 50);
             rMax = obj.safeNum(d, "radiusMax", 700);
-            sMin = obj.safeNum(d, "stokesShiftMin", 100);
-            sMax = obj.safeNum(d, "stokesShiftMax", 3600);
+            [sMin, sMax] = obj.resolveShiftLimits(d, "model", laserWl);
             sRes = obj.safeNum(d, "stokesShiftResolution", 5);
             spatialRes = obj.safeNum(d, "spatialResolution", 2);
 
@@ -1404,6 +1459,20 @@ classdef OptimizeController < handle
 
     %% Internal Helpers
     methods (Access = private)
+        function [sMin, sMax] = resolveShiftLimits(obj, d, dataSource, laserWl)
+            sMin = obj.safeNum(d, "stokesShiftMin", 100);
+            sMax = obj.safeNum(d, "stokesShiftMax", 4200);
+            if obj.safeBool(d, "detectShiftWindow", true)
+                [win, srcLbl] = resolveDbShiftWindow(obj.session.db, dataSource, laserWl, [sMin, sMax]);
+                sMin = win(1);
+                sMax = win(2);
+                if srcLbl ~= "default"
+                    fprintf("[OptimizeController] Auto-detected shift window [%.4g, %.4g] cm^-1 from %s.\n", ...
+                        sMin, sMax, srcLbl);
+                end
+            end
+        end
+
         function previewPrecomputedPredictions(obj, d, baseMetric, metricVariant, rep)
         % PREVIEWPRECOMPUTEDPREDICTIONS Fast preview of existing db.Pred without new predictions.
             rep.info("Loading pre-computed predictions from db.Pred...");

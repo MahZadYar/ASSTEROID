@@ -139,6 +139,36 @@ assert(~rep5.optimaFem.available && contains(rep5.latexSummary, "three-tier"), .
     "Without db.Optima.Sim the report must stay three-tier.");
 fprintf("  ✓ Tier 4 skipped cleanly without db.Optima.Sim.\n");
 
+%% 4b. Structured DB persistence (db.Model.Evaluation & db.Optima.Verification) + Shift Window Auto-Detect
+fprintf("Testing storeEvaluationResultsInDb and resolveDbShiftWindow...\n");
+dbEval = struct("Optima", dbOpt4);
+dbEval = storeEvaluationResultsInDb(dbEval, rep4);
+assert(isfield(dbEval.Model, "Evaluation") && isfield(dbEval.Model, "PerformanceReport"), ...
+    "db.Model.Evaluation and PerformanceReport must both be populated.");
+assert(isfield(dbEval.Optima, "Verification"), "db.Optima.Verification must be populated for Tier 4.");
+
+tmpMat = fullfile(tempdir, "test_eval_persist_" + string(randi(1e6)) + ".mat");
+cTmp = onCleanup(@() delete(tmpMat)); %#ok<NASGU>
+db = dbEval;
+save(tmpMat, "db", "-v7");
+loadedEval = load(tmpMat, "db");
+ev = loadedEval.db.Model.Evaluation;
+ver = loadedEval.db.Optima.Verification;
+assert(ev.tier4_optimaFem.available && ev.tier4_optimaFem.numVerified == 6, ...
+    "Reloaded db.Model.Evaluation must preserve Tier 4 counts.");
+assert(strlength(ev.latex.combined) > 0 && contains(ev.latex.combined, "tab:optima-fem-verification"), ...
+    "Reloaded db.Model.Evaluation.latex.combined must contain both LaTeX tables.");
+assert(ver.basinRanking.data.RegretPct(1) > 50 || ver.basinRanking.data.RegretPct(2) > 50, ...
+    "Reloaded db.Optima.Verification.basinRanking.data must be directly indexable.");
+
+cfgDef = importSweepConfig();
+assert(isequal(cfgDef.ramanWindow, [100, 4200]) && cfgDef.detectShiftWindow, ...
+    "importSweepConfig defaults must be [100, 4200] and DetectShiftWindow=true.");
+[winDet, srcDet] = resolveDbShiftWindow(struct("Sim", femSim), "model", 785, [100, 4200]);
+assert(isequal(winDet, [100, 4200]) && srcDet == "db.Sim.StokesWindow", ...
+    "resolveDbShiftWindow must detect StokesWindow from db.Sim.");
+fprintf("  ✓ Structured DB evaluation persistence & shift-window auto-detection verified.\n");
+
 %% 5. Print Summary Table preview
 disp(report.globalBiased);
 

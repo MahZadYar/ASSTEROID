@@ -1369,11 +1369,8 @@ classdef TrainingController < handle
                 perfReport = computeSurrogateEvaluationMetrics(model, ds, dbOptima, Verbose=true, ...
                     Ri=ri, AnalyteSpectrum=analyteSpec);
 
-                % Update session and database state
-                if ~isfield(obj.session.db, "Model") || ~isstruct(obj.session.db.Model)
-                    obj.session.db.Model = struct();
-                end
-                obj.session.db.Model.PerformanceReport = perfReport;
+                % Update session and database state (stores PerformanceReport, Model.Evaluation, Optima.Verification)
+                obj.session.db = storeEvaluationResultsInDb(obj.session.db, perfReport);
                 if ~isempty(obj.session.model)
                     obj.session.model.performanceReport = perfReport;
                 end
@@ -1381,11 +1378,21 @@ classdef TrainingController < handle
 
                 if ~isempty(obj.fig) && isvalid(obj.fig)
                     obj.fig.UserData.db = obj.session.db;
-                    if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "markDbDirty")
-                        obj.fig.UserData.app.markDbDirty();
+                    app = struct();
+                    if isfield(obj.fig.UserData, "app"), app = obj.fig.UserData.app; end
+                    if isfield(app, "markDbDirty")
+                        try app.markDbDirty(); catch; end
                     else
                         obj.fig.UserData.dbDirty = true;
                     end
+                    if isfield(app, "saveDbFile") && strlength(obj.session.dbFile) > 0 && isfile(obj.session.dbFile)
+                        try app.saveDbFile(); catch; end
+                    end
+                    if isfield(app, "broadcastDbStatus")
+                        try app.broadcastDbStatus(); catch; end
+                    end
+                elseif strlength(obj.session.dbFile) > 0 && isfile(obj.session.dbFile)
+                    try obj.session.saveDatabase(); catch; end
                 end
 
                 % Dispatch report to HTML UI

@@ -315,6 +315,15 @@ function openInVisualize() {
     window.htmlComponent.sendEventToMATLAB("OpenInVisualize", { branch: branch });
 }
 
+function purgePredictions() {
+    if (!confirm("Are you sure you want to delete/purge all predictions (db.Pred) from the database?")) {
+        return;
+    }
+    if (window.htmlComponent) {
+        window.htmlComponent.sendEventToMATLAB("PurgePredictions", {});
+    }
+}
+
 function collectPredictConfig() {
     var selectedFields = [];
     document.querySelectorAll('.metric-variant-cb:checked').forEach(function(cb) {
@@ -330,12 +339,12 @@ function collectPredictConfig() {
         radiusMin: numOr("radiusMin", 50),
         radiusMax: numOr("radiusMax", 700),
         stokesShiftMin: numOr("stokesShiftMin", 100),
-        stokesShiftMax: numOr("stokesShiftMax", 3600),
+        stokesShiftMax: numOr("stokesShiftMax", 4200),
         spatialResolution: numOr("spatialResolution", 1),
         stokesShiftResolution: numOr("stokesShiftResolution", 1),
         linkMetricsToGrid: linked,
         metricsShiftMin: linked ? numOr("stokesShiftMin", 100) : numOr("metricsShiftMin", 100),
-        metricsShiftMax: linked ? numOr("stokesShiftMax", 3600) : numOr("metricsShiftMax", 3600),
+        metricsShiftMax: linked ? numOr("stokesShiftMax", 4200) : numOr("metricsShiftMax", 4200),
         batchSize: numOr("batchSize", 1000),
         interpMethod: val("interpMethod") || "linear",
         spectralMethod: val("spectralMethod") || "makima",
@@ -377,7 +386,7 @@ function toggleMetricsWindow() {
         block.style.opacity = "1";
         minInput.disabled = false;
         maxInput.disabled = false;
-        if (parseFloat(minInput.value) === 100 && parseFloat(maxInput.value) === 3600) {
+        if (parseFloat(minInput.value) === 100 && parseFloat(maxInput.value) === 4200) {
             minInput.value = document.getElementById("stokesShiftMin").value;
             maxInput.value = document.getElementById("stokesShiftMax").value;
         }
@@ -850,7 +859,7 @@ document.addEventListener("DOMContentLoaded", function() {
                                 </div>
                                 <div class="field">
                                     <label>Stokes Max (cm⁻¹)</label>
-                                    <input type="number" id="stokesShiftMax" value="3600" step="10">
+                                    <input type="number" id="stokesShiftMax" value="4200" step="10">
                                 </div>
                             </div>
                             <div class="field-row" style="margin-top:4px;">
@@ -867,7 +876,7 @@ document.addEventListener("DOMContentLoaded", function() {
                                     </div>
                                     <div class="field">
                                         <label>Metrics Max (cm⁻¹)</label>
-                                        <input type="number" id="metricsShiftMax" value="3600" step="10" disabled>
+                                        <input type="number" id="metricsShiftMax" value="4200" step="10" disabled>
                                     </div>
                                 </div>
                             </div>
@@ -933,6 +942,7 @@ document.addEventListener("DOMContentLoaded", function() {
                             </div>
                             <div class="btn-row">
                                 <button id="btnOpenVisualize" class="btn-secondary" style="display:none;" onclick="openInVisualize()">Open in Visualize &#8594;</button>
+                                <button id="btnPurgePredictions" class="btn-stop" onclick="purgePredictions()">Purge Predictions (db.Pred)</button>
                             </div>
                             <p class="hint">Plots of db.Sim, db.Interp and db.Pred are produced in the <strong>6 Visualize</strong> tab.</p>
                         </div>

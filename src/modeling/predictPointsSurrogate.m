@@ -9,7 +9,7 @@ function allDataRaw = predictPointsSurrogate(options)
 %       R                   - [N × 1] Radius coordinates (nm)
 %       LambdaSamples       - Wavelength samples (nm or µm)
 %       LambdaLaser         - Laser wavelength in nm (default: 785)
-%       StokesShiftLimits   - [min, max] Stokes shift in cm⁻¹ (default: [100, 3600])
+%       StokesShiftLimits   - [min, max] Stokes shift in cm⁻¹ (default: [100, 4200])
 %       InterpResolution    - Stokes shift resolution in cm⁻¹ (default: 5)
 %       AnalyteSpectrum     - Analyte spectrum struct (optional)
 %       BatchSize           - Batch evaluation size (default: 1000)
@@ -26,7 +26,7 @@ function allDataRaw = predictPointsSurrogate(options)
         options.R double
         options.LambdaSamples double
         options.LambdaLaser double = 785
-        options.StokesShiftLimits double = [100, 3600]
+        options.StokesShiftLimits double = [100, 4200]
         options.InterpResolution double = 5
         options.AnalyteSpectrum struct = struct()
         options.BatchSize double = 1000

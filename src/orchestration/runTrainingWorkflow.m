@@ -585,7 +585,8 @@ function dbModel = buildDbModelStruct(model, dataset, cfg, summary, perfReport)
     end
 
     if exist('perfReport', 'var') && isstruct(perfReport) && ~isempty(fieldnames(perfReport))
-        dbModel.PerformanceReport = perfReport;
+        tmpDb = storeEvaluationResultsInDb(struct("Model", dbModel), perfReport);
+        dbModel = tmpDb.Model;
     end
 
     if isfield(dataset, 'trainIdx')
