@@ -215,7 +215,7 @@ sequenceDiagram
 
 - **HTML View:** [`scripts/apps/visualize_tab.html`](../scripts/apps/visualize_tab.html)
 - **Controller:** [`src/app/controllers/VisualizeController.m`](../src/app/controllers/VisualizeController.m)
-- **Features:** Synchronized 1D spectra plots, 2D response heatmaps (defaulting scattered `db.Sim` data to ungridded exact-point Delaunay `patch` meshes alongside bounded Voronoi `patch` cells, native `pcolor` for regular `db.Interp`/`db.Pred` grids, and optional `pcolor` grid interpolation via natural neighbor, linear, or nearest-sample at configurable spatial resolution in nm / raster size), and interactive 3D volumetric slicing via MATLAB `viewer3d` with the `AuroraAustralis` colormap.
+- **Features:** Synchronized 1D spectra plots (supporting `Main Sim` from `db.Sim` and `Optima Sim` from `db.Optima.Sim` with a saved-optima dropdown selector that auto-fills $(P, r)$ for direct overlay against `Model (DNN)` or `Interpolation`), 2D response heatmaps (across `db.Sim`, `db.Optima.Sim`, `db.Interp`, and `db.Pred`, defaulting scattered data to ungridded exact-point Delaunay `patch` meshes alongside bounded Voronoi `patch` cells, native `pcolor` for regular grids, and optional `pcolor` grid interpolation via natural neighbor, linear, or nearest-sample at configurable spatial resolution in nm / raster size), and interactive 3D volumetric slicing via MATLAB `viewer3d` with the `AuroraAustralis` colormap.
 - **Key Events:** `Render`, `ClearTraces`, `VisModeSelect`, `RequestBranchInfo`, `RefreshDbState`.
 
 ---

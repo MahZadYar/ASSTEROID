@@ -231,7 +231,15 @@ function setup(htmlComponent) {
         if (isFinite(d.r)) document.getElementById("r1d").value = round2(d.r);
         var snapEl = document.getElementById("snapInfo");
         if (snapEl) {
-            snapEl.textContent = "Snapped to simulated geometry #" + d.index + " (Δ = " + round2(d.distance) + " nm)";
+            if (d.simDataset === "optima") {
+                var tag = d.basinTag ? ("Basin " + d.basinTag) : "";
+                var met = d.optimizedMetric || "";
+                var lbl = [tag, met].filter(Boolean).join(" — ");
+                snapEl.textContent = "Optimum #" + d.index + (lbl ? " [" + lbl + "]" : "") +
+                    " (p = " + round2(d.p) + ", r = " + round2(d.r) + " nm)";
+            } else {
+                snapEl.textContent = "Snapped to simulated geometry #" + d.index + " (Δ = " + round2(d.distance) + " nm)";
+            }
         }
     });
     htmlComponent.addEventListener("VisError", function(event) {
@@ -249,7 +257,7 @@ function setup(htmlComponent) {
     htmlComponent.addEventListener("PreselectBranch", function(event) {
         var d = event.Data || {};
         if (d.mode) setRadio("visMode", d.mode);
-        if (d.branch) setRadio("branch", d.branch);
+        if (d.branch) setRadio("branch", d.branch === "Optima.Sim" ? "OptimaSim" : d.branch);
         refreshAll();
         appendLog("Preselected branch db." + (d.branch || "?") + " from Stage 4.");
     });
@@ -359,18 +367,19 @@ function updateModeBlocks() {
 }
 
 function updateBranchRadios() {
-    ["Sim", "Interp", "Pred"].forEach(function(b) {
+    var mode = getRadio("visMode", "1d");
+    ["Sim", "OptimaSim", "Interp", "Pred"].forEach(function(b) {
         var bi = branchInfo(b);
         var n = bi ? (bi.n || 0) : 0;
         var el = document.getElementById("branch" + b);
-        if (el) el.disabled = n === 0;
+        if (el) el.disabled = (n === 0) || (mode === "3d" && b === "OptimaSim");
         var countEl = document.getElementById("count" + b);
         if (countEl) countEl.textContent = n ? "(" + n.toLocaleString() + ")" : "(empty)";
     });
     var cur = getRadio("branch", "");
     var curEl = document.getElementById("branch" + cur);
     if (!cur || (curEl && curEl.disabled)) {
-        var pick = ["Interp", "Pred", "Sim"].filter(function(b) {
+        var pick = ["Interp", "Pred", "Sim", "OptimaSim"].filter(function(b) {
             var r = document.getElementById("branch" + b);
             return r && !r.disabled;
         })[0];
@@ -488,11 +497,15 @@ function updateMetricLists() {
     ], true);
     onMetric2dChange();
 
-    // 1D metrics depend on the source
+    // 1D metrics depend on the source (and main vs optima sub-branch for sim)
     var src = getRadio("source1d", "sim");
+    var simDs = getRadio("simDataset", "main");
     var fields = [];
     if (src === "model") {
         fields = normalizeArray(VIS.info ? VIS.info.modelTargets : []);
+    } else if (src === "sim" && simDs === "optima") {
+        var oi = branchInfo("OptimaSim");
+        fields = oi ? normalizeArray(oi.spectralFields) : [];
     } else {
         var si = branchInfo("Sim");
         fields = si ? normalizeArray(si.spectralFields) : [];
@@ -528,23 +541,47 @@ function selectAll1DMetrics(doSelect) {
 }
 
 function updateSourceAvailability() {
-    var hasSim = !!(branchInfo("Sim") && branchInfo("Sim").n);
+    var hasMainSim = !!(branchInfo("Sim") && branchInfo("Sim").n);
+    var optimaList = normalizeArray(VIS.info ? VIS.info.optimaList : []);
+    var hasOptimaSim = optimaList.length > 0;
+    var hasAnySim = hasMainSim || hasOptimaSim;
     var hasModel = !!(VIS.info && VIS.info.hasModel);
     var sSim = document.getElementById("srcSim");
     var sInterp = document.getElementById("srcInterp");
     var sModel = document.getElementById("srcModel");
-    if (sSim) sSim.disabled = !hasSim;
-    if (sInterp) sInterp.disabled = !hasSim;
+    if (sSim) sSim.disabled = !hasAnySim;
+    if (sInterp) sInterp.disabled = !hasMainSim;
     if (sModel) sModel.disabled = !hasModel;
 
     var src = getRadio("source1d", "");
     var srcMap = { sim: "srcSim", interp: "srcInterp", model: "srcModel" };
     var srcEl = document.getElementById(srcMap[src] || "srcSim");
     if (srcEl && srcEl.disabled) {
-        if (hasSim) setRadio("source1d", "sim");
+        if (hasAnySim) setRadio("source1d", "sim");
         else if (hasModel) setRadio("source1d", "model");
     }
     src = getRadio("source1d", "sim");
+
+    // Main Sim vs Optima Sim toggle & Optima dropdown
+    var dsMainEl = document.getElementById("simDatasetMain");
+    var dsOptEl = document.getElementById("simDatasetOptima");
+    if (dsMainEl) dsMainEl.disabled = !hasMainSim;
+    if (dsOptEl) dsOptEl.disabled = !hasOptimaSim;
+    var cntMain = document.getElementById("countMainSim");
+    var cntOpt = document.getElementById("countOptimaSim1d");
+    if (cntMain) cntMain.textContent = hasMainSim ? "(" + branchInfo("Sim").n.toLocaleString() + ")" : "(empty)";
+    if (cntOpt) cntOpt.textContent = hasOptimaSim ? "(" + optimaList.length + ")" : "(empty)";
+
+    var simDs = getRadio("simDataset", "main");
+    if (simDs === "main" && !hasMainSim && hasOptimaSim) setRadio("simDataset", "optima");
+    else if (simDs === "optima" && !hasOptimaSim && hasMainSim) setRadio("simDataset", "main");
+    simDs = getRadio("simDataset", "main");
+
+    var simDsRow = document.getElementById("simDatasetRow");
+    if (simDsRow) simDsRow.style.display = (src === "sim") ? "" : "none";
+    var optRow = document.getElementById("optimaSelectRow");
+    if (optRow) optRow.style.display = (src === "sim" && simDs === "optima") ? "" : "none";
+    populateOptimaDropdown(optimaList);
 
     var mRow = document.getElementById("modelSpecRow");
     if (mRow) mRow.style.display = (src === "model") ? "" : "none";
@@ -552,7 +589,9 @@ function updateSourceAvailability() {
     if (iRow) iRow.style.display = (src === "interp") ? "" : "none";
 
     var hints = {
-        sim: "Finds the nearest simulated (p, r) and plots its raw samples (dots) with a smoothed line. Input fields are updated to the snapped geometry.",
+        sim: (simDs === "optima")
+            ? "Plots the full-wave FEM verification spectrum of the selected saved optimum (db.Optima.Sim) and fills (p, r) for easy overlay with Model (DNN)."
+            : "Finds the nearest simulated (p, r) in db.Sim and plots its raw samples (dots) with a smoothed line. Input fields are updated to the snapped geometry.",
         interp: "Interpolates each native simulation wavelength node spatially at the exact (p, r); nodes are shown as dots joined by a smoothed line.",
         model: "Feeds the exact (p, r) to the trained surrogate and evaluates it on a dense wavelength grid."
     };
@@ -566,8 +605,10 @@ function updateSourceAvailability() {
         if (l2 && !l2.dataset.touched) l2.value = round2(VIS.info.laserWl);
     }
 
-    // Auto-populate P and R with range midpoints if not touched
-    if (VIS.info && VIS.info.branches && VIS.info.branches.Sim) {
+    // Auto-populate P and R with selected optimum or Sim midpoint if not touched
+    if (src === "sim" && simDs === "optima") {
+        onOptimaSelectChange(false);
+    } else if (VIS.info && VIS.info.branches && VIS.info.branches.Sim) {
         var sb = VIS.info.branches.Sim;
         var pEl = document.getElementById("p1d");
         var rEl = document.getElementById("r1d");
@@ -577,6 +618,55 @@ function updateSourceAvailability() {
         if (rEl && !rEl.dataset.touched && sb.rRange && isFinite(sb.rRange[0])) {
             rEl.value = Math.round((sb.rRange[0] + sb.rRange[1]) / 2);
         }
+    }
+}
+
+function populateOptimaDropdown(optimaList) {
+    var sel = document.getElementById("optima1d");
+    if (!sel) return;
+    var prev = sel.value;
+    sel.innerHTML = "";
+    if (!optimaList.length) {
+        var emptyOpt = document.createElement("option");
+        emptyOpt.value = "";
+        emptyOpt.textContent = "No verified optima in db.Optima.Sim";
+        sel.appendChild(emptyOpt);
+        return;
+    }
+    optimaList.forEach(function(it) {
+        var o = document.createElement("option");
+        o.value = String(it.index);
+        o.dataset.p = String(it.p);
+        o.dataset.r = String(it.r);
+        var tag = it.basinTag ? ("Basin " + it.basinTag) : ("Opt #" + it.index);
+        var met = it.optimizedMetric || "unassigned";
+        o.textContent = "#" + it.index + " | " + tag + " — " + met +
+            " (P=" + round2(it.p) + ", r=" + round2(it.r) + " nm, " + (it.nWavelengths || 0) + " λ)";
+        sel.appendChild(o);
+    });
+    if (prev) {
+        for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === prev) { sel.value = prev; break; }
+        }
+    }
+}
+
+function onOptimaSelectChange(markTouched) {
+    var sel = document.getElementById("optima1d");
+    if (!sel || sel.selectedIndex < 0) return;
+    var opt = sel.options[sel.selectedIndex];
+    if (!opt || !opt.value) return;
+    var p = parseFloat(opt.dataset.p);
+    var r = parseFloat(opt.dataset.r);
+    var pEl = document.getElementById("p1d");
+    var rEl = document.getElementById("r1d");
+    if (pEl && isFinite(p)) {
+        pEl.value = round2(p);
+        if (markTouched) pEl.dataset.touched = "1";
+    }
+    if (rEl && isFinite(r)) {
+        rEl.value = round2(r);
+        if (markTouched) rEl.dataset.touched = "1";
     }
 }
 
@@ -661,11 +751,18 @@ function onControlChange() {
 /* ---------- actions ---------- */
 function collectConfig() {
     var mode = getRadio("visMode", "1d");
-    var cfg = { mode: mode, branch: getRadio("branch", "Sim"), invertColormap: chk("invertCmap") };
+    var branchVal = getRadio("branch", "Sim");
+    if (branchVal === "OptimaSim") branchVal = "Optima.Sim";
+    var cfg = { mode: mode, branch: branchVal, invertColormap: chk("invertCmap") };
     if (mode === "1d") {
         var metrics = [];
         document.querySelectorAll("#metrics1dList input:checked").forEach(function(cb) { metrics.push(cb.value); });
         cfg.source = getRadio("source1d", "sim");
+        cfg.simDataset = getRadio("simDataset", "main");
+        if (cfg.source === "sim" && cfg.simDataset === "optima") {
+            var optIdx = parseInt(val("optima1d"), 10);
+            if (isFinite(optIdx) && optIdx >= 1) cfg.optimaIndex = optIdx;
+        }
         cfg.p = numOr("p1d", NaN);
         cfg.r = numOr("r1d", NaN);
         cfg.metrics = metrics;
@@ -712,7 +809,8 @@ function render() {
                 setStatus("error", "No Metric");
                 return;
             }
-            if (!isFinite(cfg.p) || !isFinite(cfg.r)) {
+            var usingOptimaRow = (cfg.source === "sim" && cfg.simDataset === "optima" && isFinite(cfg.optimaIndex));
+            if (!usingOptimaRow && (!isFinite(cfg.p) || !isFinite(cfg.r))) {
                 appendLog("Enter valid numeric period and radius values.", "warning");
                 setStatus("error", "Bad P/R");
                 return;
@@ -847,9 +945,16 @@ function toggleLogArea() {
 }
 
 document.addEventListener("DOMContentLoaded", function() {
-    document.querySelectorAll('input[name="visMode"], input[name="branch"], input[name="source1d"]').forEach(function(el) {
+    document.querySelectorAll('input[name="visMode"], input[name="branch"], input[name="source1d"], input[name="simDataset"]').forEach(function(el) {
         el.addEventListener("change", onControlChange);
     });
+    var optSel = document.getElementById("optima1d");
+    if (optSel) {
+        optSel.addEventListener("change", function() {
+            onOptimaSelectChange(true);
+            updateRenderAvailability();
+        });
+    }
     var m2 = document.getElementById("metric2d");
     if (m2) {
         m2.addEventListener("change", function() {
@@ -923,6 +1028,7 @@ document.addEventListener("DOMContentLoaded", function() {
                 <h2 class="section-title" id="branchTitle">Data Branch</h2>
                 <div class="segmented" role="radiogroup" aria-label="Database branch">
                     <input type="radio" name="branch" id="branchSim" value="Sim"><label for="branchSim">Sim <span class="seg-count" id="countSim"></span></label>
+                    <input type="radio" name="branch" id="branchOptimaSim" value="OptimaSim"><label for="branchOptimaSim">Optima <span class="seg-count" id="countOptimaSim"></span></label>
                     <input type="radio" name="branch" id="branchInterp" value="Interp"><label for="branchInterp">Interp <span class="seg-count" id="countInterp"></span></label>
                     <input type="radio" name="branch" id="branchPred" value="Pred"><label for="branchPred">Pred <span class="seg-count" id="countPred"></span></label>
                 </div>
@@ -938,6 +1044,16 @@ document.addEventListener("DOMContentLoaded", function() {
                         <input type="radio" name="source1d" id="srcSim" value="sim" checked><label for="srcSim">Simulation</label>
                         <input type="radio" name="source1d" id="srcInterp" value="interp"><label for="srcInterp">Interpolation</label>
                         <input type="radio" name="source1d" id="srcModel" value="model"><label for="srcModel">Model (DNN)</label>
+                    </div>
+                    <div id="simDatasetRow" style="margin-top:8px;">
+                        <div class="segmented" role="radiogroup" aria-label="Simulation dataset">
+                            <input type="radio" name="simDataset" id="simDatasetMain" value="main" checked><label for="simDatasetMain">Main Sim <span class="seg-count" id="countMainSim"></span></label>
+                            <input type="radio" name="simDataset" id="simDatasetOptima" value="optima"><label for="simDatasetOptima">Optima Sim <span class="seg-count" id="countOptimaSim1d"></span></label>
+                        </div>
+                    </div>
+                    <div class="field" id="optimaSelectRow" style="display:none; margin-top:8px;">
+                        <label class="lbl" for="optima1d">Saved Optimum (db.Optima.Sim)</label>
+                        <select id="optima1d"></select>
                     </div>
                     <p class="hint" id="sourceHint"></p>
                     <div class="field-row" style="margin-top:8px;">

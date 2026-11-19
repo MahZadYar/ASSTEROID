@@ -81,9 +81,14 @@ classdef VisualizeController < handle
             for b = ["Sim", "Interp", "Pred"]
                 branches.(b) = obj.describeBranch(obj.safeStruct(db, b));
             end
-            [hasModel, targets] = obj.localModelInfo(branches.Sim);
+            optStruct = obj.safeStruct(db, "Optima");
+            optSimStruct = obj.safeStruct(optStruct, "Sim");
+            branches.OptimaSim = obj.describeBranch(optSimStruct);
+            optimaList = obj.buildOptimaList(optSimStruct, optStruct);
+            [hasModel, targets] = obj.localModelInfo(branches.Sim, branches.OptimaSim);
             payload = struct( ...
                 "branches",     branches, ...
+                "optimaList",   {optimaList}, ...
                 "hasModel",     hasModel, ...
                 "modelTargets", {cellstr(targets)}, ...
                 "laserWl",      obj.localLaserWl(db));
@@ -197,10 +202,15 @@ classdef VisualizeController < handle
             if ~ismember(source, ["sim", "interp", "model"])
                 error("Visualize:BadSource", "Unknown 1D source: %s", source);
             end
+            simDataset = lower(obj.safeStr(d, "simDataset", "main"));
+            if ~ismember(simDataset, ["main", "optima"]), simDataset = "main"; end
             p = obj.safeNum(d, "p", NaN);
             r = obj.safeNum(d, "r", NaN);
-            if ~isfinite(p) || ~isfinite(r)
-                error("Visualize:BadInput", "Period and radius must be finite numbers.");
+            optimaIndex = round(obj.safeNum(d, "optimaIndex", NaN));
+            if ~(source == "sim" && simDataset == "optima" && isfinite(optimaIndex))
+                if ~isfinite(p) || ~isfinite(r)
+                    error("Visualize:BadInput", "Period and radius must be finite numbers.");
+                end
             end
             metrics = reshape(parseCellOrString(d, "metrics"), 1, []);
             if isempty(metrics)
@@ -213,14 +223,47 @@ classdef VisualizeController < handle
             laserWl = obj.safeNum(d, "laserWavelength", 785);
             if ~(laserWl > 0), laserWl = 785; end
 
-            S = obj.safeStruct(obj.getDb(), "Sim");
+            db = obj.getDb();
+            S = obj.safeStruct(db, "Sim");
             rep.start("Spectra1D", "Evaluating " + source + " spectra...");
             switch source
                 case "sim"
-                    out = lookupSpectrum1D("sim", p, r, metrics, SimData=S);
-                    obj.sendToHTML("VisualizeSnapped", struct( ...
-                        "p", out.p, "r", out.r, "distance", out.distance, "index", out.simIndex));
-                    srcLabel = "Sim";
+                    if simDataset == "optima"
+                        optRoot = obj.safeStruct(db, "Optima");
+                        optSim = obj.safeStruct(optRoot, "Sim");
+                        if ~isfield(optSim, "period") || isempty(optSim.period)
+                            error("Visualize:EmptyBranch", "db.Optima.Sim is empty.");
+                        end
+                        nOpt = numel(optSim.period);
+                        if isfinite(optimaIndex) && optimaIndex >= 1 && optimaIndex <= nOpt
+                            rowSoA = obj.sliceSoARow(optSim, optimaIndex);
+                            out = lookupSpectrum1D("sim", double(rowSoA.period(1)), double(rowSoA.radius(1)), ...
+                                metrics, SimData=rowSoA);
+                            out.simIndex = optimaIndex;
+                            out.distance = 0;
+                        else
+                            if ~isfinite(p) || ~isfinite(r)
+                                error("Visualize:BadInput", "Select an optimum or enter finite period and radius values.");
+                            end
+                            out = lookupSpectrum1D("sim", p, r, metrics, SimData=optSim);
+                        end
+                        [bTag, optMet] = obj.optimaRowLabels(optSim, optRoot, out.simIndex);
+                        obj.sendToHTML("VisualizeSnapped", struct( ...
+                            "p", out.p, "r", out.r, "distance", out.distance, ...
+                            "index", out.simIndex, "simDataset", "optima", ...
+                            "basinTag", bTag, "optimizedMetric", optMet));
+                        if strlength(bTag) > 0 || strlength(optMet) > 0
+                            srcLabel = sprintf("Optima.Sim [%s/%s]", bTag, optMet);
+                        else
+                            srcLabel = "Optima.Sim";
+                        end
+                    else
+                        out = lookupSpectrum1D("sim", p, r, metrics, SimData=S);
+                        obj.sendToHTML("VisualizeSnapped", struct( ...
+                            "p", out.p, "r", out.r, "distance", out.distance, ...
+                            "index", out.simIndex, "simDataset", "main"));
+                        srcLabel = "Sim";
+                    end
                 case "interp"
                     method = lower(obj.safeStr(d, "interpMethod", "natural"));
                     if ~ismember(method, ["natural", "linear", "nearest"]), method = "natural"; end
@@ -506,10 +549,18 @@ classdef VisualizeController < handle
 
         function [branch, S] = localBranch(obj, d)
             branch = obj.safeStr(d, "branch", "Sim");
-            if ~ismember(branch, ["Sim", "Interp", "Pred"])
+            if branch == "OptimaSim"
+                branch = "Optima.Sim";
+            end
+            if ~ismember(branch, ["Sim", "Interp", "Pred", "Optima.Sim"])
                 error("Visualize:BadBranch", "Unknown data branch: %s", branch);
             end
-            S = obj.safeStruct(obj.getDb(), branch);
+            db = obj.getDb();
+            if branch == "Optima.Sim"
+                S = obj.safeStruct(obj.safeStruct(db, "Optima"), "Sim");
+            else
+                S = obj.safeStruct(db, branch);
+            end
             if ~isfield(S, "period") || ~isfield(S, "radius") || isempty(S.period)
                 error("Visualize:EmptyBranch", "db.%s is empty.", branch);
             end
@@ -559,8 +610,12 @@ classdef VisualizeController < handle
             step = obj.safeNum(d, "lambdaStep", 1);
             if ~(step > 0), step = 1; end
             defRange = [laserWl, 1 / (1 / laserWl - 4200e-7)];
-            if isstruct(S) && isfield(S, "lambda") && ~isempty(S.lambda)
-                l = double(S.lambda(isfinite(S.lambda)));
+            lamSrc = S;
+            if ~(isstruct(lamSrc) && isfield(lamSrc, "lambda") && ~isempty(lamSrc.lambda))
+                lamSrc = obj.safeStruct(obj.safeStruct(obj.getDb(), "Optima"), "Sim");
+            end
+            if isstruct(lamSrc) && isfield(lamSrc, "lambda") && ~isempty(lamSrc.lambda)
+                l = double(lamSrc.lambda(isfinite(lamSrc.lambda)));
                 if ~isempty(l)
                     defRange = [min(l), max(l)];
                     if defRange(2) < 10, defRange = defRange * 1e3; end
@@ -580,7 +635,8 @@ classdef VisualizeController < handle
             if lam(end) < lamMax, lam(end+1) = lamMax; end
         end
 
-        function [hasModel, targets] = localModelInfo(obj, simBranch)
+        function [hasModel, targets] = localModelInfo(obj, simBranch, optSimBranch)
+            if nargin < 3, optSimBranch = struct(); end
             hasModel = false; targets = strings(1, 0);
             if ~isempty(obj.fig) && isvalid(obj.fig) && isfield(obj.fig.UserData, "visExport")
                 ve = obj.fig.UserData.visExport;
@@ -597,8 +653,10 @@ classdef VisualizeController < handle
                     targets = string(obj.session.model.targetNames);
                 end
             end
-            if isempty(targets) && isfield(simBranch, "spectralFields")
+            if isempty(targets) && isfield(simBranch, "spectralFields") && ~isempty(simBranch.spectralFields)
                 targets = string(simBranch.spectralFields);
+            elseif isempty(targets) && isfield(optSimBranch, "spectralFields") && ~isempty(optSimBranch.spectralFields)
+                targets = string(optSimBranch.spectralFields);
             end
         end
 
@@ -611,6 +669,13 @@ classdef VisualizeController < handle
                         lLaser = val;
                         return;
                     end
+                end
+            end
+            optSim = obj.safeStruct(obj.safeStruct(db, "Optima"), "Sim");
+            if isfield(optSim, "LaserWl") && ~isempty(optSim.LaserWl)
+                val = double(optSim.LaserWl(1));
+                if isfinite(val) && val > 0
+                    lLaser = val;
                 end
             end
         end
@@ -653,7 +718,10 @@ classdef VisualizeController < handle
         function [spec, scal] = classifyFields(~, S, n)
             meta = ["period", "radius", "lambda", "lambda_nm", "RamanShift", ...
                     "LaserWl", "lambda_exc_nm", "RamanWindow", "RamanWindowEffective", ...
-                    "p", "r", "particle_r", "f"];
+                    "p", "r", "particle_r", "f", ...
+                    "femPeriod", "femRadius", "matchDistance", "optimaIndex", ...
+                    "isVerified", "surrogateMetricValue", "kappa_V", "kappa_S", ...
+                    "VolCorr", "SurfCorr", "V_corr", "S_corr"];
             fnames = string(fieldnames(S));
             spec = strings(1, 0); scal = strings(1, 0);
             for i = 1:numel(fnames)
@@ -857,6 +925,66 @@ classdef VisualizeController < handle
             s = struct();
             if isfield(parent, fieldName) && isstruct(parent.(fieldName))
                 s = parent.(fieldName);
+            end
+        end
+
+        function list = buildOptimaList(obj, optSim, optRoot)
+            list = cell(0, 1);
+            if ~isstruct(optSim) || ~isfield(optSim, "period") || isempty(optSim.period)
+                return;
+            end
+            P = double(optSim.period(:));
+            R = double(optSim.radius(:));
+            n = min(numel(P), numel(R));
+            hasLam = isfield(optSim, "lambda") && isnumeric(optSim.lambda) && size(optSim.lambda, 1) >= n;
+            hasVer = isfield(optSim, "isVerified") && isnumeric(optSim.isVerified) && numel(optSim.isVerified) >= n;
+            for i = 1:n
+                if ~isfinite(P(i)) || ~isfinite(R(i)), continue; end
+                if hasVer && ~(optSim.isVerified(i) > 0), continue; end
+                nWl = 0;
+                if hasLam
+                    nWl = nnz(isfinite(optSim.lambda(i, :)));
+                end
+                if nWl == 0, continue; end
+                [bTag, optMet] = obj.optimaRowLabels(optSim, optRoot, i);
+                list{end+1, 1} = struct( ... %#ok<AGROW>
+                    "index",           i, ...
+                    "p",               P(i), ...
+                    "r",               R(i), ...
+                    "basinTag",        bTag, ...
+                    "optimizedMetric", optMet, ...
+                    "nWavelengths",    nWl);
+            end
+        end
+
+        function [bTag, optMet] = optimaRowLabels(~, optSim, optRoot, idx)
+            bTag = ""; optMet = "";
+            if isfield(optSim, "basinTag") && numel(optSim.basinTag) >= idx
+                bTag = string(optSim.basinTag(idx));
+            elseif isfield(optRoot, "basinTag") && numel(optRoot.basinTag) >= idx
+                bTag = string(optRoot.basinTag(idx));
+            end
+            if isfield(optSim, "optimizedMetric") && numel(optSim.optimizedMetric) >= idx
+                optMet = string(optSim.optimizedMetric(idx));
+            elseif isfield(optRoot, "optimizedMetric") && numel(optRoot.optimizedMetric) >= idx
+                optMet = string(optRoot.optimizedMetric(idx));
+            end
+            if ismissing(bTag), bTag = ""; end
+            if ismissing(optMet), optMet = ""; end
+        end
+
+        function rowS = sliceSoARow(~, S, idx)
+            rowS = struct();
+            n = structRowCount(S);
+            flds = fieldnames(S);
+            for k = 1:numel(flds)
+                fn = flds{k};
+                val = S.(fn);
+                if (isnumeric(val) || islogical(val) || isstring(val)) && size(val, 1) == n
+                    rowS.(fn) = val(idx, :);
+                elseif isscalar(val) || (isrow(val) && size(val, 1) == 1 && n > 1)
+                    rowS.(fn) = val;
+                end
             end
         end
     end
