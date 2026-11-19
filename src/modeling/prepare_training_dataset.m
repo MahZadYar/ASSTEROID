@@ -51,6 +51,8 @@ arguments
     options.IncludeVerticalGap (1,1) logical = false
     options.GapHeightUm (1,1) double {mustBePositive} = 0.005
     options.Seed (1,1) double = 0
+    options.ExtraData struct = struct()
+    options.ExtraDataSplit (1,1) string {mustBeMember(options.ExtraDataSplit, ["stratified", "train_only"])} = "stratified"
 end
 
 opts = struct();
@@ -482,6 +484,103 @@ YTrainRaw = YRaw(trainIdx, :);
 YValidationRaw = YRaw(valIdx, :);
 YTestRaw = YRaw(testIdx, :);
 
+%% Optional stratified secondary dataset (e.g. db.Optima.Sim) — preserves primary split
+extraDataCounts = struct('train', 0, 'validation', 0, 'test', 0, 'splitMode', options.ExtraDataSplit);
+if isstruct(options.ExtraData) && ~isempty(fieldnames(options.ExtraData)) && structRowCount(options.ExtraData) > 0
+    fprintf('\n=== Merging ExtraData (mode: %s, geometry-disjoint) ===\n', options.ExtraDataSplit);
+    extraDs = prepare_training_dataset(options.ExtraData, ri, ...
+        Holdout             = opts.Holdout, ...
+        ValSplit            = opts.ValSplit, ...
+        Shuffle             = opts.Shuffle, ...
+        RatioLimit          = opts.RatioLimit, ...
+        TargetFields        = string(targetFields), ...
+        FeatureLogTransform = opts.FeatureLogTransform, ...
+        IncludeRatios       = opts.IncludeRatios, ...
+        TargetLogTransform  = opts.TargetLogTransform, ...
+        FeatureSchema       = "v1_legacy", ...
+        SplitMode           = "geometry", ...
+        Seed                = opts.Seed + 10007, ...
+        ExtraData           = struct());
+
+    % Guard against exact-coordinate overlap with primary Val/Test splits
+    primaryHoldKeys = zeros(0, 2);
+    if ~isempty(XValidation), primaryHoldKeys = [primaryHoldKeys; round(XValidation(:, 1:2) * 1e6)]; end %#ok<AGROW>
+    if ~isempty(XTest),       primaryHoldKeys = [primaryHoldKeys; round(XTest(:, 1:2) * 1e6)]; end %#ok<AGROW>
+    primaryTrainKeys = round(XTrain(:, 1:2) * 1e6);
+
+    if options.ExtraDataSplit == "train_only"
+        exX    = [extraDs.XTrain; extraDs.XValidation; extraDs.XTest];
+        exY    = [extraDs.YTrain; extraDs.YValidation; extraDs.YTest];
+        exYRaw = [extraDs.YTrainRaw; extraDs.YValidationRaw; extraDs.YTestRaw];
+        if ~isempty(primaryHoldKeys) && ~isempty(exX)
+            exKeys = round(exX(:, 1:2) * 1e6);
+            leakMask = ismember(exKeys, primaryHoldKeys, 'rows');
+            if any(leakMask)
+                fprintf('  Excluded %d ExtraData samples overlapping primary Val/Test geometries.\n', nnz(leakMask));
+                exX(leakMask, :) = []; exY(leakMask, :) = []; exYRaw(leakMask, :) = [];
+            end
+        end
+        extraDataCounts.train = size(exX, 1);
+        XTrain    = [XTrain; exX];
+        YTrain    = [YTrain; exY];
+        YTrainRaw = [YTrainRaw; exYRaw];
+    else
+        % Stratified: extra Train/Val/Test appended to matching splits (drop any cross-split collision)
+        exTrX = extraDs.XTrain;      exTrY = extraDs.YTrain;      exTrR = extraDs.YTrainRaw;
+        exVaX = extraDs.XValidation; exVaY = extraDs.YValidation; exVaR = extraDs.YValidationRaw;
+        exTeX = extraDs.XTest;       exTeY = extraDs.YTest;       exTeR = extraDs.YTestRaw;
+
+        if ~isempty(primaryHoldKeys) && ~isempty(exTrX)
+            bad = ismember(round(exTrX(:, 1:2) * 1e6), primaryHoldKeys, 'rows');
+            exTrX(bad, :) = []; exTrY(bad, :) = []; exTrR(bad, :) = [];
+        end
+        if ~isempty(primaryTrainKeys) && ~isempty(exVaX)
+            bad = ismember(round(exVaX(:, 1:2) * 1e6), primaryTrainKeys, 'rows');
+            exVaX(bad, :) = []; exVaY(bad, :) = []; exVaR(bad, :) = [];
+        end
+        if ~isempty(primaryTrainKeys) && ~isempty(exTeX)
+            bad = ismember(round(exTeX(:, 1:2) * 1e6), primaryTrainKeys, 'rows');
+            exTeX(bad, :) = []; exTeY(bad, :) = []; exTeR(bad, :) = [];
+        end
+
+        extraDataCounts.train      = size(exTrX, 1);
+        extraDataCounts.validation = size(exVaX, 1);
+        extraDataCounts.test       = size(exTeX, 1);
+
+        XTrain         = [XTrain; exTrX];         YTrain         = [YTrain; exTrY];         YTrainRaw      = [YTrainRaw; exTrR];
+        XValidation    = [XValidation; exVaX];    YValidation    = [YValidation; exVaY];    YValidationRaw = [YValidationRaw; exVaR];
+        XTest          = [XTest; exTeX];          YTest          = [YTest; exTeY];          YTestRaw       = [YTestRaw; exTeR];
+    end
+
+    if opts.Shuffle
+        rng(opts.Seed + 20011, 'twister');
+        pTr = randperm(size(XTrain, 1));
+        XTrain = XTrain(pTr, :); YTrain = YTrain(pTr, :); YTrainRaw = YTrainRaw(pTr, :);
+        if ~isempty(XValidation)
+            pVa = randperm(size(XValidation, 1));
+            XValidation = XValidation(pVa, :); YValidation = YValidation(pVa, :); YValidationRaw = YValidationRaw(pVa, :);
+        end
+        if ~isempty(XTest)
+            pTe = randperm(size(XTest, 1));
+            XTest = XTest(pTe, :); YTest = YTest(pTe, :); YTestRaw = YTestRaw(pTe, :);
+        end
+    end
+
+    if opts.SplitMode == "geometry"
+        kTr = unique(round(XTrain(:, 1:2) * 1e6), 'rows');
+        if ~isempty(XValidation)
+            assert(~any(ismember(unique(round(XValidation(:, 1:2) * 1e6), 'rows'), kTr, 'rows')), ...
+                'prepare_training_dataset:ExtraGeometryLeak', 'ExtraData caused Train/Val geometry overlap.');
+        end
+        if ~isempty(XTest)
+            assert(~any(ismember(unique(round(XTest(:, 1:2) * 1e6), 'rows'), kTr, 'rows')), ...
+                'prepare_training_dataset:ExtraGeometryLeak', 'ExtraData caused Train/Test geometry overlap.');
+        end
+    end
+    fprintf('  Added ExtraData samples — Train: %d | Val: %d | Test: %d\n', ...
+        extraDataCounts.train, extraDataCounts.validation, extraDataCounts.test);
+end
+
 fprintf('\n=== Dataset Feature Ranges (before normalization) ===\n');
 fprintf('XTrain:       p=[%.6e, %.6e], r=[%.6e, %.6e], lambda=[%.6e, %.6e]\n', ...
     min(XTrain(:,1)), max(XTrain(:,1)), min(XTrain(:,2)), max(XTrain(:,2)), ...
@@ -541,6 +640,7 @@ dataset.inputScale = featureScale;
 dataset.targetLogMask = targetLogMask;
 dataset.featureLogMask = featureLogMask;
 dataset.counts = struct('train', size(XTrain,1), 'validation', size(XValidation,1), 'test', size(XTest,1));
+dataset.extraDataCounts = extraDataCounts;
 dataset.trainIdx = trainIdx;
 dataset.valIdx = valIdx;
 dataset.testIdx = testIdx;

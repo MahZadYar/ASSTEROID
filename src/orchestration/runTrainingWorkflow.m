@@ -69,6 +69,28 @@ end
 
     %% 4. Prepare training dataset
     reporter.start("PrepDataset", "Preparing training dataset...");
+    extraOptSim = struct();
+    if localCfgField(cfg, "includeOptimaSim", false)
+        candOpt = localCfgField(cfg, "optimaSimData", struct());
+        if isstruct(candOpt) && ~isempty(fieldnames(candOpt)) && structRowCount(candOpt) > 0
+            extraOptSim = candOpt;
+        elseif isfield(cfg, "databaseFile") && strlength(string(cfg.databaseFile)) > 0 && isfile(string(cfg.databaseFile))
+            try
+                ldOpt = load(string(cfg.databaseFile), "db");
+                if isfield(ldOpt, "db") && isfield(ldOpt.db, "Optima") && isfield(ldOpt.db.Optima, "Sim") ...
+                        && structRowCount(ldOpt.db.Optima.Sim) > 0
+                    extraOptSim = ldOpt.db.Optima.Sim;
+                end
+            catch
+            end
+        end
+        if isempty(fieldnames(extraOptSim))
+            reporter.warn("PrepDataset", "IncludeOptimaSim is enabled, but db.Optima.Sim is empty; training on db.Sim only.");
+        else
+            reporter.info(sprintf("Including db.Optima.Sim (%d rows, mode: %s) via stratified geometry split.", ...
+                structRowCount(extraOptSim), localCfgField(cfg, "optimaSimSplit", "stratified")));
+        end
+    end
     dataset = prepare_training_dataset(allData, ri, ...
         RatioLimit   = cfg.ratioLimit, ...
         TargetFields = cfg.metricsToTrain, ...
@@ -80,7 +102,9 @@ end
         FeatureSchema       = localCfgField(cfg, "featureSchema", "v3_physics"), ...
         SplitMode           = localCfgField(cfg, "splitMode", "geometry"), ...
         IncludeVerticalGap  = localCfgField(cfg, "includeVerticalGap", false), ...
-        GapHeightUm         = localCfgField(cfg, "gapHeightUm", 0.005));
+        GapHeightUm         = localCfgField(cfg, "gapHeightUm", 0.005), ...
+        ExtraData           = extraOptSim, ...
+        ExtraDataSplit      = localCfgField(cfg, "optimaSimSplit", "stratified"));
     reporter.complete("PrepDataset", sprintf( ...
         "Train: %d | Val: %d | Test: %d samples.", ...
         dataset.counts.train, dataset.counts.validation, dataset.counts.test));

@@ -93,6 +93,9 @@ arguments
     options.ValSplit            (1,1) double  {mustBeBetween(options.ValSplit,0,1)} = 0.5
     options.FeatureSchema       (1,1) string  {mustBeMember(options.FeatureSchema, ["v3_physics", "v2_physics", "v1_legacy"])} = "v3_physics"
     options.SplitMode           (1,1) string  {mustBeMember(options.SplitMode, ["geometry", "row"])} = "geometry"
+    options.IncludeOptimaSim    (1,1) logical = false
+    options.OptimaSimSplit      (1,1) string  {mustBeMember(options.OptimaSimSplit, ["stratified", "train_only"])} = "stratified"
+    options.OptimaSimData       (1,1) struct  = struct()
     options.IncludeVerticalGap  (1,1) logical = false
     options.GapHeightUm         (1,1) double  {mustBePositive} = 0.005
     options.SaveArtifacts       (1,1) logical = true
@@ -186,6 +189,9 @@ end
     cfg.valSplit            = options.ValSplit;
     cfg.featureSchema       = options.FeatureSchema;
     cfg.splitMode           = options.SplitMode;
+    cfg.includeOptimaSim    = options.IncludeOptimaSim;
+    cfg.optimaSimSplit      = options.OptimaSimSplit;
+    cfg.optimaSimData       = options.OptimaSimData;
     cfg.includeVerticalGap  = options.IncludeVerticalGap;
     cfg.gapHeightUm         = options.GapHeightUm;
     cfg.saveArtifacts       = options.SaveArtifacts;
