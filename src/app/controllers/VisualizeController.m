@@ -15,7 +15,7 @@ classdef VisualizeController < handle
         ax1D          = []
         ax2D          = []
         viewer        = []
-        traces        = struct("lambda", {}, "y", {}, "label", {}, "isDense", {})
+        traces        = struct("lambda", {}, "y", {}, "label", {}, "isDense", {}, "metric", {}, "group", {})
         dataPredictor = []
         dataPredictorKey = ""
     end
@@ -133,12 +133,16 @@ classdef VisualizeController < handle
 
         function clearTraces(obj)
         % CLEARTRACES Reset stored 1D spectral traces and clear 1D axes.
-            obj.traces = struct("lambda", {}, "y", {}, "label", {}, "isDense", {});
+            obj.traces = struct("lambda", {}, "y", {}, "label", {}, "isDense", {}, "metric", {}, "group", {});
             obj.syncTracesToFig();
             ax = obj.getAx1D();
             if ~isempty(ax) && isvalid(ax)
+                savedUnits = ax.Units;
+                savedPos = ax.Position;
                 if ~isempty(ax.Legend), delete(ax.Legend); end
                 cla(ax, "reset");
+                ax.Units = savedUnits;
+                ax.Position = savedPos;
                 styleDarkAxes(ax, "Wavelength (nm)", "Metric value", "1D Spectra");
             end
         end
@@ -293,23 +297,35 @@ classdef VisualizeController < handle
                 error("Visualize:NoData", "None of the selected metrics are available from the %s source.", srcLabel);
             end
 
-            newTraces = struct("lambda", {}, "y", {}, "label", {}, "isDense", {});
+            holdTraces = obj.safeBool(d, "hold", false);
+            curTraces = struct("lambda", {}, "y", {}, "label", {}, "isDense", {}, "metric", {}, "group", {});
+            nextGroup = 1;
+            if holdTraces
+                rawCur = obj.traces;
+                if ~isempty(obj.fig) && isvalid(obj.fig) && isfield(obj.fig.UserData, "visualize") ...
+                        && isfield(obj.fig.UserData.visualize, "traces")
+                    rawCur = obj.fig.UserData.visualize.traces;
+                end
+                curTraces = obj.normalizeTraceStruct(rawCur);
+                if ~isempty(curTraces)
+                    nextGroup = max([curTraces.group]) + 1;
+                end
+            end
+
+            newTraces = struct("lambda", {}, "y", {}, "label", {}, "isDense", {}, "metric", {}, "group", {});
             for m = 1:numel(out.metrics)
                 tr = struct( ...
                     "lambda", reshape(out.lambda, 1, []), ...
                     "y", reshape(out.values(:, m), 1, []), ...
                     "label", sprintf("%s | %s (p=%.1f, r=%.1f nm)", out.metrics(m), srcLabel, out.p, out.r), ...
-                    "isDense", out.isDense);
+                    "isDense", out.isDense, ...
+                    "metric", string(out.metrics(m)), ...
+                    "group", nextGroup);
                 newTraces(end+1) = tr; %#ok<AGROW>
             end
 
             titleStr = sprintf("Spectra at p = %.1f nm, r = %.1f nm", out.p, out.r);
-            if obj.safeBool(d, "hold", false)
-                curTraces = obj.traces;
-                if ~isempty(obj.fig) && isvalid(obj.fig) && isfield(obj.fig.UserData, "visualize") ...
-                        && isfield(obj.fig.UserData.visualize, "traces")
-                    curTraces = obj.fig.UserData.visualize.traces;
-                end
+            if holdTraces
                 tracesAll = [curTraces, newTraces];
                 maxTraces = 24;
                 if numel(tracesAll) > maxTraces
@@ -325,9 +341,13 @@ classdef VisualizeController < handle
             obj.traces = tracesAll;
             obj.syncTracesToFig();
 
+            plotStyle = lower(obj.safeStr(d, "plotStyle", "both"));
+            if ~ismember(plotStyle, ["both", "line", "points"]), plotStyle = "both"; end
+
             ax = obj.getAx1D();
             plotSpectraLines(ax, tracesAll, XAxis=xAxis, LaserWavelength=laserWl, ...
                 LogY=obj.safeBool(d, "logY", true), Smoothing=smoothing, ...
+                PlotStyle=plotStyle, ...
                 Normalize=obj.safeBool(d, "normalize", false), Title=titleStr);
             rep.complete("Spectra1D", sprintf("%d trace(s) evaluated.", numel(newTraces)));
             msg = sprintf("1D: %d trace(s) from %s plotted (%d on axes).", numel(newTraces), srcLabel, numel(tracesAll));
@@ -985,6 +1005,33 @@ classdef VisualizeController < handle
                 elseif isscalar(val) || (isrow(val) && size(val, 1) == 1 && n > 1)
                     rowS.(fn) = val;
                 end
+            end
+        end
+
+        function out = normalizeTraceStruct(~, raw)
+            out = struct("lambda", {}, "y", {}, "label", {}, "isDense", {}, "metric", {}, "group", {});
+            if isempty(raw) || ~isstruct(raw)
+                return;
+            end
+            for k = 1:numel(raw)
+                met = "";
+                if isfield(raw, "metric") && ~isempty(raw(k).metric)
+                    met = string(raw(k).metric);
+                elseif isfield(raw, "label") && ~isempty(raw(k).label)
+                    parts = split(string(raw(k).label), "|");
+                    met = strtrim(parts(1));
+                end
+                grp = 1;
+                if isfield(raw, "group") && ~isempty(raw(k).group) && isfinite(double(raw(k).group))
+                    grp = double(raw(k).group);
+                end
+                out(end+1) = struct( ... %#ok<AGROW>
+                    "lambda", raw(k).lambda, ...
+                    "y", raw(k).y, ...
+                    "label", raw(k).label, ...
+                    "isDense", raw(k).isDense, ...
+                    "metric", met, ...
+                    "group", grp);
             end
         end
     end

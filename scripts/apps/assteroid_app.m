@@ -6079,7 +6079,7 @@ end
 
 function t = emptyVisualizeTraces()
 %emptyVisualizeTraces  0x0 trace struct used by the 1D spectra view.
-    t = struct("lambda", {}, "y", {}, "label", {}, "isDense", {});
+    t = struct("lambda", {}, "y", {}, "label", {}, "isDense", {}, "metric", {}, "group", {});
 end
 
 function cmap = loadColormapSafe(n, doFlip)

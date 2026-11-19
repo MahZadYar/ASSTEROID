@@ -55,12 +55,36 @@ ctl2 = VisualizeController(session, fVis, [], ax1, ax2, []);
 ctl2.handleEvent("RequestBranchInfo", struct());
 
 % Exact row lookup even when optima #1 and #2 share identical (p, r)
+ax1.Units = "normalized";
+ax1.Position = [0.05, 0.05, 0.90, 0.90];
 ctl2.handleEvent("Render", struct("mode", "1d", "source", "sim", "simDataset", "optima", ...
-    "optimaIndex", 2, "metrics", {{"EE_V"}}, "hold", false));
+    "optimaIndex", 2, "metrics", {{"EE_V"}}, "plotStyle", "both", "hold", false));
 assert(numel(ctl2.traces) == 1 && abs(ctl2.traces(1).y(1) - 101) < 1e-9, ...
     "Optima Sim 1D lookup must select exact optimaIndex=2 even for shared (p, r).");
 assert(contains(ctl2.traces(1).label, "Optima.Sim [A/EE_V_analyte]"), ...
     "Optima Sim 1D trace label must show basinTag and optimizedMetric.");
+assert(ctl2.traces(1).group == 1, "First render must assign group=1.");
+assert(strcmp(ax1.Units, "normalized") && all(abs(ax1.Position - [0.05, 0.05, 0.90, 0.90]) < 1e-9), ...
+    "1D uiaxes Units/Position must be preserved across cla('reset').");
+
+% Hold previous traces: group increments, same metric keeps same color with different line/marker style
+ctl2.handleEvent("Render", struct("mode", "1d", "source", "sim", "simDataset", "optima", ...
+    "optimaIndex", 3, "metrics", {{"EE_V"}}, "plotStyle", "line", "hold", true));
+assert(numel(ctl2.traces) == 2 && ctl2.traces(2).group == 2, ...
+    "Held render must increment group to 2.");
+lnObjs = findobj(ax1, "Type", "Line");
+assert(numel(lnObjs) == 2, "Line-only mode with 2 traces must produce 2 line objects.");
+assert(all(abs(lnObjs(1).Color - lnObjs(2).Color) < 1e-9), ...
+    "Same metric across held renders must keep identical OKHSL palette color.");
+assert(~strcmp(lnObjs(1).LineStyle, lnObjs(2).LineStyle), ...
+    "Held render must switch line style for visual distinction.");
+
+% Points-only mode
+ctl2.handleEvent("Render", struct("mode", "1d", "source", "sim", "simDataset", "optima", ...
+    "optimaIndex", 1, "metrics", {{"EE_V"}}, "plotStyle", "points", "hold", false));
+ptObjs = findobj(ax1, "Type", "Line");
+assert(numel(ptObjs) == 1 && strcmp(ptObjs(1).LineStyle, "none") && ~strcmp(ptObjs(1).Marker, "none"), ...
+    "Points-only mode must draw markers without connecting line.");
 
 % 2D scattered map on db.Optima.Sim
 ctl2.handleEvent("Render", struct("mode", "2d", "branch", "Optima.Sim", ...

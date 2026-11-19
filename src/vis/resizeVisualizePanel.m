@@ -20,4 +20,16 @@ function resizeVisualizePanel(fig)
     w = max(10, round(p.Position(3)));
     h_ = max(10, round(p.Position(4)));
     tg.Position = [1, 1, w, h_];
+
+    % Keep 1D and 2D uiaxes anchored to normalized full-tab coordinates
+    % (prevents MATLAB cla('reset') / uitab deferred-layout shrinking to bottom-left)
+    for axKey = ["visualizeAx1D", "visualizeAx2D"]
+        if isfield(h, axKey)
+            ax = h.(axKey);
+            if ~isempty(ax) && isvalid(ax)
+                ax.Units = "normalized";
+                ax.Position = [0.05, 0.05, 0.90, 0.90];
+            end
+        end
+    end
 end

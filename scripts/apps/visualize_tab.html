@@ -769,6 +769,7 @@ function collectConfig() {
         cfg.xAxis = val("xAxis1d");
         cfg.logY = chk("logY1d");
         cfg.smoothing = val("smooth1d");
+        cfg.plotStyle = val("plotStyle1d") || "both";
         cfg.normalize = chk("normalize1d");
         cfg.hold = chk("hold1d");
         cfg.laserWavelength = numOr("laser1d", 785);
@@ -1127,9 +1128,19 @@ document.addEventListener("DOMContentLoaded", function() {
                             </select>
                         </div>
                     </div>
-                    <div class="field">
-                        <label class="lbl" for="laser1d">Laser λ (nm)</label>
-                        <input type="number" id="laser1d" value="785" step="0.1">
+                    <div class="field-row">
+                        <div class="field">
+                            <label class="lbl" for="plotStyle1d">Plot style</label>
+                            <select id="plotStyle1d">
+                                <option value="both" selected>Line + Points</option>
+                                <option value="line">Line only</option>
+                                <option value="points">Points only</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label class="lbl" for="laser1d">Laser λ (nm)</label>
+                            <input type="number" id="laser1d" value="785" step="0.1">
+                        </div>
                     </div>
                     <div class="check-grid">
                         <label class="check"><input type="checkbox" id="logY1d" checked>Log y-axis</label>
