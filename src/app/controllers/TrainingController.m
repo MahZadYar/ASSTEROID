@@ -833,7 +833,11 @@ classdef TrainingController < handle
         function browseCheckpointFile(obj, d)
         % BROWSECHECKPOINTFILE Browse for a checkpoint .mat file.
             startDir = obj.session.workDir;
-            if isfolder("C:/tmp/DNNCheckPoints")
+            if isfolder(fullfile(obj.session.workDir, "DNNCheckpoints"))
+                startDir = fullfile(obj.session.workDir, "DNNCheckpoints");
+            elseif isfolder(fullfile(obj.session.workDir, "Database", "DNNCheckpoints"))
+                startDir = fullfile(obj.session.workDir, "Database", "DNNCheckpoints");
+            elseif isfolder("C:/tmp/DNNCheckPoints")
                 startDir = "C:/tmp/DNNCheckPoints";
             end
             if isfield(d, "path") && strlength(string(d.path)) > 0
@@ -858,7 +862,11 @@ classdef TrainingController < handle
                 obj.sendToHTML("CheckpointDirSelected", struct("dirPath", string(d.path)));
                 return;
             end
-            cpDir = uigetdir(obj.session.workDir, 'Select Checkpoint Save Directory');
+            startDir = obj.session.workDir;
+            if isfolder(fullfile(startDir, "DNNCheckpoints"))
+                startDir = fullfile(startDir, "DNNCheckpoints");
+            end
+            cpDir = uigetdir(startDir, 'Select Checkpoint Save Directory');
             if ischar(cpDir) || isstring(cpDir)
                 obj.sendToHTML("CheckpointDirSelected", struct("dirPath", string(cpDir)));
             end
@@ -867,9 +875,10 @@ classdef TrainingController < handle
         function res = findLatestCheckpointFile(~, workDir)
         % FINDLATESTCHECKPOINTFILE Locate newest checkpoint file in candidate folders.
             candidateDirs = [
-                string(workDir), ...
-                "C:/tmp/DNNCheckPoints", ...
                 fullfile(workDir, "DNNCheckpoints"), ...
+                fullfile(workDir, "Database", "DNNCheckpoints"), ...
+                "C:/tmp/DNNCheckPoints", ...
+                string(workDir), ...
                 "C:/tmp/DNNCheckPoints_archive"
             ];
             allFiles = [];

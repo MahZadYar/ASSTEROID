@@ -15,7 +15,7 @@
 3. Leave **Checkpoint Path** empty (or omit it)
 4. Start training
 
-✅ Checkpoints are now automatically saved to: `{WorkDir}/DNNCheckpoints/{modelname}/`
+✅ Checkpoints are now automatically saved to: `{WorkDir}/DNNCheckpoints/{modelname}/` (which resolves to `Database/DNNCheckpoints/` when working from the `Database/` workspace root).
 
 ### Recovery After an App Crash (v6.1+)
 

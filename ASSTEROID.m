@@ -19,7 +19,7 @@
 %
 %   Example:
 %       ASSTEROID
-%       ASSTEROID("C:/Path/To/Data")
+%       ASSTEROID("C:/Path/To/Database")
 %
 %   See also: start_app, assteroid_app, setup_project
 

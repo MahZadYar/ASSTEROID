@@ -26,9 +26,9 @@ clearvars; clc;
 here = fileparts(mfilename('fullpath'));
 if isempty(here) || ~isfolder(here), here = fullfile(pwd, 'tests'); end
 codebase = fileparts(here);
-dataDir = fullfile(codebase, '..', '..', 'Data', 'Data Analysis');
+dataDir = fullfile(codebase, '..', '..', 'Database');
 if ~isfolder(dataDir)
-    dataDir = fullfile(codebase, '..', 'Data', 'Data Analysis');
+    dataDir = fullfile(codebase, '..', 'Database');
 end
 dataFile = fullfile(dataDir, 'prl_sweep_sphere_785_new.mat');
 legacyModelFile = fullfile(dataDir, 'prl_sweep_sphere_785_new_model.mat');

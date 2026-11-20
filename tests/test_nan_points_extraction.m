@@ -49,7 +49,7 @@ assert(contains(contentTable, sprintf('700\t200')), "Table must contain row 700,
 fprintf("COMSOL export format tests PASSED.\n");
 
 %% 3. Test with actual project dataset (prl_sweep.mat if available)
-prlFile = "d:/OneDrive - Kaunas University of Technology/~Science Projects/NanoTRAACES/WP01 Design/Data/Raw/prl_sweep.mat";
+prlFile = "d:/OneDrive - Kaunas University of Technology/~Science Projects/NanoTRAACES/WP01 Design/Database/Raw/Simulation/prl_sweep.mat";
 if isfile(prlFile)
     fprintf("\n=== Test 3: Real Dataset (prl_sweep.mat) ===\n");
     resReal = findNanSamplingPoints(prlFile);

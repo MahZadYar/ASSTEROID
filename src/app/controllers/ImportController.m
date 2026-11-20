@@ -67,9 +67,12 @@ classdef ImportController < handle
 
             candidates = { ...
                 string(inputFile), ...
-                fullfile(obj.session.workDir, inputFile)};
+                fullfile(obj.session.workDir, inputFile), ...
+                fullfile(obj.session.workDir, "Raw", "Simulation", inputFile), ...
+                fullfile(obj.session.workDir, "Database", "Raw", "Simulation", inputFile)};
             if ~isempty(obj.fig) && isvalid(obj.fig) && isfield(obj.fig.UserData, "workDir")
                 candidates{end+1} = fullfile(obj.fig.UserData.workDir, inputFile);
+                candidates{end+1} = fullfile(obj.fig.UserData.workDir, "Raw", "Simulation", inputFile);
             end
 
             filePath = "";
@@ -380,6 +383,17 @@ classdef ImportController < handle
             end
 
             startDir = obj.session.workDir;
+            if fieldId == "inputFile"
+                simCandidates = [ ...
+                    fullfile(startDir, "Raw", "Simulation"), ...
+                    fullfile(startDir, "Database", "Raw", "Simulation")];
+                for sk = 1:numel(simCandidates)
+                    if isfolder(simCandidates(sk))
+                        startDir = simCandidates(sk);
+                        break;
+                    end
+                end
+            end
             if fileType == "folder"
                 folder = uigetdir(startDir, "Select Folder");
                 if folder ~= 0

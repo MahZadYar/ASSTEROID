@@ -266,8 +266,8 @@ ASSTEROID
 % Or using the convenience script:
 start_app
 
-% Optionally specify a custom working project directory:
-ASSTEROID("path/to/my/project/data")
+% Optionally specify a custom working project directory (e.g., Database/):
+ASSTEROID("path/to/Database")
 ```
 
 The application provides:

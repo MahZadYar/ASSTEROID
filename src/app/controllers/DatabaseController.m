@@ -177,7 +177,11 @@ classdef DatabaseController < handle
                         end
 
                     case "ExportHDF5"
-                        hdfFile = fullfile(sess.workDir, "database_export.h5");
+                        exportDir = sess.workDir;
+                        if isfolder(fullfile(sess.workDir, "Published"))
+                            exportDir = fullfile(sess.workDir, "Published");
+                        end
+                        hdfFile = fullfile(exportDir, "database_export.h5");
                         [f, p] = uiputfile("*.h5", "Export HDF5", hdfFile);
                         if f ~= 0
                             exportDatabaseToHDF5(sess.db, fullfile(p, f));
@@ -186,7 +190,11 @@ classdef DatabaseController < handle
 
                     case "ExportONNX"
                         if isfield(sess.db, "Model") && isfield(sess.db.Model, "Net") && ~isempty(sess.db.Model.Net)
-                            onnxFile = fullfile(sess.workDir, "surrogate_model.onnx");
+                            exportDir = sess.workDir;
+                            if isfolder(fullfile(sess.workDir, "Published"))
+                                exportDir = fullfile(sess.workDir, "Published");
+                            end
+                            onnxFile = fullfile(exportDir, "surrogate_model.onnx");
                             [f, p] = uiputfile("*.onnx", "Export ONNX", onnxFile);
                             if f ~= 0
                                 exportModelToOnnx(sess.db.Model.Net, fullfile(p, f));

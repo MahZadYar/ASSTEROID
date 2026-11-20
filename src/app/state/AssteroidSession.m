@@ -68,9 +68,10 @@ classdef AssteroidSession < handle
             obj.dbFile = dbPath;
             obj.dbDirty = false;
 
-            % Update workDir if stored in DB
+            % Update workDir if stored in DB and folder exists on disk
             if isfield(obj.db, "Global") && isfield(obj.db.Global, "WorkDir") ...
-                    && strlength(string(obj.db.Global.WorkDir)) > 0
+                    && strlength(string(obj.db.Global.WorkDir)) > 0 ...
+                    && isfolder(string(obj.db.Global.WorkDir))
                 obj.workDir = string(obj.db.Global.WorkDir);
             else
                 obj.workDir = string(fileparts(dbPath));

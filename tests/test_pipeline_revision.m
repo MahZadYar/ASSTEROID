@@ -81,7 +81,7 @@ fprintf('  ✓ Canonical metric & COMSOL variable naming PASSED!\n\n');
 
 %% 3. Test Metric Field Name Resolution on Real COMSOL Data (Backward Compatibility)
 fprintf('--- Test 3: Metric Field Resolution on COMSOL Data ---\n');
-dataPath = fullfile(codebaseDir, "..", "..", "Data", "Data Analysis", "prl_sweep_sphere_785_new.mat");
+dataPath = fullfile(codebaseDir, "..", "..", "Database", "prl_sweep_sphere_785_new.mat");
 if ~isfile(dataPath)
     dataPath = 'prl_sweep_sphere_785_new.mat';
 end
@@ -110,7 +110,7 @@ fprintf('  ✓ Metric field resolution PASSED!\n\n');
 
 %% 4. Test Full Grid Prediction Pipeline vs Ground Truth
 fprintf('--- Test 4: Grid Prediction vs Ground Truth Correlation ---\n');
-modelPath = fullfile(codebaseDir, "..", "..", "Data", "Data Analysis", "prl_sweep_sphere_785_new_model.mat");
+modelPath = fullfile(codebaseDir, "..", "..", "Database", "prl_sweep_sphere_785_new_model.mat");
 if ~isfile(modelPath)
     modelPath = 'prl_sweep_sphere_785_new_model.mat';
 end

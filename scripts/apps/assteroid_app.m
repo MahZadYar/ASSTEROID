@@ -312,9 +312,9 @@ function figOut = assteroid_app(workFolder)
     %% Attempt DB auto-load ---------------------------------------------------
     dbCandidates = [
         string(fullfile(workFolder, "database.mat")), ...
-        string(fullfile(workFolder, "Data", "Data Analysis", "database.mat")), ...
-        string(fullfile(workFolder, "..", "Data", "Data Analysis", "database.mat")), ...
-        string(fullfile(fileparts(workFolder), "Data", "Data Analysis", "database.mat"))
+        string(fullfile(workFolder, "Database", "database.mat")), ...
+        string(fullfile(workFolder, "..", "Database", "database.mat")), ...
+        string(fullfile(fileparts(workFolder), "Database", "database.mat"))
     ];
     defaultDb = "";
     for k = 1:numel(dbCandidates)
@@ -437,6 +437,9 @@ function handleDatabaseEvent(src, event, fig)
                 if fig.UserData.dbFile ~= ""
                     outDir = fileparts(fig.UserData.dbFile);
                 end
+                if isfolder(fullfile(outDir, "Published"))
+                    outDir = fullfile(outDir, "Published");
+                end
                 h5File = fullfile(outDir, "sers_database.h5");
                 try
                     exportDatabaseToHDF5(fig.UserData.db, h5File);
@@ -454,6 +457,9 @@ function handleDatabaseEvent(src, event, fig)
                 outDir = fig.UserData.workDir;
                 if fig.UserData.dbFile ~= ""
                     outDir = fileparts(fig.UserData.dbFile);
+                end
+                if isfolder(fullfile(outDir, "Published"))
+                    outDir = fullfile(outDir, "Published");
                 end
                 onnxFile = fullfile(outDir, "sers_model.onnx");
                 try
@@ -550,9 +556,10 @@ function loadDbFile(fig, dbPath)
         fig.UserData.visExport.ri = resolveRefractiveIndexStruct(fig);
     end
 
-    % Update workDir from db if available
+    % Update workDir from db if available and folder exists on disk
     if isfield(fig.UserData.db, "Global") && isfield(fig.UserData.db.Global, "WorkDir") ...
-            && strlength(string(fig.UserData.db.Global.WorkDir)) > 0
+            && strlength(string(fig.UserData.db.Global.WorkDir)) > 0 ...
+            && isfolder(string(fig.UserData.db.Global.WorkDir))
         fig.UserData.workDir = string(fig.UserData.db.Global.WorkDir);
     else
         fig.UserData.workDir = string(fileparts(dbPath));
@@ -2001,6 +2008,17 @@ function browseAndReply(src, eventData, fig)
     end
 
     startDir = fig.UserData.workDir;
+    if fieldId == "inputFile"
+        simCandidates = [ ...
+            fullfile(startDir, "Raw", "Simulation"), ...
+            fullfile(startDir, "Database", "Raw", "Simulation")];
+        for sk = 1:numel(simCandidates)
+            if isfolder(simCandidates(sk))
+                startDir = simCandidates(sk);
+                break;
+            end
+        end
+    end
 
     if fileType == "folder"
         chosen = uigetdir(startDir, "Select Folder");
@@ -2014,8 +2032,10 @@ function browseAndReply(src, eventData, fig)
             "Select File", startDir);
         if file == 0, return; end
         
-        % Always update workDir from the selected file's directory
-        fig.UserData.workDir = string(path);
+        % Keep workDir anchored when picking raw input tables from Raw/Simulation/
+        if fieldId ~= "inputFile"
+            fig.UserData.workDir = string(path);
+        end
 
         % For rawDataFiles, send only the filename to JS (paths corrupt in JS roundtrip)
         if fieldId == "rawDataFiles"
@@ -2893,7 +2913,11 @@ function handleTrainingEvent(src, event, fig, visPanel)
                 sendEventToHTMLSource(src, "SaveComplete", "Database saved.");
             case "BrowseCheckpointFile"
                 startDir = fig.UserData.workDir;
-                if isfolder("C:/tmp/DNNCheckPoints")
+                if isfolder(fullfile(fig.UserData.workDir, "DNNCheckpoints"))
+                    startDir = fullfile(fig.UserData.workDir, "DNNCheckpoints");
+                elseif isfolder(fullfile(fig.UserData.workDir, "Database", "DNNCheckpoints"))
+                    startDir = fullfile(fig.UserData.workDir, "Database", "DNNCheckpoints");
+                elseif isfolder("C:/tmp/DNNCheckPoints")
                     startDir = "C:/tmp/DNNCheckPoints";
                 end
                 [cpFile, cpPath] = uigetfile({'*.mat', 'Model & Checkpoint Files (*.mat)'; '*.*', 'All Files (*.*)'}, ...
@@ -2905,7 +2929,11 @@ function handleTrainingEvent(src, event, fig, visPanel)
                         "fileName", string(cpFile)));
                 end
             case "BrowseCheckpointDir"
-                cpDir = uigetdir(fig.UserData.workDir, 'Select Checkpoint Save Directory');
+                startDir = fig.UserData.workDir;
+                if isfolder(fullfile(startDir, "DNNCheckpoints"))
+                    startDir = fullfile(startDir, "DNNCheckpoints");
+                end
+                cpDir = uigetdir(startDir, 'Select Checkpoint Save Directory');
                 if ischar(cpDir) || isstring(cpDir)
                     sendEventToHTMLSource(src, "CheckpointDirSelected", struct("dirPath", string(cpDir)));
                 end
@@ -3386,8 +3414,9 @@ end
 function res = findLatestCheckpointFile(workDir)
 %findLatestCheckpointFile Scan disk for recent checkpoint/model .mat files.
     candidateDirs = [
-        "C:/tmp/DNNCheckPoints", ...
         fullfile(workDir, "DNNCheckpoints"), ...
+        fullfile(workDir, "Database", "DNNCheckpoints"), ...
+        "C:/tmp/DNNCheckPoints", ...
         "C:/tmp/DNNCheckPoints_archive"
     ];
     allFiles = [];
@@ -3742,9 +3771,9 @@ function sendDbOptimaToPanel(src, fig)
     if ~isfield(db, "Optima") || ~isfield(db.Optima, "period") || isempty(db.Optima.period)
         candidates = [
             string(fullfile(fig.UserData.workDir, "database.mat")), ...
-            string(fullfile(fig.UserData.workDir, "Data", "Data Analysis", "database.mat")), ...
-            string(fullfile(fig.UserData.workDir, "..", "Data", "Data Analysis", "database.mat")), ...
-            string(fullfile(fileparts(fig.UserData.workDir), "Data", "Data Analysis", "database.mat"))
+            string(fullfile(fig.UserData.workDir, "Database", "database.mat")), ...
+            string(fullfile(fig.UserData.workDir, "..", "Database", "database.mat")), ...
+            string(fullfile(fileparts(fig.UserData.workDir), "Database", "database.mat"))
         ];
         for k = 1:numel(candidates)
             if isfile(candidates(k))

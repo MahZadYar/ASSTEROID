@@ -5,7 +5,7 @@ function [resultsOut, resultsWeightedOut] = audit_simulation_consistency(varargi
 % orders, metric schemas, and optional spatial ROI filtering).
 %
 % USAGE:
-%   audit_simulation_consistency();                                    % Default files in Data/Raw
+%   audit_simulation_consistency();                                    % Default files in Database/Raw/Simulation
 %   audit_simulation_consistency(fileList);                            % Explicit list/glob/folder of files
 %   audit_simulation_consistency(fileList, pRange, rRange);            % Explicit files + spatial ROI
 %   audit_simulation_consistency(pRange);                              % Default files + Axis-1 ROI [min, max]
@@ -25,7 +25,7 @@ function [resultsOut, resultsWeightedOut] = audit_simulation_consistency(varargi
 % EXAMPLES:
 %   audit_simulation_consistency({'runA.dat', 'runB.dat'});
 %   audit_simulation_consistency(["batch1.dat", "batch2.dat", "batch3.dat"], [400, 906.44], [100, 300]);
-%   audit_simulation_consistency('Data/Raw/Sweep*.dat', [800, 1000]);
+%   audit_simulation_consistency('Database/Raw/Simulation/Sweep*.dat', [800, 1000]);
 %
 % OUTPUT FIGURES:
 %   Figure 1: Probability Density Distributions (PDF: Unweighted Solid vs. Voronoi-Weighted Dashed)
@@ -382,7 +382,10 @@ end
 end
 
 function [filePaths, sourceLabels] = resolveInputFileList(inputSpec, projectRoot)
-rawDir = fullfile(projectRoot, 'Data', 'Raw');
+rawDir = fullfile(projectRoot, 'Database', 'Raw', 'Simulation');
+if ~isfolder(rawDir)
+    rawDir = fullfile(projectRoot, 'Database', 'Raw');
+end
 
 % Default backward-compatible list when no custom input files are supplied
 if isempty(inputSpec)
@@ -393,7 +396,7 @@ if isempty(inputSpec)
         if isfile(p), candidates{end+1} = p; end %#ok<AGROW>
     end
     if numel(candidates) < 2
-        % Fall back to all sweep data files in Data/Raw
+        % Fall back to all sweep data files in Database/Raw/Simulation
         candidates = discoverFilesInPattern(rawDir);
     end
     inputSpec = candidates;

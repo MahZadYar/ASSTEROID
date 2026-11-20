@@ -6,7 +6,7 @@ fprintf("=== Starting test_reproduce_bug ===\n");
 close all force;
 
 % Run assteroid_app
-workFolder = "d:/OneDrive - Kaunas University of Technology/~Science Projects/NanoTRAACES/WP01 Design/Data/Data Analysis";
+workFolder = "d:/OneDrive - Kaunas University of Technology/~Science Projects/NanoTRAACES/WP01 Design/Database";
 fig = assteroid_app(workFolder);
 drawnow;
 

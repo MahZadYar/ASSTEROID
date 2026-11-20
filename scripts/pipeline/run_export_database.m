@@ -13,10 +13,17 @@
 setup_project;
 
 %% Configuration
-workDir      = pwd;
-dbMatFile    = fullfile(workDir, "database.mat");
-dbH5File     = fullfile(workDir, "sers_database.h5");
-onnxFile     = fullfile(workDir, "sers_model.onnx");
+workDir = pwd;
+if ~isfile(fullfile(workDir, "database.mat")) && isfile(fullfile(workDir, "Database", "database.mat"))
+    workDir = fullfile(workDir, "Database");
+end
+exportDir = workDir;
+if isfolder(fullfile(workDir, "Published"))
+    exportDir = fullfile(workDir, "Published");
+end
+dbMatFile = fullfile(workDir, "database.mat");
+dbH5File  = fullfile(exportDir, "sers_database.h5");
+onnxFile  = fullfile(exportDir, "sers_model.onnx");
 
 %% Load database
 if ~isfile(dbMatFile)
