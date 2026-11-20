@@ -24,6 +24,7 @@ function analyteSpec = loadAndNormalizeAnalyteSpectrum(filePath, options)
         options.smoothMethod (1,:) char = 'movmean'
         options.smoothWindow (1,1) double = 5
         options.doNormalization (1,1) logical = true
+        options.normalization (1,:) char = 'area'
         options.normTargetArea (1,1) double = 1.0
         options.showPlot (1,1) logical = false
     end
@@ -38,6 +39,7 @@ function analyteSpec = loadAndNormalizeAnalyteSpectrum(filePath, options)
     smoothMethod = options.smoothMethod;
     smoothWindow = options.smoothWindow;
     doNormalization = options.doNormalization;
+    normalization = options.normalization;
     normTargetArea = options.normTargetArea;
     showPlot = options.showPlot;
 
@@ -96,38 +98,39 @@ try
 
     % --- Optional smoothing ---
     if doSmoothing && numel(proc) >= 3
-        proc = smoothdata(proc, smoothMethod, smoothWindowPts);
+        proc = smoothdata(proc, smoothMethod, smoothWindow);
     end
 
     % --- Normalization ---
-    switch lower(normalization)
-        case 'area'
-            areaVal = trapz(shift, proc);
-            if areaVal > 0
-                proc = proc / areaVal;
-            else
-                % fallback to max normalization
+    if doNormalization
+        switch lower(normalization)
+            case 'area'
+                areaVal = trapz(shift, proc);
+                if areaVal > 0
+                    proc = (proc / areaVal) * normTargetArea;
+                else
+                    % fallback to max normalization
+                    mx = max(proc);
+                    if mx > 0, proc = proc / mx; end
+                end
+            case 'max'
                 mx = max(proc);
                 if mx > 0, proc = proc / mx; end
-            end
-        case 'max'
-            mx = max(proc);
-            if mx > 0, proc = proc / mx; end
-        case 'zscore'
-            mu = mean(proc);
-            sig = std(proc);
-            if sig > 0
-                proc = (proc - mu) / sig;
-                % Shift to nonnegative and renormalize area to 1
-                mmin = min(proc);
-                if mmin < 0, proc = proc - mmin; end
+            case 'zscore'
+                mu = mean(proc);
+                sig = std(proc);
+                if sig > 0
+                    proc = (proc - mu) / sig;
+                    % Shift to nonnegative and renormalize area
+                    mmin = min(proc);
+                    if mmin < 0, proc = proc - mmin; end
+                    areaVal = trapz(shift, proc);
+                    if areaVal > 0, proc = (proc / areaVal) * normTargetArea; end
+                end
+            otherwise
                 areaVal = trapz(shift, proc);
-                if areaVal > 0, proc = proc / areaVal; end
-            end
-        otherwise
-            % default to area
-            areaVal = trapz(shift, proc);
-            if areaVal > 0, proc = proc / areaVal; end
+                if areaVal > 0, proc = (proc / areaVal) * normTargetArea; end
+        end
     end
 
     % Populate output

@@ -5159,7 +5159,14 @@ function runPredictInterpolate(src, d, fig)
 
             if strlength(analyteFile) > 0 && isfile(analyteFile)
                 try
-                    ve.analyteSpectrum = loadAndNormalizeAnalyteSpectrum(analyteFile);
+                    ve.analyteSpectrum = loadAndNormalizeAnalyteSpectrum(char(analyteFile));
+                catch
+                    ve.analyteSpectrum = struct();
+                end
+            end
+            if ~isstruct(ve.analyteSpectrum) || ~isfield(ve.analyteSpectrum, "shift_cm") || isempty(ve.analyteSpectrum.shift_cm)
+                try
+                    ve.analyteSpectrum = getDefaultAnalyteSpectrum();
                 catch
                     ve.analyteSpectrum = struct();
                 end

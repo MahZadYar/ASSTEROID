@@ -41,7 +41,12 @@ function allData = extractBranchAsSoA(db, branchName)
         if ismember(fn, metaFields)
             continue
         end
-        allData.(fn) = branch.(fn);
+        val = branch.(fn);
+        if SpectralStorage.isEncodedSpectral(val)
+            allData.(fn) = SpectralStorage.decodeField(val);
+        else
+            allData.(fn) = val;
+        end
     end
 
     % Re-inject branch-level metadata as SoA-compatible fields

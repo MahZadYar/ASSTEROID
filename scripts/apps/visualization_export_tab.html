@@ -247,6 +247,9 @@ function setup(htmlComponent) {
         if (d.fields && d.fields.length) {
             appendLog("Stored fields: " + [].concat(d.fields).join(", "));
         }
+        if (d.spectralStorageMode && d.spectralStorageMode !== "none" && d.spectralDetails) {
+            appendLog("Spectral storage (" + d.spectralStorageMode + "): " + d.spectralDetails);
+        }
         var branch = String(d.branch || "db.Pred").replace(/^db\./, "");
         var btnOpen = document.getElementById("btnOpenVisualize");
         if (branch === "Pred" || branch === "Interp") {
@@ -348,8 +351,20 @@ function collectPredictConfig() {
         batchSize: numOr("batchSize", 1000),
         interpMethod: val("interpMethod") || "linear",
         spectralMethod: val("spectralMethod") || "makima",
+        spectralStorageMode: val("spectralStorageMode") || "none",
+        svdMaxRank: numOr("svdMaxRank", 32),
+        svdMaxError: numOr("svdMaxError", 0.005),
+        sidecarSubtype: val("sidecarSubtype") || "single",
         selectedFields: selectedFields
     };
+}
+
+function toggleSpectralStorageMode() {
+    var mode = val("spectralStorageMode") || "none";
+    var svdOpts = document.getElementById("svdOptionsBlock");
+    var sidecarOpts = document.getElementById("sidecarOptionsBlock");
+    if (svdOpts) svdOpts.style.display = (mode === "svd") ? "" : "none";
+    if (sidecarOpts) sidecarOpts.style.display = (mode === "sidecar_h5") ? "" : "none";
 }
 
 function toggleDataSource() {
@@ -726,6 +741,7 @@ function updatePredictMetricsFromDb(d) {
 document.addEventListener("DOMContentLoaded", function() {
     toggleDataSource();
     togglePredictionTarget();
+    toggleSpectralStorageMode();
 });
 </script>
 </head>
@@ -937,6 +953,38 @@ document.addEventListener("DOMContentLoaded", function() {
                                 </tbody>
                             </table>
                             <p class="hint">Metrics synchronize automatically with <code>db.Model</code> (DNN mode) or <code>db.Sim</code> (Interpolation mode).</p>
+                            <div style="margin-top:10px;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);">
+                                <div class="field" style="margin-bottom:6px;">
+                                    <label for="spectralStorageMode">Spectral Array Compression / Sidecar <span style="font-weight:normal;color:var(--text-secondary);">([N &times; L] spectral only; scalars stay float64)</span></label>
+                                    <select id="spectralStorageMode" onchange="toggleSpectralStorageMode()" style="font-size:11px;">
+                                        <option value="none" selected>Uncompressed float64 (deduplicated 1&times;L axes)</option>
+                                        <option value="single">Float32 (single, ~2&times; smaller)</option>
+                                        <option value="log_uint16">Log-uint16 Quantized (~6–10&times; smaller, ~0.04% err)</option>
+                                        <option value="svd">Log-SVD Factorized C&times;B (~30–60&times; smaller, fast 2D/3D)</option>
+                                        <option value="sidecar_h5">External HDF5 Sidecar (.h5, 0 MB in DB, lazy read)</option>
+                                    </select>
+                                </div>
+                                <div id="svdOptionsBlock" style="display:none;" class="field-row">
+                                    <div class="field" style="margin-bottom:0;">
+                                        <label for="svdMaxRank">SVD Max Rank (k)</label>
+                                        <input type="number" id="svdMaxRank" value="32" step="4" min="4" max="256">
+                                    </div>
+                                    <div class="field" style="margin-bottom:0;">
+                                        <label for="svdMaxError">Target Max RMSE (dex)</label>
+                                        <input type="number" id="svdMaxError" value="0.005" step="0.001" min="0" max="0.2">
+                                    </div>
+                                </div>
+                                <div id="sidecarOptionsBlock" style="display:none;">
+                                    <div class="field" style="margin-bottom:0;">
+                                        <label for="sidecarSubtype">HDF5 Sidecar Dataset Format</label>
+                                        <select id="sidecarSubtype" style="font-size:11px;">
+                                            <option value="single" selected>Float32 (single + deflate/shuffle)</option>
+                                            <option value="log_uint16">Log-uint16 Quantized (+ deflate/shuffle)</option>
+                                            <option value="double">Float64 (double + deflate/shuffle)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
                             <div class="btn-row">
                                 <button id="btnPredict" class="btn-primary" onclick="predictInterpolate()">Predict / Interpolate (Populate DB)</button>
                             </div>

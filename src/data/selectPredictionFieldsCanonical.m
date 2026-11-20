@@ -82,6 +82,7 @@ function [filtered, includedFields] = selectPredictionFieldsCanonical(allData, s
                 filtered.(fn) = allData.(fn);
             end
         end
+        filtered = SpectralStorage.deduplicateAxes(filtered);
     end
 end
 

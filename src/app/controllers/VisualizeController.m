@@ -485,7 +485,7 @@ classdef VisualizeController < handle
             newLin = sub2ind([nr, np], mapR(irAll(sel)), mapP(ipAll(sel)));
             M = S.(metric);
             vol = NaN(nr * np, nl);
-            vol(newLin, :) = double(M(rows(sel), lamCols(iL)));
+            vol(newLin, :) = SpectralStorage.readSubmatrix(M, rows(sel), lamCols(iL));
             vol = reshape(vol, nr, np, nl);
             rep.checkStop("Volume3D");
 
@@ -588,8 +588,9 @@ classdef VisualizeController < handle
 
         function [v, nOut] = extractSpectralSlice(~, S, metric, lamT)
             M = S.(metric);
-            N = size(M, 1);
-            if size(M, 2) < 2
+            sz = SpectralStorage.getSpectralSize(M);
+            N = sz(1);
+            if sz(2) < 2
                 error("Visualize:NotSpectral", "%s is not a spectral [N x L] metric.", metric);
             end
             lam = double(S.lambda);
@@ -598,12 +599,14 @@ classdef VisualizeController < handle
                 lamRow = lam(1, :);
                 [~, idx] = min(abs(lamRow - lamT));
                 inRange = lamT >= min(lamRow) && lamT <= max(lamRow);
-                v = double(M(:, idx));
+                v = SpectralStorage.readColumns(M, idx);
                 if ~inRange, v(:) = NaN; end
                 nOut = N * double(~inRange);
             else
                 [~, idx] = min(abs(lam - lamT), [], 2);
-                v = double(M(sub2ind(size(M), (1:N)', idx)));
+                [uCols, ~, colMap] = unique(idx);
+                colsData = SpectralStorage.readColumns(M, uCols);
+                v = colsData(sub2ind(size(colsData), (1:N)', colMap));
                 outside = lamT < min(lam, [], 2) | lamT > max(lam, [], 2);
                 v(outside) = NaN;
                 nOut = nnz(outside);
@@ -748,6 +751,10 @@ classdef VisualizeController < handle
                 fn = fnames(i);
                 if ismember(fn, meta), continue; end
                 v = S.(fn);
+                if SpectralStorage.isEncodedSpectral(v, n)
+                    spec(end+1) = fn; %#ok<AGROW>
+                    continue;
+                end
                 if ~isnumeric(v), continue; end
                 if size(v, 1) == n && size(v, 2) == 1
                     scal(end+1) = fn; %#ok<AGROW>

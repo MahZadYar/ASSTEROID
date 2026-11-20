@@ -104,6 +104,17 @@ classdef PredictionController < handle
             metricsMin = obj.safeNum(d, "metricsShiftMin", stokesMin);
             metricsMax = obj.safeNum(d, "metricsShiftMax", stokesMax);
 
+            spectralStorageMode = lower(obj.safeStr(d, "spectralStorageMode", "none"));
+            if ~ismember(spectralStorageMode, ["none", "single", "log_uint16", "svd", "sidecar_h5"])
+                spectralStorageMode = "none";
+            end
+            svdMaxRank = max(1, round(obj.safeNum(d, "svdMaxRank", 32)));
+            svdMaxError = max(0, obj.safeNum(d, "svdMaxError", 0.005));
+            sidecarSubtype = lower(obj.safeStr(d, "sidecarSubtype", "single"));
+            if ~ismember(sidecarSubtype, ["single", "log_uint16", "double"])
+                sidecarSubtype = "single";
+            end
+
             selectedFields = string.empty;
             if isfield(d, "selectedFields")
                 selectedFields = parseCellOrString(d, "selectedFields");
@@ -139,7 +150,7 @@ classdef PredictionController < handle
                 [ok, model, ri] = obj.ensureModelAndRi(rep);
                 if ~ok, return; end
 
-                analyteSpec = obj.loadAnalyteSpectrum(analyteFile);
+                analyteSpec = obj.loadAnalyteSpectrum(analyteFile, rep);
                 modelMetrics = discoverModelTargetMetrics(obj.session.db, model);
                 if isempty(modelMetrics)
                     modelMetrics = ["Abs", "EE_V", "EE_S"];
@@ -232,6 +243,9 @@ classdef PredictionController < handle
                     return;
                 end
 
+                [allDataFiltered, encStats] = obj.encodeSpectralBranch(allDataFiltered, ...
+                    dataSource, predictionTarget, spectralStorageMode, svdMaxRank, svdMaxError, sidecarSubtype, rep);
+
                 if isstruct(allDataFiltered) && structRowCount(allDataFiltered) > 0
                     [obj.session.db, branchPath] = storePredictionResults( ...
                         obj.session.db, allDataFiltered, dataSource, predictionTarget);
@@ -263,6 +277,9 @@ classdef PredictionController < handle
                         "entries", nPoints, ...
                         "count", nPoints, ...
                         "fields", {cellstr(includedFields)}, ...
+                        "spectralStorageMode", char(encStats.mode), ...
+                        "spectralDetails", char(encStats.details), ...
+                        "sidecarFile", char(encStats.sidecarFile), ...
                         "message", sprintf("%d points predicted and saved to %s", nPoints, branchPath)));
                 else
                     obj.sendToHTML("VisError", "Prediction output was empty.");
@@ -293,7 +310,7 @@ classdef PredictionController < handle
                     return;
                 end
 
-                analyteSpec = obj.loadAnalyteSpectrum(analyteFile);
+                analyteSpec = obj.loadAnalyteSpectrum(analyteFile, rep);
                 baseTargets = deriveBaseTargetsFromSelection(selectedFields, simData);
 
                 rep.start("PredictInterpolate");
@@ -353,6 +370,9 @@ classdef PredictionController < handle
                     return;
                 end
 
+                [interpDataFiltered, encStats] = obj.encodeSpectralBranch(interpDataFiltered, ...
+                    dataSource, predictionTarget, spectralStorageMode, svdMaxRank, svdMaxError, sidecarSubtype, rep);
+
                 if isstruct(interpDataFiltered) && structRowCount(interpDataFiltered) > 0
                     [obj.session.db, branchPath] = storePredictionResults( ...
                         obj.session.db, interpDataFiltered, dataSource, predictionTarget);
@@ -381,6 +401,9 @@ classdef PredictionController < handle
                         "entries", nPoints, ...
                         "count", nPoints, ...
                         "fields", {cellstr(includedFields)}, ...
+                        "spectralStorageMode", char(encStats.mode), ...
+                        "spectralDetails", char(encStats.details), ...
+                        "sidecarFile", char(encStats.sidecarFile), ...
                         "message", sprintf("%d points interpolated and saved to %s", nPoints, branchPath)));
                 else
                     obj.sendToHTML("VisError", "Interpolation output was empty.");
@@ -413,13 +436,82 @@ classdef PredictionController < handle
             end
         end
 
-        function analyteSpec = loadAnalyteSpectrum(~, analyteFile)
+        function analyteSpec = loadAnalyteSpectrum(obj, analyteFile, rep)
             analyteSpec = struct();
             if strlength(analyteFile) > 0 && isfile(analyteFile)
                 try
-                    analyteSpec = loadAndNormalizeAnalyteSpectrum(analyteFile);
-                catch
+                    analyteSpec = loadAndNormalizeAnalyteSpectrum(char(analyteFile));
+                catch ME
+                    if nargin >= 3 && ~isempty(rep)
+                        rep.warn("LoadAnalyte", sprintf("Failed to load analyte spectrum '%s': %s", analyteFile, ME.message));
+                    end
                     analyteSpec = struct();
+                end
+            elseif strlength(analyteFile) > 0 && nargin >= 3 && ~isempty(rep)
+                rep.warn("LoadAnalyte", sprintf("Configured analyte spectrum file not found: %s", analyteFile));
+            end
+
+            if (~isstruct(analyteSpec) || ~isfield(analyteSpec, "shift_cm") || isempty(analyteSpec.shift_cm)) ...
+                    && isstruct(obj.session.analyteSpectrum) && isfield(obj.session.analyteSpectrum, "shift_cm") ...
+                    && ~isempty(obj.session.analyteSpectrum.shift_cm)
+                analyteSpec = obj.session.analyteSpectrum;
+            end
+
+            if ~isstruct(analyteSpec) || ~isfield(analyteSpec, "shift_cm") || isempty(analyteSpec.shift_cm)
+                try
+                    analyteSpec = getDefaultAnalyteSpectrum();
+                    if nargin >= 3 && ~isempty(rep)
+                        rep.info("Using built-in default analyte spectrum (DefaultAnalyteSpectrum.dat) for _analyte metrics.");
+                    end
+                catch ME
+                    if nargin >= 3 && ~isempty(rep)
+                        rep.warn("LoadAnalyte", sprintf("Default analyte spectrum unavailable: %s", ME.message));
+                    end
+                end
+            end
+        end
+
+        function [dataOut, stats] = encodeSpectralBranch(obj, dataIn, dataSource, predictionTarget, ...
+                storageMode, svdMaxRank, svdMaxError, sidecarSubtype, rep)
+            branchTag = "Pred";
+            if dataSource == "interpolation"
+                branchTag = "Interp";
+            end
+            if predictionTarget == "optima"
+                branchTag = "Optima_" + branchTag;
+            end
+
+            sidecarFile = "";
+            if storageMode == "sidecar_h5"
+                if strlength(obj.session.dbFile) > 0
+                    [dbDir, dbStem] = fileparts(obj.session.dbFile);
+                    if strlength(dbDir) == 0, dbDir = obj.session.workDir; end
+                    if strlength(dbStem) == 0, dbStem = "ASSTEROID"; end
+                else
+                    dbDir = obj.session.workDir;
+                    dbStem = "ASSTEROID";
+                end
+                sidecarFile = fullfile(dbDir, dbStem + "_" + branchTag + "_spectral.h5");
+            end
+
+            [dataOut, stats] = SpectralStorage.encodeBranch(dataIn, ...
+                "Mode", storageMode, ...
+                "SvdMaxRank", svdMaxRank, ...
+                "SvdMaxError", svdMaxError, ...
+                "SidecarFile", sidecarFile, ...
+                "SidecarGroup", "/" + branchTag, ...
+                "SidecarSubtype", sidecarSubtype, ...
+                "Reporter", rep);
+
+            if ~isempty(stats.encodedFields) && storageMode ~= "none" && ~isempty(rep)
+                ratio = stats.rawBytes / max(1, stats.storedBytes);
+                if storageMode == "sidecar_h5"
+                    rep.info(sprintf("Spectral sidecar (%s): %s offloaded to %s (0 MB in DB).", ...
+                        sidecarSubtype, DatabaseEngine.formatBytes(stats.rawBytes), stats.sidecarFile));
+                else
+                    rep.info(sprintf("Spectral compression (%s): %s -> %s in RAM (%.1fx). %s", ...
+                        storageMode, DatabaseEngine.formatBytes(stats.rawBytes), ...
+                        DatabaseEngine.formatBytes(stats.storedBytes), ratio, stats.details));
                 end
             end
         end
@@ -529,6 +621,7 @@ classdef PredictionController < handle
                 obj.sendToHTML("VisStatus", "No predictions (db.Pred) found in database.");
                 return;
             end
+            SpectralStorage.deleteSidecars(obj.session.db.Pred);
             obj.session.db = rmfield(obj.session.db, "Pred");
             obj.session.markDirty();
             if ~isempty(obj.fig) && isvalid(obj.fig)

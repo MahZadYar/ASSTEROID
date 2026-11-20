@@ -368,12 +368,7 @@ function allData = predictGridInterp(pVec, rVec, lambdaVec, ...
     if opts.LaserWavelength > 0
         laserNm = opts.LaserWavelength;
         allData.LaserWl    = laserNm;
-        lambdaNm1 = allData.lambda;  % already [1×Nlambda] in nm or µm
-        % lambda in output SoA may be in nm or µm depending on OutputUnit;
-        % convert to nm for the Raman shift formula.
-        if isUm
-            lambdaNm1 = lambdaNm1 * 1e3;
-        end
+        lambdaNm1 = allData.lambda;  % already [1×Nlambda] in nm
         allData.RamanShift = (1/laserNm - 1./lambdaNm1) * 1e7; % [1×Nlambda] — shared grid
     end
     if ~isempty(opts.RamanWindow)
