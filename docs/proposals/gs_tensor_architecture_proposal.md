@@ -1,7 +1,7 @@
 # Proposal (rev. 2): Geometry–Spectrum Factorized Tensor Network (`gs_tensor`)
 
 > [!NOTE]
-> **Status: implemented in ASSTEROID v6.3.0 / v6.4.0** (`src/modeling/buildSurrogateNetwork.m`, `surrogateHeadSpecs.m`, `buildPhysicsFeatures.m` `v3_physics`, Stage 3 UI). In v6.4.0, the two streams were finalized as symmetric 2-stage progressive funnels (**Geometry Stem**: $3 \to 64 \to 128$, $8{,}960$ learnables; **Geo-Spectral Trunk**: $8 \to 128 \to 256$, $34{,}944$ learnables) with 4 decoupled physically bounded readout heads (`h1_*`..`h4_*` for $\mathrm{Abs}, \mathrm{EF}_{\max}, \mathrm{EE}_V, \mathrm{EE}_S$; **507,268** learnables for 4 heads, **473,987** for 3 heads). See `Graphics/Drafts/NetDiagram/TikZ/NetDiag_v3_4heads.tex` (`fig-si-surrogate.pdf`) for the canonical publication diagram.
+> **Status: implemented in ASSTEROID v6.3.0 / v6.4.0** (`src/modeling/buildSurrogateNetwork.m`, `surrogateHeadSpecs.m`, `buildPhysicsFeatures.m` `v3_physics`, Stage 3 UI). In v6.4.0, the two streams were finalized as symmetric 2-stage progressive funnels (**Geometry Stem**: $3 \to 64 \to 128$, $8{,}960$ learnables; **Geo-Spectral Trunk**: $8 \to 128 \to 256$, $34{,}944$ learnables) with 4 decoupled physically bounded readout heads (`h1_*`..`h4_*` for $\mathrm{Abs}, \mathrm{EF}_{\max}, \mathrm{EE}_V, \mathrm{EE}_S$; **507,268** learnables for 4 heads, **473,987** for 3 heads). See `Deliverables/Visualizations/surrogate-architecture/src/NetDiag_v3.tex` (`Deliverables/Visualizations/surrogate-architecture/out/surrogate-architecture.pdf`) for the canonical publication diagram.
 
 
 **A leaner, physics-structured surrogate backbone for ASSTEROID, re-evaluated against the full MATLAB R2026b layer catalog**
@@ -246,7 +246,7 @@ The architecture is set by the **structure of the data and of the downstream use
 
 ---
 
-## 7. Implementation plan (Code → Docs/Brain → Manuscript → Export)
+## 7. Implementation plan (Code → Docs/Knowledgebase → Manuscript → Export)
 
 ### Phase 0: Baseline freeze
 - Record A0 metrics: test/val $R^2$, NRMSE, NRMSE-IDW, peak-regime RMSE, final loss 1.4 × 10⁻³, split seed, watershed basins and optima. Tag the ASSTEROID commit.
@@ -298,9 +298,9 @@ The architecture is set by the **structure of the data and of the downstream use
 
 LR sweep for the lean models: {1e-4, 3e-4, 1e-3}, same polynomial decay.
 
-### Phase 6: Docs and Brain
+### Phase 6: Docs and Knowledgebase
 - `paper_to_code_reference.md` §7 (also fix the feature-list inconsistency), `app_architecture.md`, `notation_table.md`.
-- Surrogate concept in `Brain/Concepts/`.
+- Surrogate concept in `Knowledgebase/Concepts/`.
 - Promote `gs_tensor_proposal.mmd` to the canonical figure source.
 
 ### Phase 7: Manuscript

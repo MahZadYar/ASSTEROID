@@ -1,6 +1,6 @@
 # ☄️ Notation Table
 
-This table maps the canonical mathematical notation used in the manuscript (`Documents/Manuscript/src/`) to the specific variable names found in COMSOL Multiphysics and the MATLAB codebase (`Codebase/ASSTEROID/`). Use this as the authoritative reference when translating theoretical equations into code implementations.
+This table maps the canonical mathematical notation used in the manuscript (`Deliverables/Manuscript/src/`) to the specific variable names found in COMSOL Multiphysics and the MATLAB codebase (`Codebase/ASSTEROID/`). Use this as the authoritative reference when translating theoretical equations into code implementations.
 
 ## 1. Positional Subscript / Superscript Grammar & Code Naming Convention
 
@@ -67,7 +67,7 @@ This table maps the canonical mathematical notation used in the manuscript (`Doc
 > [!IMPORTANT]
 > **Official Metric Nomenclature & Deprecated Symbols**:
 > - **Never use bare "efficacy" alone** (e.g., never write *"broadband surface efficacy"* or *"volumetric efficacy"*). Always write the full coined term **"Enhancement Efficacy"** or **"$\mathrm{EE}$"** (e.g., *Broadband surface Enhancement Efficacy* $\mathrm{EE}_S^{\text{broad}}$, *Analyte-weighted volumetric Enhancement Efficacy* $\mathrm{EE}_V^{\text{analyte}}$).
-> - **Deprecated Mathematical Symbols (DO NOT USE in Manuscript, Docs, or Brain)**:
+> - **Deprecated Mathematical Symbols (DO NOT USE in Manuscript, Docs, or Knowledgebase)**:
 >   - $\eta, \eta_D^{\text{broad}}, \eta_D^{\text{analyte}} \longrightarrow$ replaced by $\mathrm{EE}, \mathrm{EE}_D^{\text{broad}}, \mathrm{EE}_D^{\text{analyte}}$
 >   - $\mathrm{EF}_D^{\text{cell}}, \mathrm{EF}_{\rho}^{\text{cell}} \longrightarrow$ replaced by $\mathrm{EE}_D(\Delta\widetilde{\nu}), \mathrm{EE}_{\rho}(\omega_L, \omega_R)$
 >   - $\mathrm{EF}_{D, \text{approx}}^{\text{cell}} \longrightarrow$ replaced by $\mathrm{EE}_D^L$

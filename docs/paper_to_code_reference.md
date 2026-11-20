@@ -1,6 +1,6 @@
 # ☄️ Paper → Code Reference (Rational Design Workflow)
 
-This document extracts the **rationale** and **methodology** of the study (see `Documents/Manuscript/src/main.tex` and `Documents/Manuscript/src/si.tex`) and maps each concept to the concrete implementation in this repository. It is intended to be the **single development reference** so agents do not need to re-read the full manuscript.
+This document extracts the **rationale** and **methodology** of the study (see `Deliverables/Manuscript/src/main.tex` and `Deliverables/Manuscript/src/si.tex`) and maps each concept to the concrete implementation in this repository. It is intended to be the **single development reference** so agents do not need to re-read the full manuscript.
 
 ## 1) Goal and High-Level Idea
 
