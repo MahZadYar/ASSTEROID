@@ -13,8 +13,13 @@ function analyteSpec = getDefaultAnalyteSpectrum()
 %           .processed_intensity – Background-removed version
 %
 %   Behavior:
-%     Loads data from DefaultAnalyteSpectrum.dat and normalizes intensity.
-%     This provides a realistic analyte Raman spectrum, NOT a flat spectrum.
+%     Loads the baseline-free gas-phase 12CH4 (methane, T = 296 K)
+%     reference Raman spectrum across 100-4200 cm^-1 from
+%     DefaultAnalyteSpectrum.dat (derived from MeCaSDa/CaSDa24 polarizability
+%     transitions, 785 nm photon-yield (nu_L - dnu)^3 weighted, convolved with
+%     a 6 cm^-1 FWHM Gaussian slit profile) and normalizes to unit area.
+%     This provides a realistic high-shift gas-phase analyte spectrum, NOT a
+%     flat spectrum.
 %
 %   Notes:
 %     If a user-provided spectrum is needed, load via
