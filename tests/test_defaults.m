@@ -20,16 +20,17 @@ catch ME
     fprintf("  ✗ FAILED: %s\n", ME.message);
 end
 
-%% Test 2: getDefaultAnalyteSpectrum & built-in 5-analyte fingerprint library
-fprintf("\nTest 2: getDefaultAnalyteSpectrum (5-analyte built-in library)\n");
+%% Test 2: getDefaultAnalyteSpectrum & built-in 6-analyte fingerprint library
+fprintf("\nTest 2: getDefaultAnalyteSpectrum (6-analyte built-in library)\n");
 try
     expectedPeaks = struct( ...
         "CH4",  2917, ...
         "C2H4", 3021, ...
+        "H2S",  2617, ...
         "NH3",  3337, ...
         "C2H2", 1974, ...
         "H2O",  3657);
-    presetList = ["CH4", "C2H4", "NH3", "C2H2", "H2O"];
+    presetList = ["CH4", "C2H4", "H2S", "NH3", "C2H2", "H2O"];
     for k = 1:numel(presetList)
         key = presetList(k);
         analyteSpec = getDefaultAnalyteSpectrum(key);
@@ -52,7 +53,7 @@ try
     specNoArg = getDefaultAnalyteSpectrum();
     specCh4   = getDefaultAnalyteSpectrum("CH4");
     assert(isequal(specNoArg.intensity, specCh4.intensity), "Default preset should be CH4.");
-    for alias = ["methane", "ethylene", "ammonia", "acetylene", "water", "default:NH3"]
+    for alias = ["methane", "ethylene", "hydrogen sulfide", "ammonia", "acetylene", "water", "default:NH3"]
         sAlias = getDefaultAnalyteSpectrum(alias);
         assert(abs(trapz(sAlias.shift_cm, sAlias.intensity) - 1.0) < 1e-9, ...
             "Alias '%s' failed area check.", alias);

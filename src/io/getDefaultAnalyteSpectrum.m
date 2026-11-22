@@ -6,11 +6,12 @@ function analyteSpec = getDefaultAnalyteSpectrum(preset)
 %
 %   analyteSpec = getDefaultAnalyteSpectrum(preset) selects a built-in
 %   default analyte preset from the gas-phase fingerprint library:
-%       "CH4"  (or "methane", "default") -> DefaultAnalyteSpectrum.dat
-%       "C2H4" (or "ethylene", "ethene") -> DefaultAnalyteSpectrum_C2H4.dat
-%       "NH3"  (or "ammonia")            -> DefaultAnalyteSpectrum_NH3.dat
-%       "C2H2" (or "acetylene", "ethyne")-> DefaultAnalyteSpectrum_C2H2.dat
-%       "H2O"  (or "water", "steam")     -> DefaultAnalyteSpectrum_H2O.dat
+%       "CH4"  (or "methane", "default")    -> DefaultAnalyteSpectrum.dat
+%       "C2H4" (or "ethylene", "ethene")    -> DefaultAnalyteSpectrum_C2H4.dat
+%       "H2S"  (or "hydrogen sulfide")      -> DefaultAnalyteSpectrum_H2S.dat
+%       "NH3"  (or "ammonia")               -> DefaultAnalyteSpectrum_NH3.dat
+%       "C2H2" (or "acetylene", "ethyne")   -> DefaultAnalyteSpectrum_C2H2.dat
+%       "H2O"  (or "water", "steam")        -> DefaultAnalyteSpectrum_H2O.dat
 %
 %   Output:
 %       analyteSpec – struct with fields:
@@ -22,7 +23,7 @@ function analyteSpec = getDefaultAnalyteSpectrum(preset)
 %
 %   Behavior:
 %     Loads the baseline-free gas-phase 12CH4 (MeCaSDa), 12C2H4 (ECaSDa),
-%     or NH3 / C2H2 / H2O (NIST WebBook + CCCBDB MP2=FULL/aug-cc-pVTZ)
+%     or H2S / NH3 / C2H2 / H2O (NIST WebBook + CCCBDB MP2=FULL/aug-cc-pVTZ)
 %     reference Raman spectrum (T = 296 K) across 100-4200 cm^-1 (785 nm
 %     photon-yield scaled, convolved with a 20 cm^-1 FWHM Gaussian slit
 %     profile) and normalizes to unit area.

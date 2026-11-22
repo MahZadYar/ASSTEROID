@@ -20,7 +20,7 @@ mkdir(testDir);
 cDir = onCleanup(@() rmdir(testDir, "s")); %#ok<NASGU>
 
 %% 1. loadAndNormalizeAnalyteSpectrum must load built-in library files losslessly
-for presetKey = ["CH4", "C2H4", "NH3", "C2H2", "H2O"]
+for presetKey = ["CH4", "C2H4", "H2S", "NH3", "C2H2", "H2O"]
     [assetPath, ~, ~, isBuiltIn] = resolveDefaultAnalyteSpectrumPath(presetKey);
     assert(isBuiltIn && isfile(assetPath), "Built-in analyte asset missing for %s.", presetKey);
     spec = loadAndNormalizeAnalyteSpectrum(char(assetPath));
