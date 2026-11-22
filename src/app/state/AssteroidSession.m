@@ -99,6 +99,19 @@ classdef AssteroidSession < handle
                 end
             end
 
+            % Clear and re-resolve active analyte spectrum from loaded DB
+            obj.analyteSpectrum = struct();
+            if isfield(obj.db, "Global") && isfield(obj.db.Global, "AnalyteSpectrumFile") ...
+                    && strlength(string(obj.db.Global.AnalyteSpectrumFile)) > 0
+                [loadedSpec, resolvedPath] = resolveAnalyteSpectrum(obj, FallbackToDefault=false);
+                if isfield(loadedSpec, "shift_cm") && ~isempty(loadedSpec.shift_cm)
+                    obj.analyteSpectrum = loadedSpec;
+                    if strlength(resolvedPath) > 0
+                        obj.db.Global.AnalyteSpectrumFile = resolvedPath;
+                    end
+                end
+            end
+
             notify(obj, "DatabaseLoaded");
         end
 

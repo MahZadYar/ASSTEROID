@@ -437,37 +437,13 @@ classdef PredictionController < handle
         end
 
         function analyteSpec = loadAnalyteSpectrum(obj, analyteFile, rep)
-            analyteSpec = struct();
-            if strlength(analyteFile) > 0 && isfile(analyteFile)
-                try
-                    analyteSpec = loadAndNormalizeAnalyteSpectrum(char(analyteFile));
-                catch ME
-                    if nargin >= 3 && ~isempty(rep)
-                        rep.warn("LoadAnalyte", sprintf("Failed to load analyte spectrum '%s': %s", analyteFile, ME.message));
-                    end
-                    analyteSpec = struct();
-                end
-            elseif strlength(analyteFile) > 0 && nargin >= 3 && ~isempty(rep)
-                rep.warn("LoadAnalyte", sprintf("Configured analyte spectrum file not found: %s", analyteFile));
-            end
-
-            if (~isstruct(analyteSpec) || ~isfield(analyteSpec, "shift_cm") || isempty(analyteSpec.shift_cm)) ...
-                    && isstruct(obj.session.analyteSpectrum) && isfield(obj.session.analyteSpectrum, "shift_cm") ...
-                    && ~isempty(obj.session.analyteSpectrum.shift_cm)
-                analyteSpec = obj.session.analyteSpectrum;
-            end
-
-            if ~isstruct(analyteSpec) || ~isfield(analyteSpec, "shift_cm") || isempty(analyteSpec.shift_cm)
-                try
-                    analyteSpec = getDefaultAnalyteSpectrum();
-                    if nargin >= 3 && ~isempty(rep)
-                        rep.info("Using built-in default analyte spectrum (DefaultAnalyteSpectrum.dat) for _analyte metrics.");
-                    end
-                catch ME
-                    if nargin >= 3 && ~isempty(rep)
-                        rep.warn("LoadAnalyte", sprintf("Default analyte spectrum unavailable: %s", ME.message));
-                    end
-                end
+            [analyteSpec, resolvedPath] = resolveAnalyteSpectrum(obj.session, ...
+                ExplicitFile=string(analyteFile), FallbackToDefault=true, Reporter=rep);
+            if nargin >= 3 && ~isempty(rep) && strlength(string(analyteFile)) == 0 ...
+                    && isstruct(analyteSpec) && isfield(analyteSpec, "shift_cm") ...
+                    && ~isempty(analyteSpec.shift_cm) && strlength(resolvedPath) > 0
+                [~, fname, fext] = fileparts(resolvedPath);
+                rep.info(sprintf("Using built-in analyte spectrum (%s%s) for _analyte metrics.", fname, fext));
             end
         end
 

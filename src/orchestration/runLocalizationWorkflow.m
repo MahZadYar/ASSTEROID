@@ -81,14 +81,17 @@ function results = runLocalizationWorkflow(cfg, reporter)
         metricVariant = string(cfg.metricVariant);
     end
 
-    % For weighted variant: load default analyte spectrum once
+    % For weighted variant: resolve configured analyte spectrum or fall back to built-in default
     analyteSpec = struct();
     if metricVariant == "weighted" || metricVariant == "analyte"
-        try
-            analyteSpec = getDefaultAnalyteSpectrum();
-        catch ae
-            reporter.warn("AnalyteSpectrum", sprintf( ...
-                "Could not load default analyte spectrum (%s). Weighted avg will use uniform weighting.", ae.message));
+        explicitAnalyteFile = string(getConfigField(cfg, "analyteSpectrumFile", ""));
+        cachedAnalyte = getConfigField(cfg, "analyteSpectrum", struct());
+        analyteSpec = resolveAnalyteSpectrum(struct(), ...
+            ExplicitFile=explicitAnalyteFile, CachedSpectrum=cachedAnalyte, ...
+            FallbackToDefault=true, Reporter=reporter);
+        if ~isstruct(analyteSpec) || ~isfield(analyteSpec, "shift_cm") || isempty(analyteSpec.shift_cm)
+            reporter.warn("AnalyteSpectrum", ...
+                "Could not resolve analyte spectrum. Weighted avg will use uniform weighting.");
         end
     end
 
@@ -158,7 +161,7 @@ function results = runLocalizationWorkflow(cfg, reporter)
         % For interpolation mode: generate dense predictions via interpolant
         reporter.start("GeneratePredictions", "Generating dense predictions via interpolation...");
         interpPredArgs = {"LaserWavelength", cfg.lambdaLaser, "RamanWindow", cfg.stokesShiftLimits};
-        if metricVariant == "weighted" || metricVariant == "analyte" && ~isempty(fieldnames(analyteSpec))
+        if (metricVariant == "weighted" || metricVariant == "analyte") && ~isempty(fieldnames(analyteSpec))
             interpPredArgs = [interpPredArgs, {"AnalyteSpectrum", analyteSpec}];
         end
         allData = predictor.predictGrid(gp.pSamples, gp.rSamples, gp.lambdaSamples, interpPredArgs{:});
@@ -232,7 +235,7 @@ function results = runLocalizationWorkflow(cfg, reporter)
 
     % Compute analyte weights aligned to lambdaSamples for weighted-avg objective
     analyteWeights = [];
-    if metricVariant == "weighted" || metricVariant == "analyte" && ~isempty(fieldnames(analyteSpec)) && ~isempty(lambdaSamples)
+    if (metricVariant == "weighted" || metricVariant == "analyte") && ~isempty(fieldnames(analyteSpec)) && ~isempty(lambdaSamples)
         lambdaLaser_um = cfg.lambdaLaser * 1e-3;   % nm → µm
         shiftVec_cm = max(0, 1e4/lambdaLaser_um - 1e4./lambdaSamples(:));  % cm⁻¹
         wRaw = interp1(double(analyteSpec.shift_cm(:)), double(analyteSpec.intensity(:)), ...

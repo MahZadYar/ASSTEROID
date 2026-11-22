@@ -19,14 +19,20 @@ testDir = fullfile(tempdir, "test_spectral_storage_" + string(randi(1e6)));
 mkdir(testDir);
 cDir = onCleanup(@() rmdir(testDir, "s")); %#ok<NASGU>
 
-%% 1. loadAndNormalizeAnalyteSpectrum must succeed without undefined-variable crashes
-defaultDat = fullfile(fileparts(fileparts(mfilename("fullpath"))), "src", "io", "DefaultAnalyteSpectrum.dat");
-assert(isfile(defaultDat), "DefaultAnalyteSpectrum.dat missing.");
-spec = loadAndNormalizeAnalyteSpectrum(char(defaultDat));
-assert(isstruct(spec) && isfield(spec, "shift_cm") && ~isempty(spec.shift_cm) && ...
-    isfield(spec, "intensity") && abs(trapz(spec.shift_cm, spec.intensity) - 1.0) < 1e-6, ...
-    "loadAndNormalizeAnalyteSpectrum failed to load and normalize DefaultAnalyteSpectrum.dat.");
-fprintf("  ✓ loadAndNormalizeAnalyteSpectrum verified.\n");
+%% 1. loadAndNormalizeAnalyteSpectrum must load built-in library files losslessly
+for presetKey = ["CH4", "C2H4", "NH3", "C2H2", "H2O"]
+    [assetPath, ~, ~, isBuiltIn] = resolveDefaultAnalyteSpectrumPath(presetKey);
+    assert(isBuiltIn && isfile(assetPath), "Built-in analyte asset missing for %s.", presetKey);
+    spec = loadAndNormalizeAnalyteSpectrum(char(assetPath));
+    defSpec = getDefaultAnalyteSpectrum(presetKey);
+    assert(isstruct(spec) && isfield(spec, "shift_cm") && ~isempty(spec.shift_cm) && ...
+        isfield(spec, "intensity") && abs(trapz(spec.shift_cm, spec.intensity) - 1.0) < 1e-9, ...
+        "loadAndNormalizeAnalyteSpectrum failed to load and normalize %s.", assetPath);
+    assert(max(abs(spec.intensity - defSpec.intensity)) < 1e-12, ...
+        "Built-in library file %s was altered by AsLS/smoothing.", presetKey);
+end
+defaultDat = char(resolveDefaultAnalyteSpectrumPath("CH4"));
+fprintf("  ✓ loadAndNormalizeAnalyteSpectrum lossless built-in library loading verified.\n");
 
 %% 2. Synthetic gridded Sim dataset for PredictionController + VisualizeController
 [Pg, Rg] = meshgrid(500:100:1000, 100:50:250);

@@ -14,13 +14,13 @@ function analyteSpec = loadAndNormalizeAnalyteSpectrum(filePath, options)
 
     arguments
         filePath (1,:) char
-        options.doBackgroundRemoval (1,1) logical = true
+        options.doBackgroundRemoval (1,:) logical = logical.empty
         options.useMorphBaseline (1,1) logical = false
         options.morphWindowPts (1,1) double = 150
         options.aslsLambda (1,1) double = 1000
         options.aslsP (1,1) double = 0.001
         options.aslsMaxIter (1,1) double = 10
-        options.doSmoothing (1,1) logical = true
+        options.doSmoothing (1,:) logical = logical.empty
         options.smoothMethod (1,:) char = 'movmean'
         options.smoothWindow (1,1) double = 5
         options.doNormalization (1,1) logical = true
@@ -29,13 +29,31 @@ function analyteSpec = loadAndNormalizeAnalyteSpectrum(filePath, options)
         options.showPlot (1,1) logical = false
     end
     
-    doBackgroundRemoval = options.doBackgroundRemoval;
+    [~, presetKey, ~, isBuiltInAsset] = resolveDefaultAnalyteSpectrumPath(string(filePath), Strict=false);
+    if isBuiltInAsset && isempty(options.doBackgroundRemoval) && isempty(options.doSmoothing) ...
+            && options.doNormalization && strcmpi(options.normalization, 'area') ...
+            && options.normTargetArea == 1.0 && ~options.showPlot
+        % Built-in gas-phase reference spectra are already baseline-free and
+        % 20 cm^-1 Gaussian slit-convolved; load losslessly without AsLS wing stripping.
+        analyteSpec = getDefaultAnalyteSpectrum(presetKey);
+        return;
+    end
+
+    if isempty(options.doBackgroundRemoval)
+        doBackgroundRemoval = ~isBuiltInAsset;
+    else
+        doBackgroundRemoval = logical(options.doBackgroundRemoval(1));
+    end
     useMorphBaseline = options.useMorphBaseline;
     morphWindowPts = options.morphWindowPts;
     aslsLambda = options.aslsLambda;
     aslsP = options.aslsP;
     aslsMaxIter = options.aslsMaxIter;
-    doSmoothing = options.doSmoothing;
+    if isempty(options.doSmoothing)
+        doSmoothing = ~isBuiltInAsset;
+    else
+        doSmoothing = logical(options.doSmoothing(1));
+    end
     smoothMethod = options.smoothMethod;
     smoothWindow = options.smoothWindow;
     doNormalization = options.doNormalization;

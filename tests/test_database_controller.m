@@ -2,8 +2,9 @@
 setup_project;
 fprintf("=== Starting test_database_controller ===\n");
 
-testDir = fullfile(tempdir, "test_db_controller");
+testDir = fullfile(tempdir, "test_db_controller_" + string(randi(1e6)));
 if ~isfolder(testDir), mkdir(testDir); end
+cleanupDbTest = onCleanup(@() rmdir(testDir, "s")); %#ok<NASGU>
 testDbPath = fullfile(testDir, "session_test.mat");
 
 %% 1. Initialize session
@@ -55,5 +56,38 @@ assert(isstruct(treeNode), "Tree node should be a struct.");
 assert(treeNode.name == "db", "Root node name should be 'db'.");
 assert(~isempty(treeNode.children), "Root should have children branches.");
 fprintf("[5] serializeToTree PASSED\n");
+
+%% 8. Test LoadBranch & ClearBranch for built-in 5-analyte library
+for presetInfo = { ...
+        "default:CH4",  2917; ...
+        "default:C2H4", 3021; ...
+        "default:NH3",  3337; ...
+        "default:C2H2", 1974; ...
+        "default:H2O",  3657}'
+    presetTok = presetInfo{1};
+    expPeak   = presetInfo{2};
+    ctl2.handleEvent("LoadBranch", struct("branch", "Analyte", "path", presetTok));
+    assert(strlength(session2.db.Global.AnalyteSpectrumFile) > 0 && ...
+        isfile(session2.db.Global.AnalyteSpectrumFile), ...
+        "LoadBranch failed to set valid AnalyteSpectrumFile for %s.", presetTok);
+    assert(isfield(session2.analyteSpectrum, "shift_cm") && ...
+        ~isempty(session2.analyteSpectrum.shift_cm), ...
+        "session.analyteSpectrum not populated for %s.", presetTok);
+    [~, pkIdx] = max(session2.analyteSpectrum.intensity);
+    assert(session2.analyteSpectrum.shift_cm(pkIdx) == expPeak, ...
+        "Peak mismatch after LoadBranch(%s): got %.1f vs %.1f.", ...
+        presetTok, session2.analyteSpectrum.shift_cm(pkIdx), expPeak);
+end
+ctl2.handleEvent("SaveDatabase", struct("path", testDbPath));
+session3 = AssteroidSession(tempdir);
+ctl3 = DatabaseController(session3, [], []);
+ctl3.handleEvent("LoadDatabase", struct("path", testDbPath));
+assert(isfield(session3.analyteSpectrum, "shift_cm") && ...
+    session3.analyteSpectrum.shift_cm(find(session3.analyteSpectrum.intensity == max(session3.analyteSpectrum.intensity), 1)) == 3657, ...
+    "Loaded database must restore selected H2O analyte spectrum.");
+ctl3.handleEvent("ClearBranch", struct("branch", "Analyte"));
+assert(session3.db.Global.AnalyteSpectrumFile == "" && isempty(fieldnames(session3.analyteSpectrum)), ...
+    "ClearBranch('Analyte') should reset analyte file and cached spectrum.");
+fprintf("[6] LoadBranch / ClearBranch 5-analyte library PASSED\n");
 
 fprintf("=== test_database_controller COMPLETED SUCCESSFULLY! ===\n");

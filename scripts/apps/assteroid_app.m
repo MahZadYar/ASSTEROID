@@ -483,7 +483,10 @@ function handleDatabaseEvent(src, event, fig)
 
             case "LoadBranch"
                 branchName = string(data.branch);
-                filePath = string(data.path);
+                filePath = strtrim(string(data.path));
+                if branchName == "Analyte" && startsWith(lower(filePath), "default:")
+                    filePath = resolveDefaultAnalyteSpectrumPath(filePath, Strict=true);
+                end
                 if ~isfile(filePath)
                     sendEventToHTMLSource(src, "Error", "File not found: " + filePath);
                     return
@@ -565,12 +568,26 @@ function loadDbFile(fig, dbPath)
         fig.UserData.workDir = string(fileparts(dbPath));
     end
 
+    % Clear and re-resolve active analyte spectrum from loaded DB
+    fig.UserData.visExport.analyteSpectrum = struct();
+    if isfield(fig.UserData.db, "Global") && isfield(fig.UserData.db.Global, "AnalyteSpectrumFile") ...
+            && strlength(string(fig.UserData.db.Global.AnalyteSpectrumFile)) > 0
+        [loadedSpec, resolvedPath] = resolveAnalyteSpectrum(fig, FallbackToDefault=false);
+        if isfield(loadedSpec, "shift_cm") && ~isempty(loadedSpec.shift_cm)
+            fig.UserData.visExport.analyteSpectrum = loadedSpec;
+            if strlength(resolvedPath) > 0
+                fig.UserData.db.Global.AnalyteSpectrumFile = resolvedPath;
+            end
+        end
+    end
+
     % Sync with AssteroidSession if available
     if isfield(fig.UserData, "session") && ~isempty(fig.UserData.session) && isvalid(fig.UserData.session)
-        fig.UserData.session.db = db;
+        fig.UserData.session.db = fig.UserData.db;
         fig.UserData.session.dbFile = string(dbPath);
         fig.UserData.session.dbDirty = false;
         fig.UserData.session.workDir = fig.UserData.workDir;
+        fig.UserData.session.analyteSpectrum = fig.UserData.visExport.analyteSpectrum;
         if isfield(db, "Model") && isstruct(db.Model) && ...
                 ((isfield(db.Model, "Model") && ~isempty(db.Model.Model)) || ...
                  (isfield(db.Model, "Net") && ~isempty(db.Model.Net)))
@@ -1032,15 +1049,24 @@ function loadBranchData(fig, branchName, filePath)
         case "Analyte"
             fpStr = strtrim(string(filePath));
             if startsWith(lower(fpStr), "default:")
-                presetName = extractAfter(fpStr, ":");
-                ioDir = fileparts(which("getDefaultAnalyteSpectrum"));
-                if strcmpi(strtrim(presetName), "c2h4")
-                    fpStr = string(fullfile(ioDir, "DefaultAnalyteSpectrum_C2H4.dat"));
-                else
-                    fpStr = string(fullfile(ioDir, "DefaultAnalyteSpectrum.dat"));
+                fpStr = resolveDefaultAnalyteSpectrumPath(fpStr, Strict=true);
+            elseif strlength(fpStr) > 0 && ~isfile(fpStr)
+                [candPath, ~, ~, isBuiltIn] = resolveDefaultAnalyteSpectrumPath(fpStr, Strict=false);
+                if isBuiltIn
+                    fpStr = candPath;
                 end
             end
+            if ~isfile(fpStr)
+                error("loadBranchData:FileNotFound", "File not found: %s", fpStr);
+            end
             fig.UserData.db.Global.AnalyteSpectrumFile = fpStr;
+            analyteSpec = resolveAnalyteSpectrum(fig, ExplicitFile=fpStr, FallbackToDefault=false);
+            if isfield(fig.UserData, "visExport") && isstruct(fig.UserData.visExport)
+                fig.UserData.visExport.analyteSpectrum = analyteSpec;
+            end
+            if isfield(fig.UserData, "session") && ~isempty(fig.UserData.session) && isvalid(fig.UserData.session)
+                fig.UserData.session.analyteSpectrum = analyteSpec;
+            end
 
         otherwise
             warning("loadBranchData:UnknownBranch", ...
@@ -1069,6 +1095,12 @@ function clearBranchData(fig, branchName)
         case "Analyte"
             if isfield(fig.UserData.db.Global, "AnalyteSpectrumFile")
                 fig.UserData.db.Global.AnalyteSpectrumFile = "";
+            end
+            if isfield(fig.UserData, "visExport") && isstruct(fig.UserData.visExport)
+                fig.UserData.visExport.analyteSpectrum = struct();
+            end
+            if isfield(fig.UserData, "session") && ~isempty(fig.UserData.session) && isvalid(fig.UserData.session)
+                fig.UserData.session.analyteSpectrum = struct();
             end
         otherwise
             warning("clearBranchData:UnknownBranch", ...
@@ -2129,18 +2161,8 @@ function recalculateImportDerivedMetrics(src, d, fig)
             MetricVariants      = safeStruct(d, "metricVariants"));
 
         % DB analyte first, default fallback, never flat
-        analyteSpectrum = struct();
         analyteFile = resolveAnalyteFile(fig);
-        if strlength(analyteFile) > 0 && isfile(analyteFile)
-            try
-                analyteSpectrum = loadAndNormalizeAnalyteSpectrum(analyteFile);
-            catch
-                analyteSpectrum = struct();
-            end
-        end
-        if ~isstruct(analyteSpectrum) || ~isfield(analyteSpectrum, "shift_cm") || isempty(analyteSpectrum.shift_cm)
-            analyteSpectrum = getDefaultAnalyteSpectrum();
-        end
+        analyteSpectrum = resolveAnalyteSpectrum(fig, ExplicitFile=analyteFile, FallbackToDefault=true, Reporter=reporter);
 
         % Extract clean SoA before recalculating: db.Sim has branch-level metadata
         % fields (Source, LaserWl, StokesWindow…) prepended by populateBranch.
@@ -3623,18 +3645,8 @@ function generateDensePredictions(src, d, fig)
             ri = resolveRefractiveIndexStruct(fig, riCsvFile);
         end
 
-        % Optional analyte spectrum
-        analyteSpec = struct();
-        if isfield(fig.UserData, "visExport") && isfield(fig.UserData.visExport, "analyteSpectrum") ...
-                && isstruct(fig.UserData.visExport.analyteSpectrum)
-            analyteSpec = fig.UserData.visExport.analyteSpectrum;
-        elseif isfield(fig.UserData.db, "Global") && isfield(fig.UserData.db.Global, "AnalyteSpectrumFile") ...
-                && isfile(string(fig.UserData.db.Global.AnalyteSpectrumFile))
-            try
-                analyteSpec = loadAndNormalizeAnalyteSpectrum(char(fig.UserData.db.Global.AnalyteSpectrumFile));
-            catch
-            end
-        end
+        % Optional analyte spectrum (db.Global.AnalyteSpectrumFile takes precedence)
+        analyteSpec = resolveAnalyteSpectrum(fig, FallbackToDefault=false);
 
         loadPredArgs = { ...
             "Recompute", true, ...
@@ -4445,9 +4457,9 @@ function previewOptimizeMetric(src, d, fig, ax)
             end
         else
             % For model: use standard prediction
-            if metricVariant == "weighted"
+            if metricVariant == "weighted" || metricVariant == "analyte"
                 try
-                    analyteSpec = getDefaultAnalyteSpectrum();
+                    analyteSpec = resolveAnalyteSpectrum(fig, FallbackToDefault=true);
                     allData = predictor.predictGrid(gp.pSamples, gp.rSamples, gp.lambdaSamples, ...
                         "LaserWavelength", lambdaLaser, ...
                         "RamanWindow", [stokesShiftMin, stokesShiftMax], ...
@@ -4490,17 +4502,7 @@ function previewOptimizeMetric(src, d, fig, ax)
             elseif variantForField == "avg" || variantForField == "broad"
                 allData.(diagField) = mean(specMat, 2, "omitnan");
             elseif variantForField == "analyte"
-                analyteSpec = [];
-                if isfield(fig.UserData, "visExport") && isfield(fig.UserData.visExport, "analyteSpectrum") ...
-                        && isstruct(fig.UserData.visExport.analyteSpectrum)
-                    analyteSpec = fig.UserData.visExport.analyteSpectrum;
-                elseif isfield(fig.UserData, "db") && isfield(fig.UserData.db, "Global") && isfield(fig.UserData.db.Global, "AnalyteSpectrumFile") ...
-                        && isfile(string(fig.UserData.db.Global.AnalyteSpectrumFile))
-                    try
-                        analyteSpec = loadAndNormalizeAnalyteSpectrum(char(fig.UserData.db.Global.AnalyteSpectrumFile));
-                    catch
-                    end
-                end
+                analyteSpec = resolveAnalyteSpectrum(fig, FallbackToDefault=true);
                 if isstruct(analyteSpec) && isfield(analyteSpec, "shift_cm") && isfield(allData, "RamanShift")
                     shifts = allData.RamanShift(:)';
                     aw = interp1(analyteSpec.shift_cm(:), analyteSpec.intensity(:), shifts, "makima", 0);
@@ -5167,20 +5169,7 @@ function runPredictInterpolate(src, d, fig)
             end
             ve = fig.UserData.visExport;
 
-            if strlength(analyteFile) > 0 && isfile(analyteFile)
-                try
-                    ve.analyteSpectrum = loadAndNormalizeAnalyteSpectrum(char(analyteFile));
-                catch
-                    ve.analyteSpectrum = struct();
-                end
-            end
-            if ~isstruct(ve.analyteSpectrum) || ~isfield(ve.analyteSpectrum, "shift_cm") || isempty(ve.analyteSpectrum.shift_cm)
-                try
-                    ve.analyteSpectrum = getDefaultAnalyteSpectrum();
-                catch
-                    ve.analyteSpectrum = struct();
-                end
-            end
+            ve.analyteSpectrum = resolveAnalyteSpectrum(fig, ExplicitFile=analyteFile, FallbackToDefault=true, Reporter=reporter);
 
             reporter.start("PredictInterpolate");
             execEnv = "cpu";
@@ -5329,14 +5318,7 @@ function runPredictInterpolate(src, d, fig)
                     min(rPointsNm), max(rPointsNm)));
                 reporter.progress("Interpolate", 0.32, "Starting batch spectral interpolation...");
                 % Load analyte spectrum for _analyte derived metrics
-                interpAnalyte = struct();
-                if strlength(analyteFile) > 0 && isfile(analyteFile)
-                    try
-                        interpAnalyte = loadAndNormalizeAnalyteSpectrum(analyteFile);
-                    catch
-                        interpAnalyte = struct();
-                    end
-                end
+                interpAnalyte = resolveAnalyteSpectrum(fig, ExplicitFile=analyteFile, FallbackToDefault=true, Reporter=reporter);
                 % buildPointPredictionSoA already calls recomputeDerivedMetrics internally;
                 metricsWindowInterp = [];
                 if ~linkMetrics
@@ -5371,14 +5353,7 @@ function runPredictInterpolate(src, d, fig)
                 reporter.complete("Interpolate", "Dense interpolation generated from db.Sim.");
 
                 % Load analyte spectrum for _analyte derived metrics
-                interpAnalyteDense = struct();
-                if strlength(analyteFile) > 0 && isfile(analyteFile)
-                    try
-                        interpAnalyteDense = loadAndNormalizeAnalyteSpectrum(analyteFile);
-                    catch
-                        interpAnalyteDense = struct();
-                    end
-                end
+                interpAnalyteDense = resolveAnalyteSpectrum(fig, ExplicitFile=analyteFile, FallbackToDefault=true, Reporter=reporter);
 
                 % Use metrics window for derived metrics if not linked
                 derivedWindow = [stokesMin, stokesMax];

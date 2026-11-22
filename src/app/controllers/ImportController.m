@@ -316,18 +316,8 @@ classdef ImportController < handle
                 MetricVariants      = obj.safeStruct(d, "metricVariants"));
 
             % Resolve analyte spectrum
-            analyteSpectrum = struct();
             analyteFile = obj.resolveAnalyteFile();
-            if strlength(analyteFile) > 0 && isfile(analyteFile)
-                try
-                    analyteSpectrum = loadAndNormalizeAnalyteSpectrum(analyteFile);
-                catch
-                    analyteSpectrum = struct();
-                end
-            end
-            if ~isstruct(analyteSpectrum) || ~isfield(analyteSpectrum, "shift_cm") || isempty(analyteSpectrum.shift_cm)
-                analyteSpectrum = getDefaultAnalyteSpectrum();
-            end
+            analyteSpectrum = resolveAnalyteSpectrum(obj.session, ExplicitFile=analyteFile, FallbackToDefault=true, Reporter=rep);
 
             if obj.safeStr(d, "targetBranch", "Sim") == "Optima.Sim"
                 if ~isfield(obj.session.db, "Optima") || ~isstruct(obj.session.db.Optima) ...

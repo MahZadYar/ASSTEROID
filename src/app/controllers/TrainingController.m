@@ -1373,19 +1373,13 @@ classdef TrainingController < handle
                     dbOptima = db_.Optima;
                 end
 
-                % Tier 4 analyte: active app analyte file, else db.Optima.Sim metadata (import-time spectrum)
-                analyteSpec = struct();
-                try
-                    if ~isempty(obj.fig) && isvalid(obj.fig) && isfield(obj.fig.UserData, "app") ...
-                            && isfield(obj.fig.UserData.app, "resolveAnalyteFile")
-                        aFile = string(obj.fig.UserData.app.resolveAnalyteFile());
-                        if strlength(aFile) > 0 && isfile(aFile)
-                            analyteSpec = loadAndNormalizeAnalyteSpectrum(aFile);
-                        end
-                    end
-                catch
-                    analyteSpec = struct();
+                % Tier 4 analyte: active app/session analyte file, else db.Optima.Sim metadata (import-time spectrum)
+                aFile = "";
+                if ~isempty(obj.fig) && isvalid(obj.fig) && isfield(obj.fig.UserData, "app") ...
+                        && isfield(obj.fig.UserData.app, "resolveAnalyteFile")
+                    aFile = string(obj.fig.UserData.app.resolveAnalyteFile());
                 end
+                analyteSpec = resolveAnalyteSpectrum(obj.session, ExplicitFile=aFile, FallbackToDefault=false);
 
                 hasOptimaSim = isstruct(dbOptima) && isfield(dbOptima, "Sim") && isstruct(dbOptima.Sim) ...
                     && ~isempty(fieldnames(dbOptima.Sim));

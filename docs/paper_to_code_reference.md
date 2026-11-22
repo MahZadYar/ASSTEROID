@@ -219,8 +219,14 @@ This logic lives in `computeSpectralAverages()` inside [src/orchestration/runImp
 
 Analyte spectrum parsing and normalization:
 
-- [src/io/loadAndNormalizeAnalyteSpectrum.m](src/io/loadAndNormalizeAnalyteSpectrum.m)
-- built-in defaults (`12CH4` MeCaSDa & `12C2H4` ECaSDa gas-phase Raman spectra, `100-4200 cm^-1`, `296 K`, `FWHM = 20 cm^-1`, `785 nm` $(\widetilde{\nu}_L - \Delta\widetilde{\nu})^3$ photon-yield weighted): [src/io/getDefaultAnalyteSpectrum.m](src/io/getDefaultAnalyteSpectrum.m), [src/io/DefaultAnalyteSpectrum.dat](src/io/DefaultAnalyteSpectrum.dat), and [src/io/DefaultAnalyteSpectrum_C2H4.dat](src/io/DefaultAnalyteSpectrum_C2H4.dat)
+- [src/io/loadAndNormalizeAnalyteSpectrum.m](src/io/loadAndNormalizeAnalyteSpectrum.m) (AsLS baseline removal & smoothing for user experimental spectra; automatic lossless pass-through for built-in baseline-free library files)
+- unified resolution and preset catalog (`"default:<preset>"`, `db.Global.AnalyteSpectrumFile`, session cache, fallback): [src/io/resolveDefaultAnalyteSpectrumPath.m](src/io/resolveDefaultAnalyteSpectrumPath.m), [src/data/resolveAnalyteSpectrum.m](src/data/resolveAnalyteSpectrum.m), [src/io/getDefaultAnalyteSpectrum.m](src/io/getDefaultAnalyteSpectrum.m)
+- built-in 5-analyte gas-phase Raman fingerprint library (`100-4200 cm^-1`, `1 cm^-1` step, `296 K`, `FWHM = 20 cm^-1` Gaussian slit, `785 nm` photon-yield scaled):
+  - `CH4` (`12CH4`, MeCaSDa/CaSDa24, dominant peak `2917 cm^-1`): [src/io/DefaultAnalyteSpectrum.dat](src/io/DefaultAnalyteSpectrum.dat)
+  - `C2H4` (`12C2H4`, ECaSDa, dominant peak `3021 cm^-1`): [src/io/DefaultAnalyteSpectrum_C2H4.dat](src/io/DefaultAnalyteSpectrum_C2H4.dat)
+  - `NH3` (NIST WebBook + CCCBDB `MP2=FULL/aug-cc-pVTZ`, dominant peak `3337 cm^-1`): [src/io/DefaultAnalyteSpectrum_NH3.dat](src/io/DefaultAnalyteSpectrum_NH3.dat)
+  - `C2H2` (NIST WebBook + CCCBDB `MP2=FULL/aug-cc-pVTZ`, peaks `612, 1974, 3374 cm^-1`): [src/io/DefaultAnalyteSpectrum_C2H2.dat](src/io/DefaultAnalyteSpectrum_C2H2.dat)
+  - `H2O` (NIST WebBook + CCCBDB `MP2=FULL/aug-cc-pVTZ`, dominant peak `3657 cm^-1`): [src/io/DefaultAnalyteSpectrum_H2O.dat](src/io/DefaultAnalyteSpectrum_H2O.dat)
 
 Weighted inner-product metric:
 

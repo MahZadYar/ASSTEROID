@@ -81,6 +81,7 @@ classdef DatabaseController < handle
                                         fig_.UserData.visExport.ri = fig_.UserData.app.resolveRefractiveIndexStruct();
                                     end
                                 end
+                                fig_.UserData.visExport.analyteSpectrum = sess.analyteSpectrum;
                             end
                         end
 
@@ -204,6 +205,30 @@ classdef DatabaseController < handle
                             obj.sendToHTML("Error", "No trained model available to export.");
                         end
 
+                    case "BrowseBranchFile"
+                        branchName = string(eventData.branch);
+                        fieldId = string(eventData.field);
+                        filterSpec = DatabaseController.getBranchFileFilter(branchName);
+                        [file, path] = uigetfile(filterSpec, ...
+                            "Select file for " + branchName, sess.workDir);
+                        if file ~= 0
+                            obj.sendToHTML("BrowseResult", ...
+                                struct("field", fieldId, "path", fullfile(path, file)));
+                        end
+
+                    case "LoadBranch"
+                        branchName = string(eventData.branch);
+                        filePath = string(eventData.path);
+                        resolvedPath = obj.loadBranch(branchName, filePath);
+                        obj.sendToHTML("LoadComplete", ...
+                            sprintf("%s branch loaded from %s", branchName, resolvedPath));
+
+                    case "ClearBranch"
+                        branchName = string(eventData.branch);
+                        obj.clearBranch(branchName);
+                        obj.sendToHTML("LoadComplete", ...
+                            sprintf("%s branch cleared.", branchName));
+
                     case "RefreshDbState"
                         obj.broadcastStatus();
 
@@ -217,6 +242,162 @@ classdef DatabaseController < handle
                 fprintf("[DatabaseController] ERROR in %s: %s\n", eventName, ME.message);
                 obj.sendToHTML("Error", ME.message);
             end
+        end
+
+        function resolvedPath = loadBranch(obj, branchName, filePath)
+        % LOADBRANCH Load a file or built-in preset into a database branch.
+            sess = obj.session;
+            fig_ = obj.fig;
+            branchName = string(branchName);
+            fpStr = strtrim(string(filePath));
+
+            if ~isfield(sess.db, "Global") || ~isstruct(sess.db.Global)
+                sess.db.Global = struct();
+            end
+
+            if branchName == "Analyte"
+                if startsWith(lower(fpStr), "default:")
+                    fpStr = resolveDefaultAnalyteSpectrumPath(fpStr, Strict=true);
+                elseif strlength(fpStr) > 0 && ~isfile(fpStr)
+                    [candPath, ~, ~, isBuiltIn] = resolveDefaultAnalyteSpectrumPath(fpStr, Strict=false);
+                    if isBuiltIn
+                        fpStr = candPath;
+                    end
+                end
+            end
+
+            if strlength(fpStr) == 0 || ~isfile(fpStr)
+                error("DatabaseController:FileNotFound", "File not found: %s", fpStr);
+            end
+            resolvedPath = fpStr;
+
+            switch branchName
+                case "Sim"
+                    S = load(fpStr);
+                    if isfield(S, "allData")
+                        soaData = S.allData;
+                    elseif isfield(S, "db") && isstruct(S.db) && isfield(S.db, "Sim")
+                        soaData = S.db.Sim;
+                    else
+                        error("loadBranchData:InvalidSim", ...
+                            "File does not contain 'allData' or 'db.Sim'.");
+                    end
+                    sess.db.Sim = soaData;
+                    sess.db.Global.SimFile = fpStr;
+
+                case "Model"
+                    S = load(fpStr);
+                    if isfield(S, "model") && isstruct(S.model)
+                        sess.db.Model.Model = S.model;
+                        if isfield(S.model, "net"), sess.db.Model.Net = S.model.net; end
+                        if isfield(S.model, "targetNames"), sess.db.Model.TargetNames = cellstr(S.model.targetNames); end
+                        sess.model = S.model;
+                        sess.modelLoaded = true;
+                    elseif isfield(S, "trainedModel")
+                        if isstruct(S.trainedModel) && isfield(S.trainedModel, "net")
+                            sess.db.Model.Model = S.trainedModel;
+                            sess.db.Model.Net = S.trainedModel.net;
+                            sess.model = S.trainedModel;
+                            sess.modelLoaded = true;
+                        else
+                            sess.db.Model.Net = S.trainedModel;
+                        end
+                    elseif isfield(S, "net")
+                        sess.db.Model.Net = S.net;
+                    elseif isfield(S, "db") && isstruct(S.db) && isfield(S.db, "Model")
+                        sess.db.Model = S.db.Model;
+                        if isfield(S.db.Model, "Model") && isstruct(S.db.Model.Model)
+                            sess.model = S.db.Model.Model;
+                            sess.modelLoaded = true;
+                        end
+                    else
+                        error("loadBranchData:InvalidModel", ...
+                            "File does not contain a recognized model variable.");
+                    end
+                    sess.db.Model.NetFile = fpStr;
+                    notify(sess, "ModelLoaded");
+
+                case "RI"
+                    [~, ~, ext] = fileparts(fpStr);
+                    if strcmpi(ext, ".csv")
+                        ri = load_gold_refractive_index(fpStr);
+                        sess.db.RI = ri;
+                    elseif strcmpi(ext, ".mat")
+                        S = load(fpStr);
+                        if isfield(S, "ri"), sess.db.RI = S.ri;
+                        elseif isfield(S, "RI"), sess.db.RI = S.RI;
+                        else
+                            error("loadBranchData:InvalidRI", ...
+                                "MAT file does not contain 'ri' or 'RI' variable.");
+                        end
+                    end
+                    sess.db.RI.SourceFile = fpStr;
+                    sess.ri = sess.db.RI;
+                    sess.riLoaded = true;
+                    notify(sess, "RiLoaded");
+
+                case "Pred"
+                    S = load(fpStr);
+                    if isfield(S, "allData")
+                        sess.db.Pred = S.allData;
+                    elseif isfield(S, "predictions")
+                        sess.db.Pred = convertGridToSoA(S.predictions);
+                    elseif isfield(S, "db") && isstruct(S.db) && isfield(S.db, "Pred")
+                        sess.db.Pred = S.db.Pred;
+                    else
+                        error("loadBranchData:InvalidPred", ...
+                            "File does not contain predictions in a recognized format.");
+                    end
+
+                case "Analyte"
+                    analyteSpec = resolveAnalyteSpectrum(sess, ExplicitFile=fpStr, FallbackToDefault=false);
+                    sess.db.Global.AnalyteSpectrumFile = fpStr;
+                    sess.analyteSpectrum = analyteSpec;
+
+                otherwise
+                    error("DatabaseController:UnknownBranch", ...
+                        "Unknown branch: %s", branchName);
+            end
+
+            sess.markDirty();
+            obj.syncFigStateAfterBranchChange(branchName, fpStr);
+            obj.broadcastStatus();
+        end
+
+        function clearBranch(obj, branchName)
+        % CLEARBRANCH Clear a specific branch in session and synced UI state.
+            sess = obj.session;
+            branchName = string(branchName);
+
+            switch branchName
+                case "Sim"
+                    sess.db.Sim = struct();
+                    if isfield(sess.db, "Global") && isfield(sess.db.Global, "SimFile")
+                        sess.db.Global.SimFile = "";
+                    end
+                case "Model"
+                    sess.db.Model = struct("Net", [], "NetFile", "");
+                    sess.model = [];
+                    sess.modelLoaded = false;
+                case "RI"
+                    sess.db.RI = struct();
+                    sess.ri = [];
+                    sess.riLoaded = false;
+                case "Pred"
+                    sess.db.Pred = struct();
+                case "Analyte"
+                    if isfield(sess.db, "Global") && isfield(sess.db.Global, "AnalyteSpectrumFile")
+                        sess.db.Global.AnalyteSpectrumFile = "";
+                    end
+                    sess.analyteSpectrum = struct();
+                otherwise
+                    error("DatabaseController:UnknownBranch", ...
+                        "Unknown branch: %s", branchName);
+            end
+
+            sess.markDirty();
+            obj.syncFigStateAfterBranchChange(branchName, "");
+            obj.broadcastStatus();
         end
 
         function broadcastStatus(obj)
@@ -248,6 +429,43 @@ classdef DatabaseController < handle
     end
 
     methods (Access = private)
+        function syncFigStateAfterBranchChange(obj, branchName, fpStr)
+            fig_ = obj.fig;
+            if isempty(fig_) || ~isvalid(fig_) || ~isstruct(fig_.UserData)
+                return;
+            end
+            sess = obj.session;
+            fig_.UserData.db = sess.db;
+            fig_.UserData.dbDirty = sess.dbDirty;
+
+            if ~isfield(fig_.UserData, "visExport") || ~isstruct(fig_.UserData.visExport)
+                fig_.UserData.visExport = struct();
+            end
+            switch branchName
+                case "Model"
+                    fig_.UserData.visExport.model = sess.model;
+                    fig_.UserData.visExport.modelLoaded = sess.modelLoaded;
+                    if sess.modelLoaded && isfield(fig_.UserData, "app") && isfield(fig_.UserData.app, "resolveRefractiveIndexStruct")
+                        try
+                            fig_.UserData.visExport.ri = fig_.UserData.app.resolveRefractiveIndexStruct();
+                        catch
+                        end
+                    end
+                case "RI"
+                    if strlength(fpStr) > 0 && isfield(fig_.UserData, "app") && isfield(fig_.UserData.app, "resolveRefractiveIndexStruct")
+                        try
+                            fig_.UserData.visExport.ri = fig_.UserData.app.resolveRefractiveIndexStruct(fpStr);
+                        catch
+                            fig_.UserData.visExport.ri = sess.ri;
+                        end
+                    else
+                        fig_.UserData.visExport.ri = sess.ri;
+                    end
+                case "Analyte"
+                    fig_.UserData.visExport.analyteSpectrum = sess.analyteSpectrum;
+            end
+        end
+
         function sendToHTML(obj, eventName, payload)
             if ~isempty(obj.htmlComponent) && isvalid(obj.htmlComponent)
                 try
@@ -279,6 +497,24 @@ classdef DatabaseController < handle
     end
 
     methods (Static)
+        function filterSpec = getBranchFileFilter(branchName)
+        % GETBRANCHFILEFILTER Return uigetfile filter spec for a database branch.
+            switch string(branchName)
+                case "Sim"
+                    filterSpec = {"*.mat", "MAT Files (Simulation Data)"};
+                case "Model"
+                    filterSpec = {"*.mat", "MAT Files (Trained Model)"};
+                case "RI"
+                    filterSpec = {"*.csv;*.mat", "CSV or MAT Files (Refractive Index)"};
+                case "Pred"
+                    filterSpec = {"*.mat", "MAT Files (Predictions)"};
+                case "Analyte"
+                    filterSpec = {"*.dat;*.txt;*.csv;*.mat", "Spectrum Files"};
+                otherwise
+                    filterSpec = {"*.*", "All Files"};
+            end
+        end
+
         function node = serializeToTree(val, name, maxDepth)
         % SERIALIZETOTREE Recursively serialize a MATLAB value into a tree struct.
             if nargin < 3, maxDepth = 4; end

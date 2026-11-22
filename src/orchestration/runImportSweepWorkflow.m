@@ -48,26 +48,13 @@ end
     reporter.complete("ResolveInput", sprintf("Input: %s", inputPath));
 
     %% 2. Load analyte Raman spectrum
-    analyteSpectrum = struct();
     reporter.start("LoadAnalyte", "Resolving analyte Raman spectrum...");
-    if cfg.analyteSpectrumFile ~= "" && isfile(cfg.analyteSpectrumFile)
-        try
-            analyteSpectrum = loadAndNormalizeAnalyteSpectrum(cfg.analyteSpectrumFile);
-            if isfield(analyteSpectrum, "shift_cm")
-                reporter.complete("LoadAnalyte", sprintf("Loaded from file: %s", cfg.analyteSpectrumFile));
-            else
-                analyteSpectrum = struct();
-            end
-        catch
-            analyteSpectrum = struct();
-        end
-    elseif cfg.analyteSpectrumFile ~= "" && ~isfile(cfg.analyteSpectrumFile)
-        reporter.warn("LoadAnalyte", sprintf("Configured analyte file not found: %s", cfg.analyteSpectrumFile));
-    end
-
-    if ~isfield(analyteSpectrum, "shift_cm")
-        analyteSpectrum = getDefaultAnalyteSpectrum();
-        reporter.complete("LoadAnalyte", "Using codebase default analyte spectrum.");
+    [analyteSpectrum, resolvedAnalytePath] = resolveAnalyteSpectrum(struct(), ...
+        ExplicitFile=cfg.analyteSpectrumFile, FallbackToDefault=true, Reporter=reporter);
+    if strlength(cfg.analyteSpectrumFile) > 0 && strlength(resolvedAnalytePath) > 0
+        reporter.complete("LoadAnalyte", sprintf("Loaded analyte spectrum: %s", resolvedAnalytePath));
+    else
+        reporter.complete("LoadAnalyte", sprintf("Using built-in analyte spectrum: %s", resolvedAnalytePath));
     end
 
     %% 3. Load existing database (merge mode)

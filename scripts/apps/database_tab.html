@@ -85,6 +85,11 @@
         white-space: nowrap;
     }
     .browse-row button:hover { background: var(--accent); color: #fff; }
+    .browse-row button.analyte-preset-btn.active {
+        border-color: var(--accent);
+        color: var(--accent);
+        font-weight: 600;
+    }
     .btn-primary {
         width: 100%; padding: 10px; margin-top: 6px;
         background: var(--accent); color: #000 !important; border: none;
@@ -460,6 +465,12 @@ function updateStatus(d) {
     if (d.analyteFile !== undefined) {
         var afEl = document.getElementById("analyteFileInput");
         if (afEl) afEl.value = d.analyteFile;
+        var normAf = String(d.analyteFile || "").replace(/\\/g, "/").toLowerCase();
+        document.querySelectorAll(".analyte-preset-btn").forEach(function(btn) {
+            var targetFile = (btn.getAttribute("data-preset-file") || "").toLowerCase();
+            var isMatch = normAf.length > 0 && targetFile.length > 0 && normAf.endsWith("/" + targetFile);
+            btn.classList.toggle("active", isMatch || normAf === targetFile);
+        });
     }
 
     // Dirty badge
@@ -761,10 +772,13 @@ function buildTreeNode(node, startOpen) {
                         <button onclick="browseAndLoad('Analyte','analyteFileInput')">Browse</button>
                         <button onclick="loadBranch('Analyte','analyteFileInput')" style="background:var(--success);color:#fff;">Load</button>
                     </div>
-                    <div class="browse-row" style="margin-top:4px;gap:6px;">
-                        <span style="font-size:10px;color:var(--text-secondary);align-self:center;">Built-in defaults:</span>
-                        <button type="button" onclick="selectDefaultAnalyte('CH4')" style="font-size:10px;padding:3px 8px;">CH&#8324; (Methane)</button>
-                        <button type="button" onclick="selectDefaultAnalyte('C2H4')" style="font-size:10px;padding:3px 8px;">C&#8322;H&#8324; (Ethylene)</button>
+                    <div class="browse-row" style="margin-top:4px;gap:4px;flex-wrap:wrap;align-items:center;">
+                        <span style="font-size:10px;color:var(--text-secondary);margin-right:2px;">Built-in library:</span>
+                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum.dat" onclick="selectDefaultAnalyte('CH4')" title="12CH4 MeCaSDa 296 K (dominant peak 2917 cm⁻¹)" style="font-size:10px;padding:3px 7px;">CH&#8324; (Methane)</button>
+                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_C2H4.dat" onclick="selectDefaultAnalyte('C2H4')" title="12C2H4 ECaSDa 296 K (dominant peak 3021 cm⁻¹)" style="font-size:10px;padding:3px 7px;">C&#8322;H&#8324; (Ethylene)</button>
+                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_NH3.dat" onclick="selectDefaultAnalyte('NH3')" title="NH3 NIST/CCCBDB 296 K (dominant peak 3337 cm⁻¹)" style="font-size:10px;padding:3px 7px;">NH&#8323; (Ammonia)</button>
+                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_C2H2.dat" onclick="selectDefaultAnalyte('C2H2')" title="C2H2 NIST/CCCBDB 296 K (peaks 612, 1974, 3374 cm⁻¹)" style="font-size:10px;padding:3px 7px;">C&#8322;H&#8322; (Acetylene)</button>
+                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_H2O.dat" onclick="selectDefaultAnalyte('H2O')" title="H2O NIST/CCCBDB 296 K (dominant peak 3657 cm⁻¹)" style="font-size:10px;padding:3px 7px;">H&#8322;O (Water)</button>
                     </div>
                 </div>
             </div>

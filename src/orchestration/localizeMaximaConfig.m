@@ -16,6 +16,8 @@ function cfg = localizeMaximaConfig(options)
         options.ModelFile (1,1) string = ""
         options.RiCsvFile (1,1) string = ""
         options.PredictionFile (1,1) string = ""
+        options.AnalyteSpectrumFile (1,1) string = ""
+        options.AnalyteSpectrum (1,1) struct = struct()
         options.LambdaLaser (1,1) double {mustBePositive} = 785
         options.PLimits (1,2) double {mustBePositive} = [750, 950]
         options.RLimits (1,2) double {mustBePositive} = [50, 700]
@@ -108,6 +110,8 @@ function cfg = localizeMaximaConfig(options)
     cfg.modelFile = options.ModelFile;
     cfg.riCsvFile = options.RiCsvFile;
     cfg.predictionFile = options.PredictionFile;
+    cfg.analyteSpectrumFile = options.AnalyteSpectrumFile;
+    cfg.analyteSpectrum = options.AnalyteSpectrum;
 
     % Grid (pre-computed, in µm for model consumption)
     cfg.gridParams = gridParams;

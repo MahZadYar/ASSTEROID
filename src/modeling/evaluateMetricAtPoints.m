@@ -129,6 +129,16 @@ function values = evaluateFromModel(predictor, baseMetric, seeds, lambdaSamples,
     if isfield(cfg, "stokesShiftLimits"), stokesLimits = cfg.stokesShiftLimits; end
     if isfield(cfg, "lambdaLaser"), lambdaLaser = cfg.lambdaLaser; end
 
+    analyteSpecEval = struct();
+    if metricVariant == "weighted" || metricVariant == "analyte"
+        explicitFile = "";
+        if isfield(cfg, "analyteSpectrumFile"), explicitFile = string(cfg.analyteSpectrumFile); end
+        cachedSpec = struct();
+        if isfield(cfg, "analyteSpectrum") && isstruct(cfg.analyteSpectrum), cachedSpec = cfg.analyteSpectrum; end
+        analyteSpecEval = resolveAnalyteSpectrum(struct(), ...
+            ExplicitFile=explicitFile, CachedSpectrum=cachedSpec, FallbackToDefault=true);
+    end
+
     for i = 1:numel(seeds)
         pNm = double(seeds(i).P);
         rNm = double(seeds(i).R);
@@ -137,7 +147,6 @@ function values = evaluateFromModel(predictor, baseMetric, seeds, lambdaSamples,
         end
         try
             if metricVariant == "weighted" || metricVariant == "analyte"
-                analyteSpecEval = getDefaultAnalyteSpectrum();
                 soa = predictor.predictGrid(pNm * 1e-3, rNm * 1e-3, lambdaSamples, ...
                     "LaserWavelength", lambdaLaser, "RamanWindow", stokesLimits, ...
                     "AnalyteSpectrum", analyteSpecEval);
