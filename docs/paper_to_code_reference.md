@@ -220,7 +220,7 @@ This logic lives in `computeSpectralAverages()` inside [src/orchestration/runImp
 Analyte spectrum parsing and normalization:
 
 - [src/io/loadAndNormalizeAnalyteSpectrum.m](src/io/loadAndNormalizeAnalyteSpectrum.m)
-- built-in default (`12CH4` gas-phase Raman spectrum, `100-4200 cm^-1`, MeCaSDa `296 K` convolved at `FWHM = 6 cm^-1` with `785 nm` $(\widetilde{\nu}_L - \Delta\widetilde{\nu})^3$ photon-yield weighting): [src/io/getDefaultAnalyteSpectrum.m](src/io/getDefaultAnalyteSpectrum.m) and [src/io/DefaultAnalyteSpectrum.dat](src/io/DefaultAnalyteSpectrum.dat)
+- built-in default (`12CH4` gas-phase Raman spectrum, `100-4200 cm^-1`, MeCaSDa `296 K` convolved at `FWHM = 20 cm^-1` with `785 nm` $(\widetilde{\nu}_L - \Delta\widetilde{\nu})^3$ photon-yield weighting): [src/io/getDefaultAnalyteSpectrum.m](src/io/getDefaultAnalyteSpectrum.m) and [src/io/DefaultAnalyteSpectrum.dat](src/io/DefaultAnalyteSpectrum.dat)
 
 Weighted inner-product metric:
 
