@@ -433,6 +433,10 @@ function loadBranch(branchName, fieldId) {
     window.htmlComponent.sendEventToMATLAB("LoadBranch", {branch: branchName, path: path});
 }
 
+function selectDefaultAnalyte(preset) {
+    window.htmlComponent.sendEventToMATLAB("LoadBranch", {branch: "Analyte", path: "default:" + preset});
+}
+
 function clearBranch(branchName) {
     window.htmlComponent.sendEventToMATLAB("ClearBranch", {branch: branchName});
 }
@@ -453,6 +457,10 @@ function updateStatus(d) {
     // Branch file paths (fill if returned)
     fillIfEmpty("simDataFile", d.simFile);
     fillIfEmpty("modelFileInput", d.modelFile);
+    if (d.analyteFile !== undefined) {
+        var afEl = document.getElementById("analyteFileInput");
+        if (afEl) afEl.value = d.analyteFile;
+    }
 
     // Dirty badge
     var badge = document.getElementById("dirtyBadge");
@@ -749,9 +757,14 @@ function buildTreeNode(node, startOpen) {
                 <div class="field">
                     <label>Analyte Spectrum &rarr; db.Global.AnalyteSpectrum</label>
                     <div class="browse-row">
-                        <input type="text" id="analyteFileInput" placeholder="(optional — uses default broadband)">
+                        <input type="text" id="analyteFileInput" placeholder="(optional — uses CH4 default)">
                         <button onclick="browseAndLoad('Analyte','analyteFileInput')">Browse</button>
                         <button onclick="loadBranch('Analyte','analyteFileInput')" style="background:var(--success);color:#fff;">Load</button>
+                    </div>
+                    <div class="browse-row" style="margin-top:4px;gap:6px;">
+                        <span style="font-size:10px;color:var(--text-secondary);align-self:center;">Built-in defaults:</span>
+                        <button type="button" onclick="selectDefaultAnalyte('CH4')" style="font-size:10px;padding:3px 8px;">CH&#8324; (Methane)</button>
+                        <button type="button" onclick="selectDefaultAnalyte('C2H4')" style="font-size:10px;padding:3px 8px;">C&#8322;H&#8324; (Ethylene)</button>
                     </div>
                 </div>
             </div>

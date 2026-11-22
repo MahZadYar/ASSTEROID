@@ -1030,7 +1030,17 @@ function loadBranchData(fig, branchName, filePath)
             end
 
         case "Analyte"
-            fig.UserData.db.Global.AnalyteSpectrumFile = string(filePath);
+            fpStr = strtrim(string(filePath));
+            if startsWith(lower(fpStr), "default:")
+                presetName = extractAfter(fpStr, ":");
+                ioDir = fileparts(which("getDefaultAnalyteSpectrum"));
+                if strcmpi(strtrim(presetName), "c2h4")
+                    fpStr = string(fullfile(ioDir, "DefaultAnalyteSpectrum_C2H4.dat"));
+                else
+                    fpStr = string(fullfile(ioDir, "DefaultAnalyteSpectrum.dat"));
+                end
+            end
+            fig.UserData.db.Global.AnalyteSpectrumFile = fpStr;
 
         otherwise
             warning("loadBranchData:UnknownBranch", ...
