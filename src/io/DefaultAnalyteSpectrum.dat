@@ -1,3 +1,8 @@
+# Analyte: 12CH4 (Methane, gas phase)
+# Source: MeCaSDa / CaSDa24 (VAMDC ICB CNRS, https://vamdc.icb.cnrs.fr/PHP/CH4.php)
+# Query: 12CH4, polarizability mode (charac=pol), T = 296 K, threshold >= 1e-3 (4,401 transitions, 100-4200 cm^-1)
+# Synthesis: (nu_L - dnu)^3 * S_pol photon-yield weighted at lambda_L = 785 nm, convolved with 20 cm^-1 FWHM Gaussian, unit-area normalized
+# Columns: shift_cm (cm^-1), normalized_intensity (cm)
 100.0,0.0000000000e+00
 101.0,0.0000000000e+00
 102.0,0.0000000000e+00

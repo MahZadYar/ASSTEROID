@@ -1,3 +1,8 @@
+# Analyte: 12C2H4 (Ethylene, gas phase)
+# Source: ECaSDa (VAMDC ICB CNRS, https://vamdc.icb.cnrs.fr/PHP/ecasda.php)
+# Query: 12C2H4, polarizability mode (charac=pol), T = 296 K, threshold >= 1e-3 (24,837 transitions, 620-3800 cm^-1)
+# Synthesis: (nu_L - dnu)^3 * S_pol photon-yield weighted at lambda_L = 785 nm, convolved with 20 cm^-1 FWHM Gaussian, unit-area normalized
+# Columns: shift_cm (cm^-1), normalized_intensity (cm)
 100.0,0.0000000000e+00
 101.0,0.0000000000e+00
 102.0,0.0000000000e+00

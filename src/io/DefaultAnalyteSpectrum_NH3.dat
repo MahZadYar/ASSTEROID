@@ -1,3 +1,9 @@
+# Analyte: NH3 (Ammonia, gas phase)
+# Source (frequencies): NIST Chemistry WebBook (https://webbook.nist.gov/) / Shimanouchi tables
+# Source (Raman activities): NIST CCCBDB MP2=FULL/aug-cc-pVTZ (https://cccbdb.nist.gov/)
+# Modes: 950.4 cm^-1 (g=1, S=1.43 A^4/u, v2 (A1, sym. deform)); 1626.8 cm^-1 (g=2, S=1.81 A^4/u, v4 (E, deg. deform)); 3336.7 cm^-1 (g=1, S=173.10 A^4/u, v1 (A1, sym. N-H stretch)); 3443.8 cm^-1 (g=2, S=33.02 A^4/u, v3 (E, deg. N-H stretch))
+# Synthesis: Placzek (nu_L - dnu)^3 / [dnu * (1 - exp(-hc*dnu/(k_B*T)))] at lambda_L = 785 nm, T = 296 K, 20 cm^-1 FWHM Gaussian, unit-area normalized
+# Columns: shift_cm (cm^-1), normalized_intensity (cm)
 100.0,0.0000000000e+00
 101.0,0.0000000000e+00
 102.0,0.0000000000e+00

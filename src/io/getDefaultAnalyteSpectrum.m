@@ -41,8 +41,8 @@ end
 % Find the requested built-in .dat file via shared catalog
 [datPath, ~, displayLabel] = resolveDefaultAnalyteSpectrumPath(string(preset), Strict=true);
 
-% Load the .dat file (wavenumber, intensity)
-data = readmatrix(datPath, 'NumHeaderLines', 0, 'Delimiter', ',');
+% Load the .dat file (wavenumber, intensity; skip # provenance comments)
+data = readmatrix(datPath, 'CommentStyle', '#', 'Delimiter', ',');
 shift_cm = data(:, 1);      % Raman shift in cm^-1
 raw_intensity = data(:, 2); % Raw intensity values
 

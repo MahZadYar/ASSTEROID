@@ -1,3 +1,9 @@
+# Analyte: C2H2 (Acetylene, gas phase)
+# Source (frequencies): NIST Chemistry WebBook (https://webbook.nist.gov/) / Shimanouchi tables
+# Source (Raman activities): NIST CCCBDB MP2=FULL/aug-cc-pVTZ (https://cccbdb.nist.gov/)
+# Modes: 611.8 cm^-1 (g=2, S=4.30 A^4/u, v4 (Pi_g, trans bend)); 1973.8 cm^-1 (g=1, S=87.36 A^4/u, v2 (Sigma_g+, C#C stretch)); 3373.7 cm^-1 (g=1, S=67.20 A^4/u, v1 (Sigma_g+, sym. C-H stretch))
+# Synthesis: Placzek (nu_L - dnu)^3 / [dnu * (1 - exp(-hc*dnu/(k_B*T)))] at lambda_L = 785 nm, T = 296 K, 20 cm^-1 FWHM Gaussian, unit-area normalized
+# Columns: shift_cm (cm^-1), normalized_intensity (cm)
 100.0,0.0000000000e+00
 101.0,0.0000000000e+00
 102.0,0.0000000000e+00

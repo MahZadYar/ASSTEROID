@@ -70,7 +70,7 @@ if ~isfile(filePath)
 end
 
 try
-    data = readmatrix(filePath, 'Delimiter', {' ', '\t', ','}, 'TreatAsEmpty', {'NA', 'NaN'});
+    data = readmatrix(filePath, 'CommentStyle', '#', 'Delimiter', {' ', '\t', ','}, 'TreatAsEmpty', {'NA', 'NaN'});
     if isempty(data) || size(data, 2) < 2
         warning('Analyte spectrum file must have at least 2 columns. File: %s', filePath);
         return;

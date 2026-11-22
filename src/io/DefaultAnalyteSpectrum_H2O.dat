@@ -1,3 +1,9 @@
+# Analyte: H2O (Water Vapor, gas phase)
+# Source (frequencies): NIST Chemistry WebBook (https://webbook.nist.gov/) / Shimanouchi tables
+# Source (Raman activities): NIST CCCBDB MP2=FULL/aug-cc-pVTZ (https://cccbdb.nist.gov/)
+# Modes: 1594.6 cm^-1 (g=1, S=0.83 A^4/u, v2 (A1, H-O-H bend)); 3656.7 cm^-1 (g=1, S=106.04 A^4/u, v1 (A1, sym. O-H stretch)); 3755.8 cm^-1 (g=1, S=21.83 A^4/u, v3 (B2, asym. O-H stretch))
+# Synthesis: Placzek (nu_L - dnu)^3 / [dnu * (1 - exp(-hc*dnu/(k_B*T)))] at lambda_L = 785 nm, T = 296 K, 20 cm^-1 FWHM Gaussian, unit-area normalized
+# Columns: shift_cm (cm^-1), normalized_intensity (cm)
 100.0,0.0000000000e+00
 101.0,0.0000000000e+00
 102.0,0.0000000000e+00
