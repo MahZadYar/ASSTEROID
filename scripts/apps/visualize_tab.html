@@ -775,6 +775,7 @@ function onMetric2dChange() {
 /* ---------- spectral slice helpers & live dispatch ---------- */
 function shiftToWl(shift, laserWl) {
     if (!laserWl || laserWl <= 0) laserWl = 785;
+    if (Math.abs(shift) < 1e-9) return laserWl;
     var invLam = (1 / laserWl) - (shift * 1e-7);
     if (invLam <= 0) return NaN;
     return 1 / invLam;
@@ -783,6 +784,7 @@ function shiftToWl(shift, laserWl) {
 function wlToShift(wl, laserWl) {
     if (!laserWl || laserWl <= 0) laserWl = 785;
     if (!wl || wl <= 0) return NaN;
+    if (Math.abs(wl - laserWl) < 1e-9) return 0;
     return ((1 / laserWl) - (1 / wl)) * 1e7;
 }
 
@@ -795,13 +797,13 @@ function updateSliceRange() {
     var maxLbl = document.getElementById("shiftMaxLabel");
     var shiftInput = document.getElementById("sliceShift");
 
-    var minShift = 100;
+    var minShift = 0;
     var maxShift = 4200;
 
     if (bi && bi.lambdaRange && isFinite(bi.lambdaRange[0]) && isFinite(bi.lambdaRange[1])) {
         var sMin = Math.max(0, Math.round(wlToShift(bi.lambdaRange[0], laserWl)));
         var sMax = Math.round(wlToShift(bi.lambdaRange[1], laserWl));
-        if (isFinite(sMin) && isFinite(sMax) && sMax > sMin) {
+        if (isFinite(sMin) && isFinite(sMax) && sMax >= sMin) {
             minShift = sMin;
             maxShift = sMax;
         }
@@ -1335,9 +1337,9 @@ document.addEventListener("DOMContentLoaded", function() {
                             </div>
                         </div>
                         <div class="field" style="margin-top:6px; margin-bottom:2px;">
-                            <input type="range" id="sliceShiftSlider" min="100" max="4200" step="5" value="1000">
+                            <input type="range" id="sliceShiftSlider" min="0" max="4200" step="5" value="1000">
                             <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--text-secondary); margin-top:3px; font-variant-numeric:tabular-nums;">
-                                <span id="shiftMinLabel">100 cm⁻¹</span>
+                                <span id="shiftMinLabel">0 cm⁻¹</span>
                                 <span id="shiftCurLabel" style="color:var(--accent); font-weight:600;">1000 cm⁻¹</span>
                                 <span id="shiftMaxLabel">4200 cm⁻¹</span>
                             </div>

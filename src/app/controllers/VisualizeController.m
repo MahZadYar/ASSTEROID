@@ -208,7 +208,11 @@ classdef VisualizeController < handle
                 shift = obj.safeNum(d, "sliceShift", 1000);
                 laserWl = obj.safeNum(d, "laserWavelength", 785);
                 if ~(laserWl > 0), laserWl = 785; end
-                lamT = 1 / (1 / laserWl - shift * 1e-7);
+                if abs(shift) < 1e-9
+                    lamT = laserWl;
+                else
+                    lamT = 1 / (1 / laserWl - shift * 1e-7);
+                end
                 if ~isfinite(lamT) || lamT <= 0, return; end
 
                 ax = obj.getAx2D();
@@ -493,7 +497,12 @@ classdef VisualizeController < handle
             if kind == "slice"
                 shift = obj.safeNum(d, "sliceShift", 1000);
                 laserWl = obj.safeNum(d, "laserWavelength", 785);
-                lamT = 1 / (1 / laserWl - shift * 1e-7);
+                if ~(laserWl > 0), laserWl = 785; end
+                if abs(shift) < 1e-9
+                    lamT = laserWl;
+                else
+                    lamT = 1 / (1 / laserWl - shift * 1e-7);
+                end
                 if ~isfinite(lamT) || lamT <= 0
                     error("Visualize:BadShift", "Raman shift %.0f cm⁻¹ is not reachable from λ_L = %.1f nm.", shift, laserWl);
                 end

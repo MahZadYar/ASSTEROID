@@ -107,7 +107,12 @@ ctl2.handleEvent("Update2DSlice", struct("mode", "2d", "branch", "Sim", ...
 assert(contains(string(ax2.Title.String), "1200 cm⁻¹"), "Live slice update must update title to 1200 cm⁻¹.");
 cData2 = hMainPatch.FaceVertexCData;
 assert(numel(cData1) == numel(cData2), "FaceVertexCData length must be preserved across live updates.");
-fprintf("  ✓ Live 2D spectral slice update (Update2DSlice) verified in-place.\n");
+
+% Zero shift uses exact laser wavelength
+ctl2.handleEvent("Update2DSlice", struct("mode", "2d", "branch", "Sim", ...
+    "metric", "EF_vol", "metricKind", "slice", "sliceShift", 0, "laserWavelength", 785));
+assert(contains(string(ax2.Title.String), "0 cm⁻¹ (λ = 785.0 nm)"), "Zero Raman shift must use exact laser wavelength (785.0 nm).");
+fprintf("  ✓ Live 2D spectral slice update (Update2DSlice, including 0 shift -> laser λ) verified in-place.\n");
 
 ctl.handleEvent("ClearTraces", struct());
 ctl.handleEvent("StopProcess", struct());
