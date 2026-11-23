@@ -886,6 +886,67 @@ function onSliceShiftCommit(shiftVal) {
     sendToMATLAB("Update2DSlice", cfg);
 }
 
+/* ---------- 3D alpha live dispatch ---------- */
+var _alpha3dTimer = null;
+var _pendingAlphaCfg = null;
+
+function onLiveAlpha3dChange(source) {
+    var curve = val("alphaCurve3d") || "power";
+    var numEl = document.getElementById("alphaGamma3d");
+    var sliderEl = document.getElementById("alphaGammaSlider");
+    var maxSlider = document.getElementById("alphaMaxSlider");
+
+    var gammaVal = 1.5;
+    if (source === "number" && numEl) {
+        gammaVal = parseFloat(numEl.value) || 1.5;
+        if (sliderEl) sliderEl.value = gammaVal;
+    } else if (sliderEl) {
+        gammaVal = parseFloat(sliderEl.value) || 1.5;
+        if (numEl) numEl.value = gammaVal;
+    }
+    var maxAlpha = maxSlider ? (parseFloat(maxSlider.value) || 1.0) : 1.0;
+
+    var curLbl = document.getElementById("alphaCurLabel");
+    if (curLbl) curLbl.textContent = "γ = " + gammaVal.toFixed(1);
+
+    var maxLbl = document.getElementById("alphaMaxCurLabel");
+    if (maxLbl) maxLbl.textContent = Math.round(maxAlpha * 100) + "%";
+
+    var cfg = {
+        alphaCurve: curve,
+        alphaGamma: gammaVal,
+        alphaMax: maxAlpha
+    };
+    _pendingAlphaCfg = cfg;
+
+    if (!_alpha3dTimer) {
+        _alpha3dTimer = setTimeout(function() {
+            _alpha3dTimer = null;
+            if (_pendingAlphaCfg) {
+                var payload = _pendingAlphaCfg;
+                _pendingAlphaCfg = null;
+                sendToMATLAB("Update3DAlpha", payload);
+            }
+        }, 35);
+    }
+}
+
+function onAlpha3dCommit() {
+    if (_alpha3dTimer) {
+        clearTimeout(_alpha3dTimer);
+        _alpha3dTimer = null;
+    }
+    _pendingAlphaCfg = null;
+    var curve = val("alphaCurve3d") || "power";
+    var gammaVal = numOr("alphaGamma3d", 1.5);
+    var maxAlpha = parseFloat(val("alphaMaxSlider")) || 1.0;
+    sendToMATLAB("Update3DAlpha", {
+        alphaCurve: curve,
+        alphaGamma: gammaVal,
+        alphaMax: maxAlpha
+    });
+}
+
 function onControlChange() {
     refreshAll();
     var mode = getRadio("visMode", "1d");
@@ -941,6 +1002,9 @@ function collectConfig() {
         cfg.logScale = chk("log3d");
         cfg.showSimColumns = chk("showSim3d");
         cfg.maxSamples = numOr("maxSamples3d", 256);
+        cfg.alphaCurve = val("alphaCurve3d") || "power";
+        cfg.alphaGamma = numOr("alphaGamma3d", 1.5);
+        cfg.alphaMax = parseFloat(val("alphaMaxSlider")) || 1.0;
     }
     return cfg;
 }
@@ -1132,6 +1196,25 @@ document.addEventListener("DOMContentLoaded", function() {
         m3.addEventListener("change", function() {
             updateRenderAvailability();
         });
+    }
+    var aCurve = document.getElementById("alphaCurve3d");
+    if (aCurve) {
+        aCurve.addEventListener("change", function() { onLiveAlpha3dChange("curve"); });
+    }
+    var aGamma = document.getElementById("alphaGamma3d");
+    if (aGamma) {
+        aGamma.addEventListener("input", function() { onLiveAlpha3dChange("number"); });
+        aGamma.addEventListener("change", onAlpha3dCommit);
+    }
+    var aSlider = document.getElementById("alphaGammaSlider");
+    if (aSlider) {
+        aSlider.addEventListener("input", function() { onLiveAlpha3dChange("slider"); });
+        aSlider.addEventListener("change", onAlpha3dCommit);
+    }
+    var aMax = document.getElementById("alphaMaxSlider");
+    if (aMax) {
+        aMax.addEventListener("input", function() { onLiveAlpha3dChange("max"); });
+        aMax.addEventListener("change", onAlpha3dCommit);
     }
     ["p1d", "r1d", "laser1d", "laser2d", "spatialRes2d"].forEach(function(id) {
         var inputEl = document.getElementById(id);
@@ -1392,6 +1475,42 @@ document.addEventListener("DOMContentLoaded", function() {
                         <label class="check"><input type="checkbox" id="showSim3d">Sim sample columns</label>
                     </div>
                     <p class="hint">Simulation samples are drawn as faint full-height columns at their (p, r) positions.</p>
+                </section>
+
+                <section class="section" aria-labelledby="alpha3dTitle" style="margin-top:8px;">
+                    <h2 class="section-title" id="alpha3dTitle">Transparency / Alpha Curve</h2>
+                    <div class="field-row">
+                        <div class="field" style="flex:2;">
+                            <label class="lbl" for="alphaCurve3d">Curve Profile</label>
+                            <select id="alphaCurve3d">
+                                <option value="power" selected>Power law (u^γ)</option>
+                                <option value="log">Logarithmic</option>
+                                <option value="linear">Linear ramp</option>
+                                <option value="sigmoid">Sigmoid (S-curve)</option>
+                                <option value="exponential">Exponential</option>
+                            </select>
+                        </div>
+                        <div class="field" style="flex:1;">
+                            <label class="lbl" for="alphaGamma3d">Gamma (γ)</label>
+                            <input type="number" id="alphaGamma3d" value="1.5" step="0.1" min="0.1" max="5.0">
+                        </div>
+                    </div>
+                    <div class="field" style="margin-top:6px; margin-bottom:2px;">
+                        <input type="range" id="alphaGammaSlider" min="0.1" max="5.0" step="0.1" value="1.5" style="width:100%;">
+                        <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--text-secondary); margin-top:3px; font-variant-numeric:tabular-nums;">
+                            <span>0.1 (Translucent)</span>
+                            <span id="alphaCurLabel" style="color:var(--accent); font-weight:600;">γ = 1.5</span>
+                            <span>5.0 (Hotspots)</span>
+                        </div>
+                    </div>
+                    <div class="field" style="margin-top:8px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                            <label class="lbl" for="alphaMaxSlider" style="margin-bottom:0;">Peak Opacity</label>
+                            <span id="alphaMaxCurLabel" style="font-size:10px; color:var(--accent); font-weight:600; font-variant-numeric:tabular-nums;">100%</span>
+                        </div>
+                        <input type="range" id="alphaMaxSlider" min="0.05" max="1.0" step="0.05" value="1.0" style="width:100%;">
+                    </div>
+                    <p class="hint" id="alphaHint">Higher γ suppresses lower background values, highlighting high-intensity hotspots.</p>
                 </section>
             </div>
 

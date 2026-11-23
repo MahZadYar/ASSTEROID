@@ -60,6 +60,9 @@ function hVol = renderAnnotatedVolume(viewer, volData, pVec, rVec, lambdaVec, op
         options.AxisLabels (1,3) string = ["Lattice Period", "Particle Radius", "Wavelength"]
         options.AxisSymbols (1,3) string = ["p", "r", "λ"]
         options.FlipLambda (1,1) logical = true
+        options.AlphaCurve (1,1) string {mustBeMember(options.AlphaCurve, ["power", "log", "linear", "sigmoid", "exponential"])} = "power"
+        options.AlphaGamma (1,1) double {mustBePositive} = 1.5
+        options.AlphaMax (1,1) double {mustBeInRange(options.AlphaMax, 0, 1)} = 1.0
     end
 
     volData = double(volData);
@@ -96,9 +99,7 @@ function hVol = renderAnnotatedVolume(viewer, volData, pVec, rVec, lambdaVec, op
     if isempty(cmap)
         cmap = localDefaultColormap(nLevels);
     end
-    epsA = 1e-4;
-    aMap = log(linspace(epsA, 1, nLevels));
-    aMap = 1 - aMap / min(aMap);           % 0 at the lowest level, 1 at the top
+    aMap = computeVolumeAlphaMap(options.AlphaCurve, options.AlphaGamma, options.AlphaMax, nLevels);
 
     %% Physical voxel spacing (nm). Voxel centres sit at intrinsic 1..N,
     %  so the span between first and last centre equals the data range.
@@ -141,6 +142,7 @@ function hVol = renderAnnotatedVolume(viewer, volData, pVec, rVec, lambdaVec, op
     end
 
     hVol = volshow(round(volN * nLevels), volArgs{:});
+    hVol.UserData = struct("alphaCurve", options.AlphaCurve, "alphaGamma", options.AlphaGamma, "alphaMax", options.AlphaMax);
 
     %% Viewer styling (as legacy volumeVisualizer)
     viewer.Lighting = "off";

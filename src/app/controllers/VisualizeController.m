@@ -61,6 +61,8 @@ classdef VisualizeController < handle
                         obj.selectMode(eventData);
                     case "Update2DSlice"
                         obj.update2DSlice(eventData);
+                    case "Update3DAlpha"
+                        obj.update3DAlpha(eventData);
                     otherwise
                         fprintf("[VisualizeController] Unknown event: %s\n", eventName);
                 end
@@ -324,6 +326,37 @@ classdef VisualizeController < handle
                 % Fallback cleanly to runRender
                 fprintf("[VisualizeController] update2DSlice in-place fallback: %s\n", ME.message);
                 obj.runRender(d);
+            end
+        end
+
+        function update3DAlpha(obj, d)
+        % UPDATE3DALPHA Fast live update of 3D volume Alphamap from UI alpha controls.
+            try
+                viewerObj = obj.getViewer();
+                if isempty(viewerObj) || ~isvalid(viewerObj), return; end
+
+                volObj = findobj(viewerObj.Children, '-isa', 'images.ui.graphics.Volume');
+                if isempty(volObj) || ~isvalid(volObj)
+                    return;
+                end
+
+                curve = lower(obj.safeStr(d, "alphaCurve", "power"));
+                validCurves = ["power", "log", "linear", "sigmoid", "exponential"];
+                if ~ismember(curve, validCurves), curve = "power"; end
+
+                gammaVal = obj.safeNum(d, "alphaGamma", 1.5);
+                if ~(gammaVal > 0), gammaVal = 1.5; end
+
+                maxAlpha = obj.safeNum(d, "alphaMax", 1.0);
+                if ~isfinite(maxAlpha), maxAlpha = 1.0; end
+                maxAlpha = max(0, min(1, maxAlpha));
+
+                aMap = computeVolumeAlphaMap(curve, gammaVal, maxAlpha, 4095);
+                volObj.Alphamap = aMap;
+                volObj.UserData = struct("alphaCurve", curve, "alphaGamma", gammaVal, "alphaMax", maxAlpha);
+                drawnow limitrate;
+            catch ME
+                fprintf("[VisualizeController] update3DAlpha error: %s\n", ME.message);
             end
         end
     end
@@ -657,9 +690,14 @@ classdef VisualizeController < handle
             if obj.safeBool(d, "invertColormap", false)
                 cmap = obj.loadColormapSafe(256, false);
             end
+            alphaCurve = lower(obj.safeStr(d, "alphaCurve", "power"));
+            alphaGamma = obj.safeNum(d, "alphaGamma", 1.5);
+            alphaMax = obj.safeNum(d, "alphaMax", 1.0);
+
             viewerObj = obj.getViewer();
             renderAnnotatedVolume(viewerObj, vol, pV, rV, lV, ...
                 Colormap=cmap, LogScale=obj.safeBool(d, "logScale", true), ...
+                AlphaCurve=alphaCurve, AlphaGamma=alphaGamma, AlphaMax=alphaMax, ...
                 MetricLabel=metric, OverlayMask=overlay);
             rep.complete("Volume3D", "Volume rendered.");
             msg = sprintf("3D: %s volume %d×%d×%d (r × p × λ) from db.%s.", metric, nr, np, nl, branch);

@@ -74,7 +74,10 @@ uf = uifigure("Visible", "off");
 v = viewer3d(uf);
 vol = rand(9, 21, 15);
 renderAnnotatedVolume(v, vol, linspace(400, 1400, 21), linspace(50, 450, 9), linspace(790, 1000, 15), ...
-    MetricLabel="EF_vol");
+    MetricLabel="EF_vol", AlphaCurve="power", AlphaGamma=2.0, AlphaMax=0.9);
+volStandalone = findobj(v.Children, '-isa', 'images.ui.graphics.Volume');
+assert(isscalar(volStandalone) && abs(max(volStandalone.Alphamap) - 0.9) < 1e-4, ...
+    "renderAnnotatedVolume should scale Alphamap by AlphaMax.");
 nAnn = numel(v.Annotations);
 assert(nAnn >= 7, sprintf("Expected axis + range annotations, found %d.", nAnn));
 delete(uf);
@@ -144,12 +147,19 @@ fprintf("[4b] 2D renders OK\n");
 
 % 3D: gridded Interp renders; scattered Sim is refused
 send("Render", struct("mode", "3d", "branch", "Interp", "invertColormap", false, "metric", "EF_vol", ...
-    "logScale", true, "showSimColumns", true, "maxSamples", 16));
+    "logScale", true, "showSimColumns", true, "maxSamples", 16, ...
+    "alphaCurve", "power", "alphaGamma", 2.2, "alphaMax", 0.85));
 viewer = h.visualizeViewer;
 volObj = findobj(viewer.Children, '-isa', 'images.ui.graphics.Volume');
 assert(isscalar(volObj), "3D render should create one Volume.");
 assert(~isempty(volObj.OverlayData), "Sim columns overlay should be attached.");
+assert(abs(max(volObj.Alphamap) - 0.85) < 1e-4, "3D render should set Alphamap to specified AlphaMax.");
 assert(numel(viewer.Annotations) >= 7, "3D axes should be annotated.");
+
+% Test live 3D alpha updating without re-rendering volume
+send("Update3DAlpha", struct("alphaCurve", "sigmoid", "alphaGamma", 3.0, "alphaMax", 0.6));
+assert(abs(max(volObj.Alphamap) - 0.6) < 1e-4, "Update3DAlpha should live update volume Alphamap.");
+assert(strcmp(volObj.UserData.alphaCurve, "sigmoid"), "Volume UserData should store active alpha curve.");
 send("Render", struct("mode", "3d", "branch", "Sim", "invertColormap", false, "metric", "EF_vol", ...
     "logScale", true, "showSimColumns", false, "maxSamples", 64));
 volObj2 = findobj(viewer.Children, '-isa', 'images.ui.graphics.Volume');

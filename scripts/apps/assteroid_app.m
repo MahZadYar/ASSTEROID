@@ -5519,6 +5519,11 @@ function handleVisualizeEvent(src, event, fig)
                 runVisualizeRender(src, data, fig);
             case "Update2DSlice"
                 runVisualizeRender(src, data, fig);
+            case "Update3DAlpha"
+                if isfield(fig.UserData, "handles") && isfield(fig.UserData.handles, "visController") ...
+                        && ~isempty(fig.UserData.handles.visController)
+                    fig.UserData.handles.visController.handleEvent(name, data);
+                end
             case "ClearTraces"
                 fig.UserData.visualize.traces = emptyVisualizeTraces();
                 ax = fig.UserData.handles.visualizeAx1D;
@@ -6086,8 +6091,12 @@ function [msg, warns] = renderVisualize3D(d, fig, reporter)
     if safeBool(d, "invertColormap", false)
         cmap = loadColormapSafe(256, false);
     end
+    alphaCurve = lower(safeStr(d, "alphaCurve", "power"));
+    alphaGamma = safeNum(d, "alphaGamma", 1.5);
+    alphaMax = safeNum(d, "alphaMax", 1.0);
     renderAnnotatedVolume(fig.UserData.handles.visualizeViewer, vol, pV, rV, lV, ...
         Colormap=cmap, LogScale=safeBool(d, "logScale", true), ...
+        AlphaCurve=alphaCurve, AlphaGamma=alphaGamma, AlphaMax=alphaMax, ...
         MetricLabel=metric, OverlayMask=overlay);
     reporter.complete("Volume3D", "Volume rendered.");
     msg = sprintf("3D: %s volume %d×%d×%d (r × p × λ) from db.%s.", metric, nr, np, nl, branch);

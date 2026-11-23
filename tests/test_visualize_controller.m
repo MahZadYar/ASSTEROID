@@ -114,6 +114,18 @@ ctl2.handleEvent("Update2DSlice", struct("mode", "2d", "branch", "Sim", ...
 assert(contains(string(ax2.Title.String), "0 cm⁻¹ (λ = 785.0 nm)"), "Zero Raman shift must use exact laser wavelength (785.0 nm).");
 fprintf("  ✓ Live 2D spectral slice update (Update2DSlice, including 0 shift -> laser λ) verified in-place.\n");
 
+% 3d. computeVolumeAlphaMap and Update3DAlpha verification
+aPower = computeVolumeAlphaMap("power", 2.0, 0.8, 100);
+assert(numel(aPower) == 100 && abs(max(aPower) - 0.8) < 1e-6 && aPower(1) == 0, ...
+    "computeVolumeAlphaMap power profile must match expected range.");
+aLog = computeVolumeAlphaMap("log", 1.0, 1.0, 100);
+assert(numel(aLog) == 100 && abs(max(aLog) - 1.0) < 1e-6, "Log profile must normalize to 1.");
+aSig = computeVolumeAlphaMap("sigmoid", 2.0, 1.0, 100);
+assert(aSig(1) < 1e-6 && abs(aSig(end) - 1.0) < 1e-6, "Sigmoid must span [0, 1].");
+
+ctl2.handleEvent("Update3DAlpha", struct("alphaCurve", "power", "alphaGamma", 2.5, "alphaMax", 0.8));
+fprintf("  ✓ computeVolumeAlphaMap & Update3DAlpha verified.\n");
+
 ctl.handleEvent("ClearTraces", struct());
 ctl.handleEvent("StopProcess", struct());
 ctl.handleEvent("RefreshDbState", struct());
