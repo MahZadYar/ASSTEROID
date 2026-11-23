@@ -18,6 +18,7 @@ function cfg = localizeMaximaConfig(options)
         options.PredictionFile (1,1) string = ""
         options.AnalyteSpectrumFile (1,1) string = ""
         options.AnalyteSpectrum (1,1) struct = struct()
+        options.AnalyteLibrary (:,:) struct = struct([])
         options.LambdaLaser (1,1) double {mustBePositive} = 785
         options.PLimits (1,2) double {mustBePositive} = [750, 950]
         options.RLimits (1,2) double {mustBePositive} = [50, 700]
@@ -59,7 +60,7 @@ function cfg = localizeMaximaConfig(options)
         options.DestinationBoundPadding (1,1) double {mustBeNonnegative} = 0
         options.KeepRejectedSeeds (1,1) logical = true
         options.BorderRejectFraction (1,1) double {mustBeNonnegative} = 0.02
-        options.MetricVariant (1,1) string {mustBeMember(options.MetricVariant, ["laser","broad","broadband","avg","analyte","weighted"])} = "avg"
+        options.MetricVariant (1,1) string {mustBeValidMetricVariantOpt(options.MetricVariant)} = "avg"
         options.UseWatershedBasins (1,1) logical = true
         options.BasinSensitivity (1,1) double {mustBeNonnegative} = 0.005
         options.BasinMinArea (1,1) double {mustBePositive} = 4
@@ -112,6 +113,7 @@ function cfg = localizeMaximaConfig(options)
     cfg.predictionFile = options.PredictionFile;
     cfg.analyteSpectrumFile = options.AnalyteSpectrumFile;
     cfg.analyteSpectrum = options.AnalyteSpectrum;
+    cfg.analyteLibrary = options.AnalyteLibrary;
 
     % Grid (pre-computed, in µm for model consumption)
     cfg.gridParams = gridParams;
@@ -181,4 +183,12 @@ function cfg = localizeMaximaConfig(options)
     cfg.inBasinStarts = options.InBasinStarts;
     cfg.basinValueThreshold = options.BasinValueThreshold;
     cfg.basinMap = options.BasinMap;
+end
+
+function mustBeValidMetricVariantOpt(v)
+    p = parseMetricVariantName(v, IsVariantToken=true);
+    if ~(p.isVariantToken && p.variantKind ~= "spectral")
+        error("localizeMaximaConfig:InvalidMetricVariant", ...
+            "Invalid MetricVariant '%s'. Expected laser, broad, broadband, avg, analyte, weighted, or an analyte key.", v);
+    end
 end

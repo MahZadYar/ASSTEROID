@@ -1,22 +1,22 @@
 function allData = buildPointPredictionSoA(predictor, periodNm, radiusNm, lambdaSamples, ...
-    laserWl, stokesShiftLimits, stokesRes, analyteSpectrum, reporter, progressStepName, metricsRamanWindow)
+    laserWl, stokesShiftLimits, stokesRes, analyteSpectrum, reporter, progressStepName, metricsRamanWindow, analyteLibrary)
 %buildPointPredictionSoA Predict spectra for explicit (period, radius) coordinate pairs.
 %   Builds SoA struct from per-point predictor evaluations and computes
-%   derived metrics (avg, laser, analyte).
+%   derived metrics (avg, laser, analyte, analyte_<KEY>).
 %
 %   Inputs:
-%       predictor        - Model or data predictor with predictSpectral method.
-%       periodNm         - [N × 1] period values in nm.
-%       radiusNm         - [N × 1] radius values in nm.
-%       lambdaSamples    - Wavelength samples (nm or µm, auto-detected).
-%       laserWl          - Laser wavelength in nm.
-%       stokesShiftLimits - [min, max] Stokes shift in cm⁻¹.
-%       stokesRes        - Spectral interpolation resolution (cm⁻¹ per point).
-%       analyteSpectrum  - Analyte spectrum struct (or empty struct).
-%       reporter         - ProgressReporter instance.
-%       progressStepName - Step name for progress reporting.
-%       metricsRamanWindow - Optional [min, max] cm⁻¹ for derived metrics
-%                            (defaults to stokesShiftLimits when empty).
+%       predictor          - Model or data predictor with predictSpectral method.
+%       periodNm           - [N × 1] period values in nm.
+%       radiusNm           - [N × 1] radius values in nm.
+%       lambdaSamples      - Wavelength samples (nm or µm, auto-detected).
+%       laserWl            - Laser wavelength in nm.
+%       stokesShiftLimits  - [min, max] Stokes shift in cm⁻¹.
+%       stokesRes          - Spectral interpolation resolution (cm⁻¹ per point).
+%       analyteSpectrum    - Analyte spectrum struct (or empty struct).
+%       reporter           - ProgressReporter instance.
+%       progressStepName   - Step name for progress reporting.
+%       metricsRamanWindow - Optional [min, max] cm⁻¹ for derived metrics.
+%       analyteLibrary     - Optional struct array of analytes (.key, .spectrum).
 
     arguments
         predictor
@@ -30,6 +30,7 @@ function allData = buildPointPredictionSoA(predictor, periodNm, radiusNm, lambda
         reporter = []
         progressStepName string = "Predict"
         metricsRamanWindow double = []
+        analyteLibrary struct = struct([])
     end
 
     numPoints = numel(periodNm);
@@ -62,11 +63,14 @@ function allData = buildPointPredictionSoA(predictor, periodNm, radiusNm, lambda
         queryR = radiusNm * 1e-3;
     end
 
-    % Use batch evaluation when available (interpolation predictor with vectorised
-    % DT + barycentric spatial interpolation): avoids per-point overhead.
+    % Use batch evaluation when available (vectorised surrogate or data predictor).
     if isfield(predictor, "predictPointsBatch") && ~isempty(predictor.predictPointsBatch)
         numT = numel(targetNames);
-        numLraw = numel(predictor.lambdaGrid);
+        if isfield(predictor, "lambdaGrid") && ~isempty(predictor.lambdaGrid)
+            numLraw = numel(predictor.lambdaGrid);
+        else
+            numLraw = numLambda;
+        end
         if ~isempty(reporter)
             reporter.progress(progressStepName, 0.35, sprintf( ...
                 "Batch eval: %d pts × %d targets × %d lambda-slices...", numPoints, numT, numLraw));
@@ -118,7 +122,8 @@ function allData = buildPointPredictionSoA(predictor, periodNm, radiusNm, lambda
         RamanWindow=derivedWindow, ...
         DetectShiftWindow=false, ...
         InterpResolution=stokesRes, ...
-        SpectralInterpMethod="makima");
+        SpectralInterpMethod="makima", ...
+        AnalyteLibrary=analyteLibrary);
     [allData, ~] = recomputeDerivedMetrics(allData, derivedCfg, analyteSpectrum, reporter);
 end
 

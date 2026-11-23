@@ -59,25 +59,44 @@ function refinedSeeds = extractRefinedSeeds(results, baseMetric, seeds)
     if isfield(metricRes, "metricName") && strlength(string(metricRes.metricName)) > 0
         metricKey = string(metricRes.metricName);
     end
-    % Try all variant suffixes (and cross-alias base names) so the displayed
-    % value is never NaN regardless of which metric variant was used.
+    % Prefer the exact derived column stored by runLocalizationWorkflow, then search all variants.
     valueField = '';
-    aliasMap = struct('EE_V','EF_vol', 'EF_vol','EE_V', ...
-                      'EE_S','EF_surf', 'EF_surf','EE_S', ...
-                      'Abs','Absorptance', 'Absorptance','Abs');
-    keyCandidates = {char(metricKey)};
-    if isfield(aliasMap, char(metricKey))
-        keyCandidates{end+1} = aliasMap.(char(metricKey));
-    end
-    for kc = 1:numel(keyCandidates)
-        for vs = {'_broad', '_avg', '_laser', '_analyte'}
-            candidate = matlab.lang.makeValidName([keyCandidates{kc}, vs{1}]);
-            if any(strcmp(varNames, candidate))
-                valueField = candidate;
-                break;
-            end
+    if isfield(metricRes, "primaryMetricAvgField") && strlength(string(metricRes.primaryMetricAvgField)) > 0
+        cand = matlab.lang.makeValidName(char(metricRes.primaryMetricAvgField));
+        if any(strcmp(varNames, cand))
+            valueField = cand;
         end
-        if ~isempty(valueField), break; end
+    end
+
+    if isempty(valueField)
+        aliasMap = struct('EE_V','EF_vol', 'EF_vol','EE_V', ...
+                          'EE_S','EF_surf', 'EF_surf','EE_S', ...
+                          'Abs','Absorptance', 'Absorptance','Abs');
+        keyCandidates = {char(metricKey)};
+        if isfield(aliasMap, char(metricKey))
+            keyCandidates{end+1} = aliasMap.(char(metricKey));
+        end
+        for kc = 1:numel(keyCandidates)
+            for vs = {'_broad', '_avg', '_laser', '_analyte'}
+                candidate = matlab.lang.makeValidName([keyCandidates{kc}, vs{1}]);
+                if any(strcmp(varNames, candidate))
+                    valueField = candidate;
+                    break;
+                end
+            end
+            if isempty(valueField)
+                for vnIdx = 1:numel(varNames)
+                    vn = string(varNames{vnIdx});
+                    pv = parseMetricVariantName(vn);
+                    if pv.isDerived && ~pv.isVariantToken && strlength(pv.analyteKey) > 0 && ...
+                            (strcmpi(pv.baseRaw, keyCandidates{kc}) || strcmpi(pv.baseCanonical, keyCandidates{kc}))
+                        valueField = char(vn);
+                        break;
+                    end
+                end
+            end
+            if ~isempty(valueField), break; end
+        end
     end
     n = height(tbl);
     refinedSeeds = repmat(struct("Tag", "", "P", NaN, "R", NaN, "Value", NaN, ...

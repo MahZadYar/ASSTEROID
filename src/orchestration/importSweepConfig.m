@@ -68,6 +68,8 @@ arguments
     options.InputFile           (1,1) string  = "SweepPropeTable.dat"
     options.OutputFile          (1,1) string  = ""
     options.AnalyteSpectrumFile (1,1) string  = ""
+    options.AnalyteLibrary      (:,:) struct  = struct([])
+    options.AnalyteKeys         (1,:) string  = string.empty
     options.ExistingData        (:,:) struct  = struct([])
 
     %% Column Schema (dynamic column definitions from preview)
@@ -120,6 +122,8 @@ end
     cfg.inputFile           = options.InputFile;
     cfg.outputFile          = options.OutputFile;
     cfg.analyteSpectrumFile = options.AnalyteSpectrumFile;
+    cfg.analyteLibrary      = options.AnalyteLibrary;
+    cfg.analyteKeys         = options.AnalyteKeys;
     cfg.existingData        = options.ExistingData;
 
     % Column schema

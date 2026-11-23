@@ -211,11 +211,20 @@ classdef ImportController < handle
                 end
             end
 
+            analyteKeys = obj.parseAnalyteKeys(d);
+            analyteLib = struct([]);
+            if ~isempty(analyteKeys)
+                analyteLib = resolveAnalyteLibrary(obj.session, Keys=analyteKeys, ...
+                    ExplicitFile=analyteFile, FallbackToDefault=false, Reporter=rep);
+            end
+
             cfg = importSweepConfig( ...
                 WorkDir             = obj.session.workDir, ...
                 InputFile           = obj.safeStr(d, "inputFile", "SweepPropeTable.dat"), ...
                 OutputFile          = outputFile, ...
                 AnalyteSpectrumFile = analyteFile, ...
+                AnalyteLibrary      = analyteLib, ...
+                AnalyteKeys         = analyteKeys, ...
                 ColumnSchema        = columnSchema, ...
                 LaserWavelength     = obj.safeNum(d, "laserWavelength", 785), ...
                 RamanWindow         = [obj.safeNum(d,"ramanWindowMin",100), obj.safeNum(d,"ramanWindowMax",4200)], ...
@@ -306,6 +315,16 @@ classdef ImportController < handle
                 return;
             end
 
+            % Resolve analyte spectrum + optional multi-analyte library
+            analyteFile = obj.resolveAnalyteFile();
+            analyteSpectrum = resolveAnalyteSpectrum(obj.session, ExplicitFile=analyteFile, FallbackToDefault=true, Reporter=rep);
+            analyteKeys = obj.parseAnalyteKeys(d);
+            analyteLib = struct([]);
+            if ~isempty(analyteKeys)
+                analyteLib = resolveAnalyteLibrary(obj.session, Keys=analyteKeys, ...
+                    ExplicitFile=analyteFile, FallbackToDefault=false, Reporter=rep);
+            end
+
             cfg = importSweepConfig( ...
                 WorkDir             = obj.session.workDir, ...
                 LaserWavelength     = obj.safeNum(d, "laserWavelength", 785), ...
@@ -313,11 +332,9 @@ classdef ImportController < handle
                 DetectShiftWindow   = obj.safeBool(d, "detectShiftWindow", true), ...
                 InterpResolution    = obj.safeNum(d, "interpResolution", 1), ...
                 SpectralInterpMethod = obj.safeStr(d, "spectralInterpMethod", "makima"), ...
-                MetricVariants      = obj.safeStruct(d, "metricVariants"));
-
-            % Resolve analyte spectrum
-            analyteFile = obj.resolveAnalyteFile();
-            analyteSpectrum = resolveAnalyteSpectrum(obj.session, ExplicitFile=analyteFile, FallbackToDefault=true, Reporter=rep);
+                MetricVariants      = obj.safeStruct(d, "metricVariants"), ...
+                AnalyteLibrary      = analyteLib, ...
+                AnalyteKeys         = analyteKeys);
 
             if obj.safeStr(d, "targetBranch", "Sim") == "Optima.Sim"
                 if ~isfield(obj.session.db, "Optima") || ~isstruct(obj.session.db.Optima) ...
@@ -443,6 +460,21 @@ classdef ImportController < handle
                     outputFile = sf;
                 end
             end
+        end
+
+        function keys = parseAnalyteKeys(~, d)
+            keys = string.empty;
+            if ~isstruct(d) || ~isfield(d, "analyteKeys") || isempty(d.analyteKeys)
+                return;
+            end
+            raw = d.analyteKeys;
+            if iscell(raw)
+                keys = string(cellfun(@string, raw, "UniformOutput", true));
+            else
+                keys = string(raw(:)');
+            end
+            keys = strtrim(keys);
+            keys = keys(strlength(keys) > 0);
         end
 
         function analyteFile = resolveAnalyteFile(obj)

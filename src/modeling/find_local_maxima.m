@@ -1063,7 +1063,20 @@ end
 
 function avgVal = localEvaluateViaPredictor(pVal, rVal, predictor, metricIdx, lambdaVec, analyteWeights)
     %localEvaluateViaPredictor  Use unified predictor for spectral average (optionally analyte-weighted).
-    result = predictor.predictSpectral(pVal, rVal, lambdaVec);
+    pQuery = pVal;
+    rQuery = rVal;
+    lamQuery = lambdaVec;
+    if isfield(predictor, 'mode') && strcmpi(string(predictor.mode), "data")
+        % createDataPredictor operates in nm while find_local_maxima runs in µm
+        if pQuery < 50 && rQuery < 50
+            pQuery = pQuery * 1e3;
+            rQuery = rQuery * 1e3;
+        end
+        if ~isempty(lamQuery) && max(lamQuery) < 50
+            lamQuery = lamQuery * 1e3;
+        end
+    end
+    result = predictor.predictSpectral(pQuery, rQuery, lamQuery);
     metricSeries = double(result(:, metricIdx));
     if ~isempty(analyteWeights) && numel(analyteWeights) == numel(metricSeries)
         w = double(analyteWeights(:));

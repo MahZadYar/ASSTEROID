@@ -879,6 +879,7 @@ classdef VisualizeController < handle
         function info = describeBranch(obj, S)
             info = struct("n", 0, "isGridded", false, "gridSize", [0 0], ...
                 "spectralFields", {{}}, "scalarFields", {{}}, ...
+                "stdScalarFields", {{}}, "analyteScalarFields", {{}}, "otherScalarFields", {{}}, ...
                 "pRange", [NaN NaN], "rRange", [NaN NaN], "lambdaRange", [NaN NaN]);
             if ~isstruct(S) || ~isscalar(S) || ~isfield(S, "period") || ~isfield(S, "radius") ...
                     || isempty(S.period)
@@ -906,12 +907,15 @@ classdef VisualizeController < handle
                     info.lambdaRange = lr;
                 end
             end
-            [spec, scal] = obj.classifyFields(S, n);
+            [spec, scal, stdScal, anScal, othScal] = obj.classifyFields(S, n);
             info.spectralFields = cellstr(spec);
             info.scalarFields = cellstr(scal);
+            info.stdScalarFields = cellstr(stdScal);
+            info.analyteScalarFields = cellstr(anScal);
+            info.otherScalarFields = cellstr(othScal);
         end
 
-        function [spec, scal] = classifyFields(~, S, n)
+        function [spec, scal, stdScal, anScal, othScal] = classifyFields(~, S, n)
             meta = ["period", "radius", "lambda", "lambda_nm", "RamanShift", ...
                     "LaserWl", "lambda_exc_nm", "RamanWindow", "RamanWindowEffective", ...
                     "p", "r", "particle_r", "f", ...
@@ -935,8 +939,23 @@ classdef VisualizeController < handle
                     spec(end+1) = fn; %#ok<AGROW>
                 end
             end
-            pref = contains(scal, ["_laser", "_broad", "_avg", "_analyte"]) | startsWith(scal, ["BEE_", "AEE_"]);
-            scal = [scal(pref), scal(~pref)];
+            isSpecificAnalyte = false(size(scal));
+            isStandardVariant = false(size(scal));
+            for i = 1:numel(scal)
+                pv = parseMetricVariantName(scal(i));
+                if pv.isDerived
+                    if strlength(pv.analyteKey) > 0
+                        isSpecificAnalyte(i) = true;
+                    else
+                        isStandardVariant(i) = true;
+                    end
+                end
+            end
+            isOther = ~(isStandardVariant | isSpecificAnalyte);
+            stdScal = scal(isStandardVariant);
+            anScal  = scal(isSpecificAnalyte);
+            othScal = scal(isOther);
+            scal = [stdScal, anScal, othScal];
         end
 
         function cmap = loadColormapSafe(~, n, doFlip)

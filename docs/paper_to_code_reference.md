@@ -137,8 +137,8 @@ Spectrally integrated Enhancement Efficacies ($D \in \{S, V\}$):
 | 4 | $\mathrm{EE}_V^L$ | `EE_V_laser` | `EF_vol_laser`, `EF_vol_approx` | 3D volume at $\lambda_L$ | Single-wavelength unit-cell volumetric Enhancement Efficacy $\kappa_V \langle \mathrm{EF}^L \rangle_V$ |
 | 5 | $\mathrm{EE}_S^{\text{broad}}$ | `EE_S_broad` | `EE_S_avg`, `EF_surf_avg`, `BEE_surf` | 2D surface, broadband | Two-frequency broadband surface Enhancement Efficacy |
 | 6 | $\mathrm{EE}_V^{\text{broad}}$ | `EE_V_broad` | `EE_V_avg`, `EF_vol_avg`, `BEE_vol` | 3D volume, broadband | Two-frequency broadband volumetric Enhancement Efficacy |
-| 7 | $\mathrm{EE}_S^{\text{analyte}}$ | `EE_S_analyte` | `EF_surf_analyte`, `AEE_surf` | 2D surface, fingerprint | Two-frequency analyte-weighted surface Enhancement Efficacy |
-| 8 | $\mathrm{EE}_V^{\text{analyte}}$ | `EE_V_analyte` | `EF_vol_analyte`, `AEE_vol` | 3D volume, fingerprint | Two-frequency analyte-weighted volumetric Enhancement Efficacy |
+| 7 | $\mathrm{EE}_S^{\text{analyte}}$ | `EE_S_analyte` / `EE_S_<KEY>` | `EF_surf_analyte`, `AEE_surf`, `EE_S_analyte_<KEY>` | 2D surface, fingerprint | Two-frequency analyte-weighted surface Enhancement Efficacy |
+| 8 | $\mathrm{EE}_V^{\text{analyte}}$ | `EE_V_analyte` / `EE_V_<KEY>` | `EF_vol_analyte`, `AEE_vol`, `EE_V_analyte_<KEY>` | 3D volume, fingerprint | Two-frequency analyte-weighted volumetric Enhancement Efficacy |
 
 **Code mapping:**
 
@@ -147,8 +147,8 @@ Spectrally integrated Enhancement Efficacies ($D \in \{S, V\}$):
   - `Abs_laser` ($\mathrm{Abs}^L$), `EF_max_laser` ($\mathrm{EF}_{\max}^L$), `EE_S_laser` ($\mathrm{EE}_S^L$), `EE_V_laser` ($\mathrm{EE}_V^L$)
 - Broadband averages (`_broad`, with `_avg` alias stored per geometry):
   - `EE_V_broad` ($\mathrm{EE}_V^{\text{broad}}$), `EE_S_broad` ($\mathrm{EE}_S^{\text{broad}}$)
-- Analyte-weighted scalars (`_analyte`):
-  - `EE_V_analyte` ($\mathrm{EE}_V^{\text{analyte}}$), `EE_S_analyte` ($\mathrm{EE}_S^{\text{analyte}}$)
+- Analyte-weighted scalars (`_analyte` active or `_<KEY>` per-analyte, e.g., `EE_V_CH4`, `EE_V_H2S`; legacy `_analyte_<KEY>` read fallback supported):
+  - `EE_V_analyte` / `EE_V_<KEY>` ($\mathrm{EE}_V^{\text{analyte}}$), `EE_S_analyte` / `EE_S_<KEY>` ($\mathrm{EE}_S^{\text{analyte}}$)
 - Weighting implementation: [src/physics/computeAnalyteWeightedMetric.m](src/physics/computeAnalyteWeightedMetric.m) and [src/data/recomputeDerivedMetrics.m](src/data/recomputeDerivedMetrics.m)
 
 The import workflow densifies discrete FEM spectra using **makima** interpolation solely for adaptive sampling density estimation, whereas the trained DNN surrogate evaluates continuous spectral grids directly without intermediate spline interpolation.
@@ -211,16 +211,17 @@ Within the Raman window `[shiftMin, shiftMax]`:
 - build `shiftDense = linspace(shiftMin, shiftMax, interpSamples)`
 - interpolate using `makima`
 - integrate using `trapz`
-- store the derived scalars (`*_laser`, `*_broad` / `*_avg`, `*_analyte`) per geometry
+- store the derived scalars (`*_laser`, `*_broad` / `*_avg`, active `*_analyte`, and per-analyte `*_<KEY>`, with backward-compatible `*_analyte_<KEY>` read fallback) per geometry
 
-This logic lives in `computeSpectralAverages()` inside [src/orchestration/runImportSweepWorkflow.m](src/orchestration/runImportSweepWorkflow.m) and [src/data/recomputeDerivedMetrics.m](src/data/recomputeDerivedMetrics.m).
+This logic lives in `computeSpectralAverages()` inside [src/orchestration/runImportSweepWorkflow.m](src/orchestration/runImportSweepWorkflow.m), [src/data/recomputeDerivedMetrics.m](src/data/recomputeDerivedMetrics.m), and [src/data/convertGridToSoA.m](src/data/convertGridToSoA.m).
 
-### 5.3 Analyte spectrum weighting
+### 5.3 Analyte spectrum weighting & multi-analyte library
 
-Analyte spectrum parsing and normalization:
+Analyte spectrum parsing, resolution, and multi-analyte catalog management:
 
 - [src/io/loadAndNormalizeAnalyteSpectrum.m](src/io/loadAndNormalizeAnalyteSpectrum.m) (AsLS baseline removal & smoothing for user experimental spectra; automatic lossless pass-through for built-in baseline-free library files)
-- unified resolution and preset catalog (`"default:<preset>"`, `db.Global.AnalyteSpectrumFile`, session cache, fallback): [src/io/resolveDefaultAnalyteSpectrumPath.m](src/io/resolveDefaultAnalyteSpectrumPath.m), [src/data/resolveAnalyteSpectrum.m](src/data/resolveAnalyteSpectrum.m), [src/io/getDefaultAnalyteSpectrum.m](src/io/getDefaultAnalyteSpectrum.m)
+- built-in 6-analyte catalog, sanitized field-safe keys, and workspace working-analyte selection (`"CH4"`, `"C2H4"`, `"H2S"`, `"NH3"`, `"C2H2"`, `"H2O"` + custom analytes registered in `db.Global.AnalyteLibrary` and selected subset `db.Global.SelectedAnalytes`): [src/io/getBuiltInAnalyteCatalog.m](src/io/getBuiltInAnalyteCatalog.m), [src/utils/sanitizeAnalyteKey.m](src/utils/sanitizeAnalyteKey.m), [src/utils/knownAnalyteKeysRegistry.m](src/utils/knownAnalyteKeysRegistry.m), [src/data/resolveAnalyteLibrary.m](src/data/resolveAnalyteLibrary.m), [src/utils/parseMetricVariantName.m](src/utils/parseMetricVariantName.m)
+- unified active-analyte resolution (`"default:<preset>"`, `db.Global.AnalyteSpectrumFile`, session cache, fallback): [src/io/resolveDefaultAnalyteSpectrumPath.m](src/io/resolveDefaultAnalyteSpectrumPath.m), [src/data/resolveAnalyteSpectrum.m](src/data/resolveAnalyteSpectrum.m), [src/io/getDefaultAnalyteSpectrum.m](src/io/getDefaultAnalyteSpectrum.m)
 - built-in 6-analyte gas-phase Raman fingerprint library (`100-4200 cm^-1`, `1 cm^-1` step, `296 K`, `FWHM = 20 cm^-1` Gaussian slit, `785 nm` photon-yield scaled):
   - `CH4` (`12CH4`, MeCaSDa/CaSDa24, dominant peak `2917 cm^-1`): [src/io/DefaultAnalyteSpectrum.dat](src/io/DefaultAnalyteSpectrum.dat)
   - `C2H4` (`12C2H4`, ECaSDa, dominant peak `3021 cm^-1`): [src/io/DefaultAnalyteSpectrum_C2H4.dat](src/io/DefaultAnalyteSpectrum_C2H4.dat)
@@ -229,9 +230,9 @@ Analyte spectrum parsing and normalization:
   - `C2H2` (NIST WebBook + CCCBDB `MP2=FULL/aug-cc-pVTZ`, peaks `612, 1974, 3374 cm^-1`): [src/io/DefaultAnalyteSpectrum_C2H2.dat](src/io/DefaultAnalyteSpectrum_C2H2.dat)
   - `H2O` (NIST WebBook + CCCBDB `MP2=FULL/aug-cc-pVTZ`, dominant peak `3657 cm^-1`): [src/io/DefaultAnalyteSpectrum_H2O.dat](src/io/DefaultAnalyteSpectrum_H2O.dat)
 
-Weighted inner-product metric:
+Weighted inner-product metric (single-analyte and vectorized `[L × K]` multi-analyte quadrature):
 
-- [src/physics/computeAnalyteWeightedMetric.m](src/physics/computeAnalyteWeightedMetric.m)
+- [src/physics/computeAnalyteWeightedMetric.m](src/physics/computeAnalyteWeightedMetric.m) and [src/physics/computeAnalyteGridWeights.m](src/physics/computeAnalyteGridWeights.m)
 
 Implementation details:
 
@@ -247,7 +248,7 @@ Key conventions:
 
 - `period`, `radius`: $[N\times 1]$ (nm), with $N = 6{,}144$ unique geometries in the dataset
 - spectral fields (`lambda`, `EE_V`, `EE_S`, `EF_max`, `Abs`, `ECC`, plus legacy aliases `EF_vol`, `EF_surf`, `Absorptance`): $[N\times L]$ (nm for `lambda`; $L = 25$ wavelengths in the `[100, 3600] cm^-1` sweep and $L = 30$ wavelengths in the extended `[100, 4200] cm^-1` sweep)
-- scalar integrated/benchmark metrics (`*_laser`, `*_broad` / `*_avg`, `*_analyte`, `kappa_V`, `kappa_S`): $[N\times 1]$
+- scalar integrated/benchmark metrics (`*_laser`, `*_broad` / `*_avg`, `*_analyte`, `*_<KEY>`, `kappa_V`, `kappa_S`): $[N\times 1]$
 
 SoA utilities:
 
@@ -330,7 +331,7 @@ Code implementation:
 - Import: Stage 1 with `TargetBranch="Optima.Sim"` ([src/orchestration/importSweepConfig.m](src/orchestration/importSweepConfig.m), [src/orchestration/runImportSweepWorkflow.m](src/orchestration/runImportSweepWorkflow.m)) → [src/data/mergeOptimaVerificationData.m](src/data/mergeOptimaVerificationData.m). Imported geometries are matched to the saved `db.Optima` rows (Euclidean $(P, r)$ distance $\le$ `OptimaMatchTolerance`, default $0.5\text{ nm}$) and stored row-aligned in `db.Optima.Sim`; `db.Sim` (the 30-wavelength training database) is never padded or modified, so the verification set stays strictly out-of-sample.
 - Evaluation: Tier 4 of [src/modeling/computeSurrogateEvaluationMetrics.m](src/modeling/computeSurrogateEvaluationMetrics.m) via [src/modeling/computeOptimaFemVerificationMetrics.m](src/modeling/computeOptimaFemVerificationMetrics.m) (persisted into `db.Model.Evaluation`, `db.Model.PerformanceReport`, and `db.Optima.Verification` via [src/modeling/storeEvaluationResultsInDb.m](src/modeling/storeEvaluationResultsInDb.m)):
   - spectral fidelity per channel ($\mathrm{Abs}$, $\mathrm{EF}_{\max}$, $\mathrm{EE}_V$, $\mathrm{EE}_S$) for wavelength subsets *training grid* ($|\lambda - \lambda_{\text{train}}| \le 0.05\text{ nm}$), *unseen* (between training wavelengths) and *extrapolated*;
-  - the eight integrated metrics ($\mathrm{Abs}^L$, $\mathrm{EF}_{\max}^L$, $\mathrm{EE}_S^L$, $\mathrm{EE}_V^L$, $\mathrm{EE}_S^{\text{broad}}$, $\mathrm{EE}_V^{\text{broad}}$, $\mathrm{EE}_S^{\text{analyte}}$, $\mathrm{EE}_V^{\text{analyte}}$), computed from FEM and surrogate spectra on the same grid with the same `recomputeDerivedMetrics` integration, Raman window (`db.Optima.Sim.StokesWindow`) and analyte spectrum (`db.Optima.Sim.AnalyteSpectrum`); median/max absolute percentage error and Spearman $\rho$ over unique geometries;
+  - the integrated scalar benchmarks ($\mathrm{Abs}^L$, $\mathrm{EF}_{\max}^L$, $\mathrm{EE}_S^L$, $\mathrm{EE}_V^L$, $\mathrm{EE}_S^{\text{broad}}$, $\mathrm{EE}_V^{\text{broad}}$, $\mathrm{EE}_S^{\text{analyte}}$, $\mathrm{EE}_V^{\text{analyte}}$, plus any `EE_*_<KEY>` or legacy `EE_*_analyte_<KEY>` auto-discovered from `db.Optima.optimizedMetric`), computed from FEM and surrogate spectra on the same grid with the same `recomputeDerivedMetrics` integration, Raman window (`db.Optima.Sim.StokesWindow`), and analyte library; median/max absolute percentage error and Spearman $\rho$ over unique geometries;
   - basin-ranking agreement per optimized metric: Spearman $\rho_{\text{basin}}$, top-basin agreement and regret $= (\mathrm{EE}^{\text{FEM}}_{\text{best}} - \mathrm{EE}^{\text{FEM}}_{\text{surrogate pick}}) / \mathrm{EE}^{\text{FEM}}_{\text{best}}$.
 - Tier 3 (RoI, holdout geometries within $R_{\text{roi}} = 20\text{ nm}$ of an optimum) evaluates optima sharing one geometry once and normalizes NRMSE by the global test range of each channel.
 

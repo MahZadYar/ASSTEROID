@@ -18,26 +18,25 @@ function baseTargets = deriveBaseTargetsFromSelection(selectedFields, simData)
         simData        struct = struct()
     end
 
-    derivedSuffixes = ["_laser", "_broad", "_avg", "_analyte", "_approx"];
     selectedFields = strtrim(string(selectedFields(:)));
     selectedFields = selectedFields(strlength(selectedFields) > 0);
 
     bases = string.empty;
     for i = 1:numel(selectedFields)
         f = selectedFields(i);
-        base = f;
-        for s = derivedSuffixes
-            if endsWith(f, s)
-                base = extractBefore(f, strlength(f) - strlength(s) + 1);
-                break;
-            end
+        parsed = parseMetricVariantName(f);
+        if parsed.isVariantToken
+            continue;
         end
+        base = parsed.baseRaw;
         if startsWith(base, "BEE_")
             base = replaceBetween(base, 1, 4, "EE_");
         elseif startsWith(base, "AEE_")
             base = replaceBetween(base, 1, 4, "EE_");
         end
-        bases(end+1) = base; %#ok<AGROW>
+        if strlength(base) > 0
+            bases(end+1) = base; %#ok<AGROW>
+        end
     end
     bases = unique(bases, "stable");
 

@@ -38,21 +38,18 @@ function fieldName = resolveDerivedMetricField(baseMetric, variant, soaData)
 
     arguments
         baseMetric (1,1) string
-        variant (1,1) string {mustBeMember(variant, ["broad", "broadband", "avg", "analyte", "weighted", "laser"])}
+        variant (1,1) string {mustBeValidDerivedVariant(variant)}
         soaData struct = struct()
     end
 
     bMetric = baseMetric;
-    v = lower(variant);
-    if v == "broadband"
-        v = "broad";
-    elseif v == "weighted"
-        v = "analyte";
-    end
+    parsedVar = parseMetricVariantName(variant, IsVariantToken=true);
+    v = parsedVar.variant;
+    analyteKey = parsedVar.analyteKey;
 
     % Build canonical name and candidate list in priority order
-    switch v
-        case {"broad", "avg"}
+    switch parsedVar.variantKind
+        case "broad"
             if v == "broad"
                 newName = bMetric + "_broad";
             else
@@ -92,26 +89,52 @@ function fieldName = resolveDerivedMetricField(baseMetric, variant, soaData)
             end
 
         case "analyte"
-            newName = bMetric + "_analyte";
-            switch char(bMetric)
-                case {"Abs", "Absorptance"}
-                    candidates = ["Abs_analyte", "Absorptance_analyte", "Abs_broad", "Abs_avg", "Absorptance_avg"];
-                case {"EE_V", "EF_vol"}
-                    if bMetric == "EE_V"
-                        candidates = ["EE_V_analyte", "EF_vol_analyte", "AEE_vol", "EE_V_broad", "EF_vol_avg"];
-                    else
-                        candidates = ["EF_vol_analyte", "EE_V_analyte", "AEE_vol", "EF_vol_avg", "EE_V_broad"];
-                    end
-                case {"EE_S", "EF_surf"}
-                    if bMetric == "EE_S"
-                        candidates = ["EE_S_analyte", "EF_surf_analyte", "AEE_surf", "EE_S_broad", "EF_surf_avg"];
-                    else
-                        candidates = ["EF_surf_analyte", "EE_S_analyte", "AEE_surf", "EF_surf_avg", "EE_S_broad"];
-                    end
-                case "EF_max"
-                    candidates = ["EF_max_analyte", "M2_max_analyte", "EF_max_broad", "EF_max_avg"];
-                otherwise
-                    candidates = [newName, baseMetric + "_analyte"];
+            if strlength(analyteKey) > 0
+                sfx = "_" + analyteKey;
+                legacySfx = "_analyte_" + analyteKey;
+                newName = bMetric + sfx;
+                switch char(bMetric)
+                    case {"Abs", "Absorptance"}
+                        candidates = ["Abs" + sfx, "Absorptance" + sfx, "Abs" + legacySfx, "Absorptance" + legacySfx];
+                    case {"EE_V", "EF_vol"}
+                        if bMetric == "EE_V"
+                            candidates = ["EE_V" + sfx, "EF_vol" + sfx, "EE_V" + legacySfx, "EF_vol" + legacySfx];
+                        else
+                            candidates = ["EF_vol" + sfx, "EE_V" + sfx, "EF_vol" + legacySfx, "EE_V" + legacySfx];
+                        end
+                    case {"EE_S", "EF_surf"}
+                        if bMetric == "EE_S"
+                            candidates = ["EE_S" + sfx, "EF_surf" + sfx, "EE_S" + legacySfx, "EF_surf" + legacySfx];
+                        else
+                            candidates = ["EF_surf" + sfx, "EE_S" + sfx, "EF_surf" + legacySfx, "EE_S" + legacySfx];
+                        end
+                    case "EF_max"
+                        candidates = ["EF_max" + sfx, "M2_max" + sfx, "EF_max" + legacySfx, "M2_max" + legacySfx];
+                    otherwise
+                        candidates = [newName, baseMetric + sfx, baseMetric + legacySfx];
+                end
+            else
+                newName = bMetric + "_analyte";
+                switch char(bMetric)
+                    case {"Abs", "Absorptance"}
+                        candidates = ["Abs_analyte", "Absorptance_analyte"];
+                    case {"EE_V", "EF_vol"}
+                        if bMetric == "EE_V"
+                            candidates = ["EE_V_analyte", "EF_vol_analyte", "AEE_vol"];
+                        else
+                            candidates = ["EF_vol_analyte", "EE_V_analyte", "AEE_vol"];
+                        end
+                    case {"EE_S", "EF_surf"}
+                        if bMetric == "EE_S"
+                            candidates = ["EE_S_analyte", "EF_surf_analyte", "AEE_surf"];
+                        else
+                            candidates = ["EF_surf_analyte", "EE_S_analyte", "AEE_surf"];
+                        end
+                    case "EF_max"
+                        candidates = ["EF_max_analyte", "M2_max_analyte"];
+                    otherwise
+                        candidates = [newName, baseMetric + "_analyte"];
+                end
             end
 
         case "laser"
@@ -177,5 +200,13 @@ function fieldName = resolveDerivedMetricField(baseMetric, variant, soaData)
         end
     else
         fieldName = newName;
+    end
+end
+
+function mustBeValidDerivedVariant(v)
+    p = parseMetricVariantName(v, IsVariantToken=true);
+    if ~(p.isVariantToken && p.variantKind ~= "spectral")
+        error("resolveDerivedMetricField:InvalidVariant", ...
+            "Invalid metric variant '%s'. Expected laser, broad, broadband, avg, analyte, weighted, or an analyte key.", v);
     end
 end

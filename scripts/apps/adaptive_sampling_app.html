@@ -3,63 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Adaptive Parameter Sampling</title>
+    <title>ASSTEROID v7.0 — Adaptive Parameter Sampling</title>
     <link rel="stylesheet" href="shared/css/assteroid_tokens.css">
     <link rel="stylesheet" href="shared/css/assteroid_components.css">
     <script src="shared/js/matlab_bridge.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            height: 100vh;
-            overflow: hidden;
-        }
-
         .app-container {
             display: flex;
             height: 100vh;
+            background: var(--bg-canvas);
         }
 
-        /* Left Panel - Controls */
+        /* Single-Column Control Panel (Stage 2 Tab) */
         .control-panel {
             width: 100%;
             min-width: 0;
             flex: 1;
-            background: var(--bg-primary);
+            background: transparent;
             border-right: none;
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            padding: 0;
         }
 
         .viz-panel {
             display: none;
-        }
-
-        .panel-header {
-            padding: 16px 20px;
-            background: var(--bg-secondary);
-            border-bottom: 1px solid var(--border);
-        }
-
-        .panel-header h1 {
-            font-size: 15px;
-            font-weight: 600;
-            color: var(--accent);
-            margin-bottom: 4px;
-        }
-
-        .panel-header p {
-            font-size: 12px;
-            color: var(--text-secondary);
-            opacity: 1;
         }
 
         .controls-scroll {
@@ -68,52 +37,48 @@
             padding: 12px;
         }
 
-        .controls-scroll::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .controls-scroll::-webkit-scrollbar-track {
-            background: var(--bg-primary);
-        }
-
-        .controls-scroll::-webkit-scrollbar-thumb {
-            background: var(--text-secondary);
-            border-radius: 3px;
-        }
-
-        /* Category Sections */
+        /* Category Accordions (A20/A30 Fills + B50/B60 Rims + C70/C80 Highlights) */
         .category {
-            background: var(--bg-secondary);
-            border-radius: 8px;
+            background: linear-gradient(180deg, rgba(8, 0, 80, 0.66) 0%, rgba(3, 0, 51, 0.88) 100%);
+            border-radius: var(--radius-lg);
             margin-bottom: 10px;
             overflow: hidden;
             border: 1px solid var(--border);
+            box-shadow: 0 2px 10px rgba(0, 1, 23, 0.35);
+            transition: border-color var(--transition-fast);
+        }
+
+        .category:hover {
+            border-color: rgba(153, 78, 243, 0.62);
         }
 
         .category-header {
-            padding: 12px 16px;
-            background: rgba(255,255,255,0.05);
+            padding: 10px 14px;
+            background: linear-gradient(90deg, rgba(22, 0, 142, 0.72) 0%, rgba(8, 0, 80, 0.85) 100%);
             cursor: pointer;
             display: flex;
             justify-content: space-between;
             align-items: center;
             user-select: none;
-            transition: background 0.2s;
+            transition: background var(--transition-fast);
         }
 
         .category-header:hover {
-            background: rgba(255,255,255,0.1);
+            background: linear-gradient(90deg, rgba(127, 0, 224, 0.28) 0%, rgba(22, 0, 142, 0.78) 100%);
         }
 
         .category-header h2 {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--accent);
+            font-size: var(--font-size-base);
+            font-weight: 700;
+            color: var(--pal-c80);
             text-transform: uppercase;
             letter-spacing: 0.5px;
             display: flex;
             align-items: center;
             gap: 8px;
+            margin: 0;
+            padding: 0;
+            border: none;
         }
 
         .category-icon {
@@ -122,19 +87,21 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: var(--accent);
-            border-radius: 4px;
+            background: linear-gradient(135deg, var(--pal-b50) 0%, var(--pal-b60) 100%);
+            color: var(--pal-white);
+            border-radius: var(--radius-sm);
             font-size: 11px;
         }
 
         .category-toggle {
             font-size: 12px;
-            color: var(--text-secondary);
-            transition: transform 0.3s;
+            color: var(--pal-c70);
+            transition: transform 0.25s;
         }
 
         .category.collapsed .category-toggle {
             transform: rotate(-90deg);
+            color: var(--text-secondary);
         }
 
         .category.collapsed .category-content {
@@ -142,8 +109,8 @@
         }
 
         .category-content {
-            padding: 12px 16px;
-            border-top: 1px solid var(--border);
+            padding: 12px 14px;
+            border-top: 1px solid var(--border-subtle);
         }
 
         /* Form Controls */
@@ -190,8 +157,8 @@
         input[type="number"]:focus,
         select:focus {
             outline: none;
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(0, 232, 255, 0.2);
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 2px var(--btn-primary-glow);
         }
 
         input[type="number"] {
@@ -215,17 +182,20 @@
         .file-input-group button {
             padding: 6px 10px;
             white-space: nowrap;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            border-radius: 4px;
+            background: var(--btn-secondary-bg);
+            border: 1px solid var(--btn-primary-border);
+            border-radius: var(--radius-sm);
             color: var(--text-primary);
             cursor: pointer;
             font-size: 11px;
+            font-weight: 600;
         }
 
         .file-input-group button:hover {
-            background: var(--accent);
-            color: #fff;
+            background: var(--btn-primary-bg);
+            border-color: var(--pal-b70);
+            color: var(--pal-white);
+            box-shadow: 0 0 8px var(--btn-primary-glow);
         }
 
         /* Toggle Switch */
@@ -278,7 +248,8 @@
         }
 
         .toggle-switch input:checked + .toggle-slider {
-            background: var(--accent);
+            background: var(--pal-c60);
+            box-shadow: 0 0 6px var(--accent-glow);
         }
 
         .toggle-switch input:checked + .toggle-slider:before {
@@ -302,18 +273,21 @@
         }
 
         .range-value {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--accent);
-            background: rgba(0, 232, 255, 0.2);
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--pal-c80);
+            background: var(--success-bg);
+            border: 1px solid var(--success-border);
             padding: 2px 8px;
-            border-radius: 4px;
+            border-radius: var(--radius-sm);
+            font-variant-numeric: tabular-nums;
         }
 
         input[type="range"] {
             width: 100%;
             height: 6px;
             background: var(--input-bg);
+            border: 1px solid var(--border-subtle);
             border-radius: 3px;
             outline: none;
             -webkit-appearance: none;
@@ -321,16 +295,19 @@
 
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 16px;
-            height: 16px;
-            background: var(--accent);
+            width: 15px;
+            height: 15px;
+            background: var(--pal-c70);
+            border: 2px solid var(--pal-a15);
             border-radius: 50%;
             cursor: pointer;
-            transition: transform 0.2s;
+            box-shadow: 0 0 6px var(--accent-glow);
+            transition: transform 0.15s;
         }
 
         input[type="range"]::-webkit-slider-thumb:hover {
-            transform: scale(1.2);
+            transform: scale(1.18);
+            background: var(--pal-c80);
         }
 
         /* Metric Table */
@@ -343,8 +320,8 @@
         .metric-table th {
             text-align: left;
             padding: 8px 6px;
-            background: rgba(255,255,255,0.05);
-            font-weight: 500;
+            background: rgba(22, 0, 142, 0.55);
+            font-weight: 600;
             color: var(--text-secondary);
             text-transform: uppercase;
             font-size: 10px;
@@ -383,97 +360,33 @@
             font-size: 12px;
         }
 
-        /* Buttons */
-        button {
-            padding: 8px 12px;
-            border: none;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .btn-primary {
-            background: var(--accent);
-            color: #000 !important;
-            font-weight: 700;
-        }
-
-        .btn-primary:hover {
-            background: var(--accent-hover);
-        }
-
+        /* Buttons & Status */
         input[type="number"], .stat-value, .status-badge {
             font-variant-numeric: tabular-nums;
         }
-        button:focus-visible, input:focus-visible, select:focus-visible {
-            outline: 2px solid var(--accent) !important;
-            outline-offset: 2px !important;
-        }
-        button:active {
-            transform: scale(0.98);
-        }
-
-        .btn-secondary {
-            background: var(--bg-tertiary);
-            color: var(--text-primary);
-            border: 1px solid var(--border);
-        }
-
-        .btn-secondary:hover {
-            background: var(--border);
-        }
 
         .btn-success {
-            background: var(--success);
-            color: white;
+            background: linear-gradient(135deg, var(--pal-c50) 0%, var(--pal-c60) 100%);
+            color: var(--pal-white);
+            border: 1px solid var(--pal-c70);
+            border-radius: var(--radius-md);
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition-fast);
         }
 
-        .btn-success:hover {
-            background: #059669;
-        }
-
-        .btn-danger {
-            background: var(--error);
-            color: white;
-        }
-
-        .btn-danger:hover {
-            background: #dc2626;
-        }
-
-        .btn-stop {
-            background: #c62828 !important;
-            color: #ffffff !important;
-            border: 1px solid #e53935 !important;
-            box-shadow: 0 2px 5px rgba(198, 40, 40, 0.4);
-        }
-
-        .btn-stop:hover {
-            background: #e53935 !important;
-            box-shadow: 0 3px 8px rgba(229, 57, 53, 0.6);
-        }
-
-        .btn-stop:active {
-            background: #b71c1c !important;
-        }
-
-        .btn-stop:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            box-shadow: none;
-        }
-
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+        .btn-success:hover:not(:disabled) {
+            background: var(--pal-c70);
+            color: var(--pal-a10);
+            box-shadow: 0 0 10px var(--accent-glow);
         }
 
         /* Action Buttons */
         .action-buttons {
-            padding: 16px 12px;
-            background: rgba(0,0,0,0.2);
+            padding: 12px;
+            background: rgba(2, 0, 32, 0.72);
             border-top: 1px solid var(--border);
             display: flex;
             flex-direction: column;
@@ -487,12 +400,13 @@
 
         .action-buttons button {
             flex: 1;
+            margin-top: 0;
         }
 
         /* Status Bar */
         .status-bar {
-            padding: 10px 16px;
-            background: var(--bg-secondary);
+            padding: 10px 14px;
+            background: rgba(8, 0, 80, 0.72);
             border-top: 1px solid var(--border);
             font-size: 12px;
             display: flex;
@@ -504,19 +418,23 @@
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background: var(--success);
+            background: var(--pal-c70);
+            box-shadow: 0 0 6px var(--accent-glow);
         }
 
         .status-indicator.warning {
             background: var(--warning);
+            box-shadow: 0 0 6px var(--warning-border);
         }
 
         .status-indicator.error {
-            background: var(--danger);
+            background: var(--error);
+            box-shadow: 0 0 6px var(--error-border);
         }
 
         .status-indicator.loading {
-            background: var(--accent);
+            background: var(--pal-b60);
+            box-shadow: 0 0 6px var(--btn-primary-glow);
             animation: pulse 1s infinite;
         }
 
@@ -528,8 +446,8 @@
         /* Progress Bar */
         .progress-container {
             display: none;
-            padding: 12px 16px;
-            background: var(--bg-secondary);
+            padding: 10px 14px;
+            background: rgba(8, 0, 80, 0.72);
             border-top: 1px solid var(--border);
         }
 
@@ -553,8 +471,9 @@
 
         .progress-fill {
             height: 100%;
-            background: var(--accent);
+            background: linear-gradient(90deg, var(--pal-c60) 0%, var(--pal-c70) 65%, var(--pal-c80) 100%);
             border-radius: 3px;
+            box-shadow: 0 0 8px var(--accent-glow);
             transition: width 0.3s;
         }
 
@@ -680,13 +599,13 @@
             margin-bottom: 4px;
         }
 
-        /* Alert Banner */
+        /* Alert Banner (OKHSL D/C + Semantic Red) */
         .alert-banner {
             display: none;
-            padding: 12px 16px;
-            border-radius: 6px;
+            padding: 10px 14px;
+            border-radius: var(--radius-md);
             margin-bottom: 10px;
-            font-size: 13px;
+            font-size: 12px;
             align-items: center;
             gap: 10px;
         }
@@ -696,21 +615,21 @@
         }
 
         .alert-banner.error {
-            background: rgba(239, 68, 68, 0.2);
-            border: 1px solid var(--error);
-            color: #fca5a5;
+            background: var(--error-bg);
+            border: 1px solid var(--error-border);
+            color: var(--error-bright);
         }
 
         .alert-banner.success {
-            background: rgba(16, 185, 129, 0.2);
-            border: 1px solid var(--success);
-            color: #6ee7b7;
+            background: var(--success-bg);
+            border: 1px solid var(--success-border);
+            color: var(--pal-c80);
         }
 
         .alert-banner.warning {
-            background: rgba(245, 158, 11, 0.2);
-            border: 1px solid var(--warning);
-            color: #fcd34d;
+            background: var(--warning-bg);
+            border: 1px solid var(--warning-border);
+            color: var(--pal-d80);
         }
 
         .alert-close {
@@ -722,39 +641,36 @@
         .alert-close:hover {
             opacity: 1;
         }
-        .req-badge { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 8px; }
-        .req-ok { color: #66bb6a; }
-        .req-missing { color: #ef5350; }
-        .req-optional { color: var(--text-muted, #888); }
+
         .nan-badge {
             display: inline-flex;
             align-items: center;
             gap: 3px;
             padding: 2px 6px;
-            border-radius: 4px;
+            border-radius: var(--radius-sm);
             font-size: 10px;
-            font-weight: 600;
-            background: rgba(245, 158, 11, 0.2);
-            color: #fbbf24;
-            border: 1px solid rgba(245, 158, 11, 0.4);
+            font-weight: 700;
+            background: var(--warning-bg);
+            color: var(--pal-d80);
+            border: 1px solid var(--warning-border);
         }
     </style>
 </head>
 <body>
-    <div id="dbStatusBanner" style="display:none;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);padding:6px 10px;margin-bottom:8px;font-size:var(--font-size-sm);color:var(--text-secondary);"></div>
     <div class="app-container">
         <!-- Left Panel: Controls -->
         <div class="control-panel">
-            <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between;">
-                <div>
+            <header class="stage-header">
+                <div class="stage-title-group">
                     <h1>🎯 Stage 2 — Adaptive Parameter Sampling</h1>
-                    <p>Generate optimized COMSOL sweep points</p>
+                    <span class="v7-version-pill">v7.0</span>
                 </div>
-                <div style="display:flex;gap:6px;align-items:center;">
-                    <button style="padding:4px 10px;font-size:11px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer;" onclick="htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
-                    <button style="padding:4px 10px;font-size:11px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:4px;color:var(--text-primary);cursor:pointer;" onclick="htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
+                <div class="stage-actions">
+                    <button class="btn-header" onclick="htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
+                    <button class="btn-header highlight" onclick="htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
                 </div>
-            </div>
+            </header>
+            <div id="dbStatusBanner" style="display:none;margin:8px 12px 0 12px;"></div>
 
             <div class="controls-scroll">
                 <!-- Alert Banner -->
@@ -808,7 +724,7 @@
                 <!-- 1b. NaN / Failed Points Generator -->
                 <div class="category" id="catNanPoints">
                     <div class="category-header" onclick="toggleCategory('catNanPoints')">
-                        <h2><span class="category-icon" style="background:#f59e0b;color:#111;">⚠️</span> NaN Point Recovery (COMSOL)</h2>
+                        <h2><span class="category-icon" style="background:var(--pal-d70);color:var(--pal-a10);">⚠️</span> NaN Point Recovery (COMSOL)</h2>
                         <span class="category-toggle">▼</span>
                     </div>
                     <div class="category-content">
@@ -1603,7 +1519,7 @@
             const titleEl = document.getElementById("nanSummaryTitle");
             if (titleEl) {
                 titleEl.innerHTML = "⚠️ Found " + res.count + " Unique Failed Geometries (" + res.totalNanRows + " NaN entries):";
-                titleEl.style.color = "#fbbf24";
+                titleEl.style.color = "var(--pal-d80)";
             }
 
             // Populate badges for metrics with NaNs
@@ -1625,9 +1541,9 @@
                 pointList.forEach((pt, idx) => {
                     const failedStr = normalizeArray(pt.failedMetrics).join(", ");
                     rowsHtml += '<tr>' +
-                        '<td style="padding:2px 5px;border-bottom:1px solid rgba(27,80,85,0.3);color:var(--text-secondary);">' + (idx + 1) + '</td>' +
-                        '<td style="padding:2px 5px;border-bottom:1px solid rgba(27,80,85,0.3);color:var(--accent);font-weight:600;">' + (pt.paramStr || '') + '</td>' +
-                        '<td style="padding:2px 5px;border-bottom:1px solid rgba(27,80,85,0.3);color:#fbbf24;">' + failedStr + '</td>' +
+                        '<td style="padding:2px 5px;border-bottom:1px solid var(--border-subtle);color:var(--text-secondary);">' + (idx + 1) + '</td>' +
+                        '<td style="padding:2px 5px;border-bottom:1px solid var(--border-subtle);color:var(--pal-c80);font-weight:600;">' + (pt.paramStr || '') + '</td>' +
+                        '<td style="padding:2px 5px;border-bottom:1px solid var(--border-subtle);color:var(--pal-d80);">' + failedStr + '</td>' +
                         '</tr>';
                 });
                 tbody.innerHTML = rowsHtml;
@@ -1684,8 +1600,8 @@
             const btn = document.getElementById("btnHighlightNan");
             if (nanHighlightActive) {
                 btn.textContent = "🙈 Hide on Plot";
-                btn.style.borderColor = "#fbbf24";
-                btn.style.color = "#fbbf24";
+                btn.style.borderColor = "var(--pal-d80)";
+                btn.style.color = "var(--pal-d80)";
             } else {
                 btn.textContent = "👁 Show on Plot";
                 btn.style.borderColor = "";

@@ -119,9 +119,29 @@ classdef PredictionController < handle
             if isfield(d, "selectedFields")
                 selectedFields = parseCellOrString(d, "selectedFields");
             end
+            requestedAnalyteKeys = parseCellOrString(d, "analyteKeys");
+            if ~isempty(requestedAnalyteKeys) && ~isempty(selectedFields)
+                expandedFields = selectedFields;
+                for fi = 1:numel(selectedFields)
+                    pf = parseMetricVariantName(selectedFields(fi));
+                    if pf.isDerived && ~pf.isVariantToken && pf.variant == "analyte" && strlength(pf.baseRaw) > 0
+                        for ki = 1:numel(requestedAnalyteKeys)
+                            ak = strtrim(string(requestedAnalyteKeys(ki)));
+                            if strlength(ak) > 0
+                                candField = pf.baseRaw + "_" + ak;
+                                if ~ismember(candField, expandedFields)
+                                    expandedFields(end+1) = candField; %#ok<AGROW>
+                                end
+                            end
+                        end
+                    end
+                end
+                selectedFields = expandedFields;
+            end
 
             [modelFile, riCsvFile, dataFile, predictionFile] = obj.resolvePaths();
             analyteFile = obj.resolveAnalyteFile();
+            analyteLib = obj.resolvePredictionAnalyteLibrary(d, selectedFields, analyteFile, rep);
 
             rep.progress("PredictInterpolate", 0.01, ...
                 sprintf("Mode: %s | Target: %s", dataSource, predictionTarget));
@@ -193,6 +213,7 @@ classdef PredictionController < handle
                         StokesShiftLimits=[stokesMin, stokesMax], ...
                         InterpResolution=stokesRes, ...
                         AnalyteSpectrum=analyteSpec, ...
+                        AnalyteLibrary=analyteLib, ...
                         MetricsWindow=metricsWindow, ...
                         BatchSize=batchSize, ...
                         Reporter=rep);
@@ -224,6 +245,7 @@ classdef PredictionController < handle
                         "LambdaLaser", laserWl, ...
                         "StokesShiftLimits", [stokesMin, stokesMax], ...
                         "AnalyteSpectrum", analyteSpec, ...
+                        "AnalyteLibrary", analyteLib, ...
                         "InterpResolution", stokesRes, ...
                         "PredictionFile", cfg.predictionFile, ...
                         "SaveAfterGeneration", false, ...
@@ -346,7 +368,7 @@ classdef PredictionController < handle
                     allDataRaw = buildPointPredictionSoA( ...
                         predictor, optimaPoints(:, 1), optimaPoints(:, 2), gp.lambdaSamples, ...
                         laserWl, [stokesMin, stokesMax], stokesRes, ...
-                        analyteSpec, rep, "PredictInterpolate", metricsWindowInterp);
+                        analyteSpec, rep, "PredictInterpolate", metricsWindowInterp, analyteLib);
                 else
                     allDataRaw = interpolateRawSimulationData(simData, gp, ...
                         TargetNames=baseTargets, ...
@@ -360,7 +382,8 @@ classdef PredictionController < handle
                         RamanWindow=derivedWindow, ...
                         DetectShiftWindow=true, ...
                         InterpResolution=stokesRes, ...
-                        SpectralInterpMethod="makima");
+                        SpectralInterpMethod="makima", ...
+                        AnalyteLibrary=analyteLib);
                     [allDataRaw, ~] = recomputeDerivedMetrics(allDataRaw, derivedCfg, analyteSpec, rep);
                 end
 
@@ -434,6 +457,31 @@ classdef PredictionController < handle
                 if isfield(g, "RefractiveIndexFile"), riCsvFile = string(g.RefractiveIndexFile); end
                 if isfield(g, "SimulationDataFile"), dataFile = string(g.SimulationDataFile); end
             end
+        end
+
+        function analyteLib = resolvePredictionAnalyteLibrary(obj, d, selectedFields, analyteFile, rep)
+            keys = string.empty;
+            explicitKeys = parseCellOrString(d, "analyteKeys");
+            for k = 1:numel(explicitKeys)
+                ak = strtrim(string(explicitKeys(k)));
+                if strlength(ak) > 0 && ~ismember(ak, keys)
+                    keys(end+1) = ak; %#ok<AGROW>
+                end
+            end
+            for k = 1:numel(selectedFields)
+                pf = parseMetricVariantName(selectedFields(k));
+                if pf.isDerived && ~pf.isVariantToken && strlength(pf.analyteKey) > 0
+                    if ~ismember(pf.analyteKey, keys)
+                        keys(end+1) = pf.analyteKey; %#ok<AGROW>
+                    end
+                end
+            end
+            if isempty(keys)
+                analyteLib = struct([]);
+                return;
+            end
+            analyteLib = resolveAnalyteLibrary(obj.session, Keys=keys, ...
+                ExplicitFile=analyteFile, FallbackToDefault=false, Reporter=rep);
         end
 
         function analyteSpec = loadAnalyteSpectrum(obj, analyteFile, rep)

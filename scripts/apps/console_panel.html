@@ -25,8 +25,8 @@
         flex-direction: column;
         height: 100%;
         width: 100%;
-        background: var(--bg-secondary, #0a0e1c);
-        border-top: 1px solid var(--border, #1c2438);
+        background: var(--pal-a12, #020023);
+        border-top: 1px solid var(--pal-b60, #994ef3);
     }
 
     /* Top control bar */
@@ -37,8 +37,8 @@
         padding: 6px 12px;
         height: 38px;
         min-height: 38px;
-        background: linear-gradient(180deg, #0f152a 0%, #0a0e1c 100%);
-        border-bottom: 1px solid var(--border, #1c2438);
+        background: linear-gradient(90deg, rgba(22, 0, 142, 0.72) 0%, rgba(8, 0, 80, 0.90) 60%, rgba(36, 30, 195, 0.50) 100%);
+        border-bottom: 1px solid rgba(127, 0, 224, 0.45);
         gap: 12px;
         flex-shrink: 0;
     }
@@ -58,7 +58,7 @@
         font-size: 11px;
         letter-spacing: 0.5px;
         text-transform: uppercase;
-        color: var(--pal-c70, #48b2ac);
+        color: var(--pal-c80, #6bd1cb);
     }
 
     .status-pill {
@@ -73,15 +73,15 @@
         letter-spacing: 0.4px;
     }
     .status-pill.idle {
-        background: rgba(160, 178, 214, 0.1);
-        color: var(--text-secondary, #a0b2d6);
-        border: 1px solid rgba(160, 178, 214, 0.2);
+        background: rgba(8, 0, 80, 0.65);
+        color: var(--text-secondary, #a7bbf9);
+        border: 1px solid rgba(127, 0, 224, 0.42);
     }
     .status-pill.running {
-        background: rgba(39, 146, 141, 0.2);
+        background: rgba(39, 146, 141, 0.24);
         color: var(--pal-c80, #6bd1cb);
-        border: 1px solid var(--pal-c60, #27928d);
-        box-shadow: 0 0 8px rgba(39, 146, 141, 0.35);
+        border: 1px solid var(--pal-c70, #48b2ac);
+        box-shadow: 0 0 8px rgba(72, 178, 172, 0.35);
     }
     .status-pill.running .dot {
         width: 6px; height: 6px; border-radius: 50%;
@@ -93,19 +93,19 @@
         50% { opacity: 0.3; transform: scale(0.8); }
     }
     .status-pill.complete {
-        background: rgba(46, 184, 114, 0.18);
-        color: #4ade80;
-        border: 1px solid rgba(46, 184, 114, 0.4);
+        background: var(--success-bg, rgba(39, 146, 141, 0.22));
+        color: var(--pal-c80, #6bd1cb);
+        border: 1px solid var(--pal-c70, #48b2ac);
     }
     .status-pill.error {
-        background: rgba(229, 57, 53, 0.18);
-        color: #f87171;
-        border: 1px solid rgba(229, 57, 53, 0.4);
+        background: var(--error-bg, rgba(239, 68, 68, 0.18));
+        color: var(--error-bright, #f87171);
+        border: 1px solid var(--error-border, rgba(239, 68, 68, 0.55));
     }
     .status-pill.stopped {
-        background: rgba(235, 179, 79, 0.18);
-        color: #fbbf24;
-        border: 1px solid rgba(235, 179, 79, 0.4);
+        background: var(--warning-bg, rgba(201, 148, 44, 0.18));
+        color: var(--pal-d80, #ebb34f);
+        border: 1px solid var(--warning-border, rgba(235, 179, 79, 0.55));
     }
 
     /* Middle Progress Section */
@@ -156,16 +156,16 @@
         display: inline-flex;
         align-items: center;
         padding: 2px 6px;
-        background: rgba(19, 26, 51, 0.85);
-        border: 1px solid rgba(56, 74, 224, 0.35);
+        background: rgba(8, 0, 80, 0.85);
+        border: 1px solid rgba(153, 78, 243, 0.42);
         border-radius: 4px;
         font-family: 'Cascadia Code', 'Consolas', monospace;
         font-size: 10px;
-        color: var(--text-secondary, #a0b2d6);
+        color: var(--text-secondary, #a7bbf9);
         white-space: nowrap;
     }
     .metric-chip strong {
-        color: var(--text-primary, #f0f4fc);
+        color: var(--pal-c80, #6bd1cb);
         margin-left: 3px;
     }
 
@@ -185,46 +185,47 @@
         padding: 4px 9px;
         height: 26px;
         border-radius: 4px;
-        border: 1px solid var(--border, #233256);
-        background: rgba(255, 255, 255, 0.04);
-        color: var(--text-secondary, #a0b2d6);
+        border: 1px solid rgba(153, 78, 243, 0.48);
+        background: rgba(22, 0, 142, 0.45);
+        color: var(--text-primary, #f8f8f8);
         font-size: 11px;
         font-weight: 600;
         cursor: pointer;
         transition: all 0.15s ease;
     }
     .c-btn:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: var(--text-primary, #ffffff);
-        border-color: rgba(255, 255, 255, 0.25);
+        background: linear-gradient(135deg, var(--pal-b50, #7f00e0), var(--pal-b60, #994ef3));
+        color: #ffffff;
+        border-color: var(--pal-b60, #994ef3);
+        box-shadow: 0 0 8px rgba(153, 78, 243, 0.4);
     }
     .c-btn.save-fig {
-        background: rgba(56, 189, 248, 0.12);
-        border-color: rgba(56, 189, 248, 0.35);
-        color: #7dd3fc;
+        background: rgba(39, 146, 141, 0.20);
+        border-color: rgba(72, 178, 172, 0.55);
+        color: var(--pal-c80, #6bd1cb);
         font-weight: 600;
     }
     .c-btn.save-fig:hover {
-        background: #0284c7;
+        background: var(--pal-c60, #27928d);
         color: #ffffff;
-        border-color: #38bdf8;
-        box-shadow: 0 0 8px rgba(56, 189, 248, 0.45);
+        border-color: var(--pal-c70, #48b2ac);
+        box-shadow: 0 0 8px rgba(72, 178, 172, 0.45);
     }
     .c-btn.save-fig:active {
-        background: #0369a1;
+        background: var(--pal-c50, #00736e);
         transform: scale(0.97);
     }
     .c-btn.stop {
-        background: rgba(229, 57, 53, 0.15);
-        border-color: rgba(229, 57, 53, 0.4);
-        color: #ff8585;
+        background: rgba(239, 68, 68, 0.18);
+        border-color: rgba(239, 68, 68, 0.55);
+        color: #f87171;
         font-weight: 700;
     }
     .c-btn.stop:hover {
-        background: #e53935;
+        background: #ef4444;
         color: #ffffff;
-        border-color: #ff5252;
-        box-shadow: 0 0 8px rgba(229, 57, 53, 0.4);
+        border-color: #f87171;
+        box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
     }
 
     /* Console Terminal Body */
@@ -233,11 +234,11 @@
         overflow-y: auto;
         overflow-x: hidden;
         padding: 6px 12px;
-        background: #04060c;
+        background: var(--pal-a10, #000117);
         font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
         font-size: 11px;
         line-height: 1.45;
-        color: #d1d8ea;
+        color: var(--pal-g90, #dedede);
         user-select: text;
         word-break: break-all;
     }
@@ -246,14 +247,14 @@
         width: 8px;
     }
     .console-body::-webkit-scrollbar-track {
-        background: #060914;
+        background: var(--pal-a12, #020023);
     }
     .console-body::-webkit-scrollbar-thumb {
-        background: #1c2742;
+        background: rgba(127, 0, 224, 0.45);
         border-radius: 4px;
     }
     .console-body::-webkit-scrollbar-thumb:hover {
-        background: #2d3c63;
+        background: var(--pal-c70, #48b2ac);
     }
 
     .log-entry {
@@ -261,11 +262,11 @@
         align-items: baseline;
         gap: 8px;
         padding: 1px 0;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+        border-bottom: 1px solid rgba(167, 187, 249, 0.04);
     }
 
     .log-time {
-        color: #53648a;
+        color: var(--pal-a70, #809aec);
         font-size: 10px;
         flex-shrink: 0;
     }
@@ -275,11 +276,11 @@
         white-space: pre-wrap;
     }
 
-    .log-text.info { color: #d1d8ea; }
-    .log-text.success { color: #4ade80; font-weight: 600; }
-    .log-text.warning { color: #fbbf24; font-weight: 600; }
+    .log-text.info { color: var(--pal-g90, #dedede); }
+    .log-text.success { color: var(--pal-c80, #6bd1cb); font-weight: 600; }
+    .log-text.warning { color: var(--pal-d80, #ebb34f); font-weight: 600; }
     .log-text.error { color: #f87171; font-weight: 700; }
-    .log-text.system { color: #a7bbf9; font-style: italic; }
+    .log-text.system { color: var(--pal-b80, #c8aef9); font-style: italic; }
 
     #copyToast {
         position: fixed;
@@ -305,7 +306,8 @@
         <div class="header-left">
             <div class="console-title">
                 <span>☄️</span>
-                <span>MATLAB Console</span>
+                <span>ASSTEROID Console</span>
+                <span class="v7-version-pill">v7.0</span>
             </div>
             <div id="statusPill" class="status-pill idle">
                 <span class="dot"></span>
@@ -343,7 +345,7 @@
     <div id="consoleBody" class="console-body">
         <div class="log-entry" id="initialLog">
             <span class="log-time">[Init]</span>
-            <span class="log-text system">☄️ ASSTEROID inverse design computational engine initialized. Ready.</span>
+            <span class="log-text system">☄️ ASSTEROID v7.0 computational engine initialized (Multi-Analyte Engine + OKHSL Suite). Ready.</span>
         </div>
     </div>
 </div>

@@ -6,148 +6,11 @@
 <link rel="stylesheet" href="shared/css/assteroid_components.css">
 <script src="shared/js/matlab_bridge.js"></script>
 <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-        font-family: 'Segoe UI', system-ui, sans-serif;
-        background: var(--bg-primary);
-        color: var(--text-primary);
-        font-size: 13px;
-        overflow: hidden;
-        height: 100vh;
-        margin: 0; padding: 0;
-    }
-    .app-container {
-        display: flex;
-        height: 100vh;
-        width: 100%;
-    }
-    .control-panel {
-        width: 420px;
-        min-width: 420px;
-        flex-shrink: 0;
-        z-index: 10;
-        background: var(--bg-primary);
-        border-right: 1px solid var(--border);
-        display: flex;
-        flex-direction: column;
-        overflow-y: auto;
-        padding: 12px;
-    }
-    .main-panel {
-        flex: 1;
-        min-width: 0;
-        background: var(--bg-primary);
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        padding: 12px;
-    }
-    h2 {
-        font-size: 15px; font-weight: 600; color: var(--accent);
-        margin-bottom: 10px; padding-bottom: 6px;
-        border-bottom: 1px solid var(--border);
-    }
-    .section {
-        background: var(--bg-secondary);
-        border-radius: 8px; padding: 12px;
-        margin-bottom: 10px;
-        border: 1px solid var(--border);
-    }
-    .section-title {
-        font-size: 12px; font-weight: 600; color: var(--accent);
-        text-transform: uppercase; letter-spacing: 0.5px;
-        margin-bottom: 8px; cursor: pointer; user-select: none;
-    }
-    .section-title::before { content: '\25B8 '; }
-    .section-title.open::before { content: '\25BE '; }
-    .field { margin-bottom: 8px; }
-    .field label {
-        display: block; font-size: 11px; color: var(--text-secondary);
-        margin-bottom: 3px; font-weight: 500;
-    }
-    .field input[type="text"], .field input[type="number"], .field select {
-        width: 100%; padding: 6px 8px;
-        background: var(--input-bg); border: 1px solid var(--border);
-        border-radius: 4px; color: var(--text-primary);
-        font-size: 12px; outline: none;
-    }
-    .field input:focus, .field select:focus {
-        border-color: var(--accent);
-    }
-    .browse-row {
-        display: flex; gap: 4px;
-    }
-    .browse-row input { flex: 1; }
-    .browse-row button {
-        padding: 6px 10px; background: var(--bg-tertiary);
-        border: 1px solid var(--border); border-radius: 4px;
-        color: var(--text-primary); cursor: pointer; font-size: 11px;
-        white-space: nowrap;
-    }
-    .browse-row button:hover { background: var(--accent); color: #fff; }
-    .browse-row button.analyte-preset-btn.active {
-        border-color: var(--accent);
-        color: var(--accent);
-        font-weight: 600;
-    }
-    .btn-primary {
-        width: 100%; padding: 10px; margin-top: 6px;
-        background: var(--accent); color: #000 !important; border: none;
-        border-radius: 6px; font-size: 13px; font-weight: 700;
-        cursor: pointer; transition: background 0.2s;
-    }
-    .btn-primary:hover { background: var(--accent-hover); }
-    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    input[type="number"], .status-card-value, .status-badge {
-        font-variant-numeric: tabular-nums;
-    }
-    button:focus-visible, input:focus-visible, select:focus-visible {
-        outline: 2px solid var(--accent) !important;
-        outline-offset: 2px !important;
-    }
-    button:active {
-        transform: scale(0.98);
-    }
-    .btn-secondary {
-        width: 100%; padding: 8px; margin-top: 4px;
-        background: var(--bg-tertiary); color: var(--text-primary);
-        border: 1px solid var(--border); border-radius: 6px;
-        font-size: 12px; cursor: pointer; transition: background 0.2s;
-    }
-    .btn-secondary:hover { background: var(--border); }
+    /* Stage 0 specific layout, branch status cards, and DB struct inspector */
     .btn-row {
         display: flex; gap: 6px; margin-top: 6px;
     }
     .btn-row button { flex: 1; }
-    .btn-stop {
-        background: #c62828 !important;
-        color: #ffffff !important;
-        border: 1px solid #e53935 !important;
-        border-radius: 6px;
-        padding: 6px 12px;
-        font-size: 11px;
-        font-weight: 700;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 5px;
-        transition: all 0.2s ease;
-        box-shadow: 0 2px 5px rgba(198, 40, 40, 0.4);
-    }
-    .btn-stop:hover {
-        background: #e53935 !important;
-        box-shadow: 0 3px 8px rgba(229, 57, 53, 0.6);
-    }
-    .btn-stop:active {
-        background: #b71c1c !important;
-    }
-    .btn-stop:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-        box-shadow: none;
-    }
 
     /* Status cards */
     .status-grid {
@@ -158,7 +21,7 @@
     .status-card {
         background: var(--bg-tertiary);
         border: 1px solid var(--border);
-        border-radius: 6px;
+        border-radius: var(--radius-md);
         padding: 8px 10px;
     }
     .status-card.full-width {
@@ -170,64 +33,89 @@
         margin-bottom: 4px;
     }
     .status-card-value {
-        font-size: 16px; font-weight: 700;
+        font-size: 15px; font-weight: 700;
         color: var(--text-primary);
+        font-variant-numeric: tabular-nums;
     }
-    .status-card-value.empty { color: var(--text-secondary); font-size: 13px; }
-    .status-card-value.loaded { color: var(--success); }
+    .status-card-value.empty { color: var(--text-muted); font-size: 12px; }
+    .status-card-value.loaded { color: var(--pal-c80); }
 
     /* Dirty indicator */
     .dirty-badge {
         display: inline-block;
-        padding: 2px 8px; border-radius: 10px;
-        font-size: 10px; font-weight: 600;
-        margin-left: 6px;
+        padding: 2px 8px; border-radius: var(--radius-full);
+        font-size: 10px; font-weight: 700;
+        letter-spacing: 0.3px;
     }
     .dirty-badge.dirty {
-        background: #4a3000; color: var(--warning);
+        background: var(--warning-bg);
+        color: var(--warning);
+        border: 1px solid var(--warning-border);
     }
     .dirty-badge.clean {
-        background: #003d2e; color: var(--success);
+        background: var(--success-bg);
+        color: var(--pal-c80);
+        border: 1px solid var(--success-border);
     }
     .dirty-badge.empty {
-        background: var(--bg-tertiary); color: var(--text-secondary);
+        background: rgba(8, 0, 80, 0.72);
+        color: var(--text-secondary);
+        border: 1px solid var(--border-subtle);
+    }
+
+    /* Analyte matrix box */
+    .analyte-matrix-card {
+        margin-top: 6px;
+        padding: 8px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: rgba(2, 0, 35, 0.55);
+    }
+    .analyte-matrix-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        margin-bottom: 6px;
+    }
+    .analyte-mini-btn {
+        background: none;
+        border: none;
+        color: var(--pal-c80);
+        cursor: pointer;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 1px 4px;
+    }
+    .analyte-mini-btn:hover {
+        color: var(--pal-white);
+        text-decoration: underline;
     }
 
     /* Progress area */
     #progressArea {
-        background: var(--bg-secondary); border: 1px solid var(--border);
-        border-radius: 6px; padding: 8px; margin-top: 8px;
-        font-family: 'Cascadia Code', 'Consolas', monospace;
-        font-size: 11px; color: var(--text-secondary);
-        max-height: 120px; overflow-y: auto;
-        white-space: pre-wrap; word-break: break-all;
+        margin-top: 8px;
         display: none;
     }
     .progress-bar-container {
-        width: 100%; height: 4px; background: var(--bg-tertiary);
-        border-radius: 2px; margin-top: 6px; overflow: hidden;
+        margin-top: 6px;
         display: none;
-    }
-    .progress-bar {
-        height: 100%; background: var(--accent);
-        border-radius: 2px; width: 0%;
-        transition: width 0.3s ease;
     }
 
     /* ===== Tree Viewer ===== */
     .tree-container {
         flex: 1;
         overflow: auto;
-        font-family: 'Cascadia Code', 'Consolas', monospace;
+        font-family: var(--font-mono);
         font-size: 12px;
-        background: var(--bg-secondary);
+        background: rgba(3, 0, 51, 0.85);
         border: 1px solid var(--border);
-        border-radius: 6px;
+        border-radius: var(--radius-md);
         padding: 8px;
     }
     .tree-node {
         padding-left: 16px;
-        border-left: 1px solid rgba(27,80,85,0.3);
+        border-left: 1px solid rgba(127, 0, 224, 0.35);
     }
     .tree-node-header {
         display: flex;
@@ -240,7 +128,7 @@
         white-space: nowrap;
     }
     .tree-node-header:hover {
-        background: rgba(0,232,255,0.06);
+        background: rgba(72, 178, 172, 0.12);
     }
     .tree-node-header.expandable {
         cursor: pointer;
@@ -258,12 +146,12 @@
         font-size: 13px;
     }
     .tree-name {
-        color: var(--accent);
+        color: var(--pal-c80);
         font-weight: 600;
         margin-right: 4px;
     }
     .tree-type {
-        color: #7c6fa0;
+        color: var(--pal-b70);
         font-size: 10px;
         margin-right: 4px;
     }
@@ -273,15 +161,15 @@
         margin-right: 6px;
     }
     .tree-value {
-        color: #b8d4a8;
+        color: var(--pal-c90);
         font-size: 11px;
         overflow: hidden;
         text-overflow: ellipsis;
         max-width: 500px;
     }
-    .tree-value.string-val { color: #e8a87c; }
-    .tree-value.number-val { color: #82b1ff; }
-    .tree-value.bool-val { color: #c792ea; }
+    .tree-value.string-val { color: var(--pal-d80); }
+    .tree-value.number-val { color: var(--pal-a80); }
+    .tree-value.bool-val { color: var(--pal-b70); }
     .tree-children {
         display: none;
     }
@@ -351,6 +239,8 @@ function setup(htmlComponent) {
         appendLog(msg);
         resetStopButtons();
     });
+
+    renderWorkingAnalyteList(null, null);
 }
 
 function stopProcess() {
@@ -442,6 +332,44 @@ function selectDefaultAnalyte(preset) {
     window.htmlComponent.sendEventToMATLAB("LoadBranch", {branch: "Analyte", path: "default:" + preset});
 }
 
+function addCustomAnalyte() {
+    var path = val("analyteFileInput");
+    if (!path) { appendLog("No analyte spectrum file path specified."); return; }
+    window.htmlComponent.sendEventToMATLAB("AddCustomAnalyte", {path: path});
+}
+
+function removeCustomAnalyte(key) {
+    window.htmlComponent.sendEventToMATLAB("RemoveCustomAnalyte", {key: key});
+}
+
+function sendSelectedAnalytes(keys) {
+    window.htmlComponent.sendEventToMATLAB("SetSelectedAnalytes", {keys: keys});
+}
+
+function collectWorkingAnalytes() {
+    var keys = [];
+    document.querySelectorAll(".db-working-analyte-cb:checked").forEach(function(cb) {
+        if (cb.dataset && cb.dataset.key) keys.push(cb.dataset.key);
+    });
+    return keys;
+}
+
+function selectWorkingAnalytePreset(mode) {
+    var cbs = document.querySelectorAll(".db-working-analyte-cb");
+    var keys = [];
+    cbs.forEach(function(cb) {
+        var keep = (mode === "all") || (mode === "builtins" && cb.dataset.builtin === "1");
+        cb.checked = keep;
+        if (keep && cb.dataset.key) keys.push(cb.dataset.key);
+    });
+    sendSelectedAnalytes(keys);
+}
+
+function dismissV7Hero() {
+    var el = document.getElementById("v7LaunchHero");
+    if (el) el.style.display = "none";
+}
+
 function clearBranch(branchName) {
     window.htmlComponent.sendEventToMATLAB("ClearBranch", {branch: branchName});
 }
@@ -472,6 +400,8 @@ function updateStatus(d) {
             btn.classList.toggle("active", isMatch || normAf === targetFile);
         });
     }
+    renderWorkingAnalyteList(d.analyteLibrary, d.selectedAnalytes);
+    renderCustomAnalyteList(d.analyteLibrary);
 
     // Dirty badge
     var badge = document.getElementById("dirtyBadge");
@@ -507,6 +437,126 @@ function fillIfEmpty(id, value) {
     if (!value) return;
     var el = document.getElementById(id);
     if (el && !el.value) el.value = value;
+}
+
+var DEFAULT_DB_ANALYTES = [
+    { key: "CH4",  label: "12CH4 (Methane)",        filePath: "default:CH4",  isBuiltIn: true, peakShift_cm: 2917 },
+    { key: "C2H4", label: "12C2H4 (Ethylene)",      filePath: "default:C2H4", isBuiltIn: true, peakShift_cm: 3021 },
+    { key: "H2S",  label: "H2S (Hydrogen Sulfide)", filePath: "default:H2S",  isBuiltIn: true, peakShift_cm: 2617 },
+    { key: "NH3",  label: "NH3 (Ammonia)",          filePath: "default:NH3",  isBuiltIn: true, peakShift_cm: 3337 },
+    { key: "C2H2", label: "C2H2 (Acetylene)",       filePath: "default:C2H2", isBuiltIn: true, peakShift_cm: 1974 },
+    { key: "H2O",  label: "H2O (Water)",            filePath: "default:H2O",  isBuiltIn: true, peakShift_cm: 3657 }
+];
+
+function renderWorkingAnalyteList(lib, selectedKeys) {
+    var host = document.getElementById("workingAnalyteList");
+    var countEl = document.getElementById("workingAnalyteCount");
+    if (!host) return;
+    var items = (Array.isArray(lib) && lib.length > 0) ? lib : DEFAULT_DB_ANALYTES;
+    var hasSelField = Array.isArray(selectedKeys);
+    var selSet = new Set(hasSelField ? selectedKeys.map(function(k) { return String(k || "").toLowerCase(); }) : []);
+    host.innerHTML = "";
+    var activeCount = 0;
+
+    items.forEach(function(it) {
+        if (!it || !it.key) return;
+        var isChecked = hasSelField ? selSet.has(String(it.key).toLowerCase()) : true;
+        if (isChecked) activeCount++;
+
+        var chip = document.createElement("label");
+        chip.className = "analyte-chip" + (isChecked ? " selected" : "") + (it.isActive ? " active-default" : "");
+        chip.title = (it.label || it.key) + (it.filePath ? ("\n" + it.filePath) : "");
+
+        var cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.className = "db-working-analyte-cb";
+        cb.dataset.key = it.key;
+        cb.dataset.builtin = it.isBuiltIn ? "1" : "0";
+        cb.checked = isChecked;
+        cb.onchange = function() {
+            chip.classList.toggle("selected", cb.checked);
+            sendSelectedAnalytes(collectWorkingAnalytes());
+        };
+
+        var pk = (typeof it.peakShift_cm === "number" && isFinite(it.peakShift_cm))
+            ? (" · " + Math.round(it.peakShift_cm)) : "";
+        var txt = document.createElement("span");
+        txt.textContent = it.key + pk;
+
+        var star = document.createElement("button");
+        star.type = "button";
+        star.className = "analyte-chip-action";
+        star.textContent = it.isActive ? "\u2605" : "\u2606";
+        star.title = it.isActive ? "Current active fallback spectrum" : "Set as active fallback spectrum";
+        star.onclick = function(ev) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            var targetPath = it.isBuiltIn ? ("default:" + it.key) : (it.filePath || "");
+            if (targetPath) {
+                window.htmlComponent.sendEventToMATLAB("LoadBranch", {branch: "Analyte", path: targetPath});
+            }
+        };
+
+        chip.appendChild(cb);
+        chip.appendChild(txt);
+        chip.appendChild(star);
+
+        if (!it.isBuiltIn) {
+            var del = document.createElement("button");
+            del.type = "button";
+            del.className = "analyte-chip-action";
+            del.textContent = "\u00d7";
+            del.style.color = "var(--error-bright)";
+            del.title = "Remove from db.Global.AnalyteLibrary";
+            del.onclick = function(ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                removeCustomAnalyte(it.key);
+            };
+            chip.appendChild(del);
+        }
+
+        host.appendChild(chip);
+    });
+
+    if (countEl) {
+        countEl.textContent = activeCount + "/" + items.length + " active";
+    }
+}
+
+function renderCustomAnalyteList(lib) {
+    var host = document.getElementById("customAnalyteList");
+    if (!host) return;
+    var items = Array.isArray(lib) ? lib.filter(function(it) { return it && !it.isBuiltIn; }) : [];
+    if (items.length === 0) {
+        host.innerHTML = "";
+        return;
+    }
+    host.innerHTML = '<span style="font-size:10px;color:var(--text-secondary);margin-right:2px;">Custom entries:</span>';
+    items.forEach(function(it) {
+        var wrap = document.createElement("span");
+        wrap.className = "analyte-chip" + (it.isActive ? " active-default selected" : "");
+        var pk = (typeof it.peakShift_cm === "number" && isFinite(it.peakShift_cm)) ? (" (" + Math.round(it.peakShift_cm) + " cm\u207b\u00b9)") : "";
+        var btnUse = document.createElement("button");
+        btnUse.type = "button";
+        btnUse.textContent = (it.key || "Custom") + pk;
+        btnUse.title = "Set as active AnalyteSpectrumFile: " + (it.filePath || "");
+        btnUse.style.cssText = "background:none;border:none;color:inherit;cursor:pointer;font-size:10px;padding:0;font-weight:600;";
+        btnUse.onclick = function() {
+            if (it.filePath) {
+                window.htmlComponent.sendEventToMATLAB("LoadBranch", {branch: "Analyte", path: it.filePath});
+            }
+        };
+        var btnDel = document.createElement("button");
+        btnDel.type = "button";
+        btnDel.textContent = "\u00d7";
+        btnDel.title = "Remove from db.Global.AnalyteLibrary";
+        btnDel.style.cssText = "background:none;border:none;color:var(--error-bright);cursor:pointer;font-size:11px;padding:0 2px;";
+        btnDel.onclick = function() { removeCustomAnalyte(it.key); };
+        wrap.appendChild(btnUse);
+        wrap.appendChild(btnDel);
+        host.appendChild(wrap);
+    });
 }
 
 function setCard(id, hasData, loadedText, emptyText) {
@@ -673,8 +723,15 @@ function buildTreeNode(node, startOpen) {
 <div class="app-container">
     <!-- LEFT PANEL: Controls -->
     <div class="control-panel">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);">
-            <h2 style="margin:0;padding:0;border:none;">💾 Stage 0 — Database Manager <span id="dirtyBadge" class="dirty-badge empty">No DB</span></h2>
+        <div class="stage-header stage-header-inline">
+            <div class="stage-title-group">
+                <h2>💾 Stage 0 — Database</h2>
+                <span class="v7-version-pill">v7.0</span>
+                <span id="dirtyBadge" class="dirty-badge empty">No DB</span>
+            </div>
+            <div class="stage-actions">
+                <button class="btn-header" onclick="window.htmlComponent.sendEventToMATLAB('RefreshDbState',{})" title="Refresh DB state">&#8635;</button>
+            </div>
         </div>
 
         <!-- DB File section -->
@@ -738,7 +795,7 @@ function buildTreeNode(node, startOpen) {
                     <div class="browse-row">
                         <input type="text" id="simDataFile" placeholder="SoA struct with period, radius, lambda...">
                         <button onclick="browseAndLoad('Sim','simDataFile')">Browse</button>
-                        <button onclick="loadBranch('Sim','simDataFile')" style="background:var(--success);color:#fff;">Load</button>
+                        <button class="btn-load-inline" onclick="loadBranch('Sim','simDataFile')">Load</button>
                     </div>
                 </div>
                 <div class="field">
@@ -746,7 +803,7 @@ function buildTreeNode(node, startOpen) {
                     <div class="browse-row">
                         <input type="text" id="modelFileInput" placeholder="Trained model file...">
                         <button onclick="browseAndLoad('Model','modelFileInput')">Browse</button>
-                        <button onclick="loadBranch('Model','modelFileInput')" style="background:var(--success);color:#fff;">Load</button>
+                        <button class="btn-load-inline" onclick="loadBranch('Model','modelFileInput')">Load</button>
                     </div>
                 </div>
                 <div class="field">
@@ -754,7 +811,7 @@ function buildTreeNode(node, startOpen) {
                     <div class="browse-row">
                         <input type="text" id="riFileInput" placeholder="McPeak.csv (optional — auto-loaded)">
                         <button onclick="browseAndLoad('RI','riFileInput')">Browse</button>
-                        <button onclick="loadBranch('RI','riFileInput')" style="background:var(--success);color:#fff;">Load</button>
+                        <button class="btn-load-inline" onclick="loadBranch('RI','riFileInput')">Load</button>
                     </div>
                 </div>
                 <div class="field">
@@ -762,24 +819,38 @@ function buildTreeNode(node, startOpen) {
                     <div class="browse-row">
                         <input type="text" id="predFileInput" placeholder="Dense predictions SoA file...">
                         <button onclick="browseAndLoad('Pred','predFileInput')">Browse</button>
-                        <button onclick="loadBranch('Pred','predFileInput')" style="background:var(--success);color:#fff;">Load</button>
+                        <button class="btn-load-inline" onclick="loadBranch('Pred','predFileInput')">Load</button>
                     </div>
                 </div>
                 <div class="field">
-                    <label>Analyte Spectrum &rarr; db.Global.AnalyteSpectrum</label>
+                    <label>Active Fallback & Custom Analyte Library &rarr; db.Global</label>
                     <div class="browse-row">
                         <input type="text" id="analyteFileInput" placeholder="(optional — uses CH4 default)">
                         <button onclick="browseAndLoad('Analyte','analyteFileInput')">Browse</button>
-                        <button onclick="loadBranch('Analyte','analyteFileInput')" style="background:var(--success);color:#fff;">Load</button>
+                        <button class="btn-load-inline" onclick="loadBranch('Analyte','analyteFileInput')">Load</button>
+                        <button onclick="addCustomAnalyte()" title="Add custom spectrum to multi-analyte library without overwriting default">+ Library</button>
                     </div>
-                    <div class="browse-row" style="margin-top:4px;gap:4px;flex-wrap:wrap;align-items:center;">
-                        <span style="font-size:10px;color:var(--text-secondary);margin-right:2px;">Built-in library:</span>
-                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum.dat" onclick="selectDefaultAnalyte('CH4')" title="12CH4 MeCaSDa 296 K (dominant peak 2917 cm⁻¹)" style="font-size:10px;padding:3px 7px;">CH&#8324; (Methane)</button>
-                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_C2H4.dat" onclick="selectDefaultAnalyte('C2H4')" title="12C2H4 ECaSDa 296 K (dominant peak 3021 cm⁻¹)" style="font-size:10px;padding:3px 7px;">C&#8322;H&#8324; (Ethylene)</button>
-                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_H2S.dat" onclick="selectDefaultAnalyte('H2S')" title="H2S NIST/CCCBDB 296 K (dominant peak 2617 cm⁻¹)" style="font-size:10px;padding:3px 7px;">H&#8322;S (Hydrogen Sulfide)</button>
-                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_NH3.dat" onclick="selectDefaultAnalyte('NH3')" title="NH3 NIST/CCCBDB 296 K (dominant peak 3337 cm⁻¹)" style="font-size:10px;padding:3px 7px;">NH&#8323; (Ammonia)</button>
-                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_C2H2.dat" onclick="selectDefaultAnalyte('C2H2')" title="C2H2 NIST/CCCBDB 296 K (peaks 612, 1974, 3374 cm⁻¹)" style="font-size:10px;padding:3px 7px;">C&#8322;H&#8322; (Acetylene)</button>
-                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_H2O.dat" onclick="selectDefaultAnalyte('H2O')" title="H2O NIST/CCCBDB 296 K (dominant peak 3657 cm⁻¹)" style="font-size:10px;padding:3px 7px;">H&#8322;O (Water)</button>
+                    <div id="customAnalyteList" class="browse-row" style="margin-top:4px;gap:4px;flex-wrap:wrap;align-items:center;"></div>
+                    <div class="analyte-matrix-card">
+                        <div class="analyte-matrix-toolbar">
+                            <span style="font-size:10px;font-weight:700;color:var(--pal-c80);">Working Analytes (<code>_&lt;KEY&gt;</code>) · <span id="workingAnalyteCount">6/6 active</span></span>
+                            <span>
+                                <button type="button" class="analyte-mini-btn" onclick="selectWorkingAnalytePreset('all')">All</button>
+                                <button type="button" class="analyte-mini-btn" onclick="selectWorkingAnalytePreset('builtins')">Built-in</button>
+                                <button type="button" class="analyte-mini-btn" onclick="selectWorkingAnalytePreset('none')">Clear</button>
+                            </span>
+                        </div>
+                        <div id="workingAnalyteList" class="analyte-pill-grid"></div>
+                        <div style="font-size:9px;color:var(--text-secondary);margin-top:5px;">Check analytes to enable across Import, Predict, Optimize &amp; Visualize; click &#9733; to set the active single-analyte fallback.</div>
+                    </div>
+                    <div class="browse-row" style="margin-top:5px;gap:4px;flex-wrap:wrap;align-items:center;">
+                        <span style="font-size:10px;color:var(--text-secondary);margin-right:2px;">Quick active preset:</span>
+                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum.dat" onclick="selectDefaultAnalyte('CH4')" title="12CH4 MeCaSDa 296 K (dominant peak 2917 cm⁻¹)" style="font-size:10px;padding:3px 7px;">CH&#8324;</button>
+                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_C2H4.dat" onclick="selectDefaultAnalyte('C2H4')" title="12C2H4 ECaSDa 296 K (dominant peak 3021 cm⁻¹)" style="font-size:10px;padding:3px 7px;">C&#8322;H&#8324;</button>
+                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_H2S.dat" onclick="selectDefaultAnalyte('H2S')" title="H2S NIST/CCCBDB 296 K (dominant peak 2617 cm⁻¹)" style="font-size:10px;padding:3px 7px;">H&#8322;S</button>
+                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_NH3.dat" onclick="selectDefaultAnalyte('NH3')" title="NH3 NIST/CCCBDB 296 K (dominant peak 3337 cm⁻¹)" style="font-size:10px;padding:3px 7px;">NH&#8323;</button>
+                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_C2H2.dat" onclick="selectDefaultAnalyte('C2H2')" title="C2H2 NIST/CCCBDB 296 K (peaks 612, 1974, 3374 cm⁻¹)" style="font-size:10px;padding:3px 7px;">C&#8322;H&#8322;</button>
+                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_H2O.dat" onclick="selectDefaultAnalyte('H2O')" title="H2O NIST/CCCBDB 296 K (dominant peak 3657 cm⁻¹)" style="font-size:10px;padding:3px 7px;">H&#8322;O</button>
                     </div>
                 </div>
             </div>
@@ -816,11 +887,34 @@ function buildTreeNode(node, startOpen) {
         </div>
     </div> <!-- /control-panel -->
 
-    <!-- RIGHT PANEL: DB Struct Tree Viewer -->
+    <!-- RIGHT PANEL: v7.0 Welcome Hero & DB Struct Tree Viewer -->
     <div class="main-panel">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);">
-            <h2 style="margin:0;padding:0;border:none;">Database Struct Inspector</h2>
-            <button class="btn-secondary" style="width:auto;padding:4px 14px;font-size:11px;margin:0;" onclick="inspectDb()">🔄 Refresh Tree</button>
+        <div class="stage-header stage-header-inline">
+            <div class="stage-title-group">
+                <h2>Database Struct Inspector</h2>
+            </div>
+            <div class="stage-actions">
+                <button class="btn-header highlight" onclick="inspectDb()">&#128260; Refresh Tree</button>
+            </div>
+        </div>
+
+        <div id="v7LaunchHero" class="v7-hero-card">
+            <div class="v7-hero-top">
+                <div class="v7-hero-title">
+                    <span>☄️ ASSTEROID Platform</span>
+                    <span class="v7-version-pill">v7.0 Release</span>
+                </div>
+                <button type="button" class="analyte-mini-btn" style="color:var(--pal-a90);" onclick="dismissV7Hero()" title="Hide welcome banner">&times;</button>
+            </div>
+            <div class="v7-hero-desc">
+                Multi-Analyte Optical Reciprocity &amp; Physics-Informed Inverse Design Suite — clean per-gas <code>_&lt;KEY&gt;</code> metrics, simultaneous library evaluation across <code>CH4 · C2H4 · H2S · NH3 · C2H2 · H2O</code> + custom spectra, <code>gs_tensor</code> factorized surrogate, and full-wave Tier 4 FEM verification.
+            </div>
+            <div class="v7-feature-chips">
+                <span class="v7-chip">Multi-Analyte <code>EE_V_&lt;KEY&gt;</code></span>
+                <span class="v7-chip">Selectable Working Analytes</span>
+                <span class="v7-chip">Unified OKHSL Suite</span>
+                <span class="v7-chip gold">Tier 4 FEM Verification</span>
+            </div>
         </div>
 
         <div id="treePlaceholder" class="tree-placeholder">

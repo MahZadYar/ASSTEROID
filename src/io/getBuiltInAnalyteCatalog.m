@@ -1,0 +1,43 @@
+function catalog = getBuiltInAnalyteCatalog()
+%getBuiltInAnalyteCatalog Return the built-in gas-phase Raman analyte catalog.
+%
+%   catalog = getBuiltInAnalyteCatalog() returns a 1xK struct array describing
+%   all built-in gas-phase Raman analyte spectra bundled in src/io/:
+%       key       - Canonical field-safe suffix ("CH4", "C2H4", "H2S", "NH3", "C2H2", "H2O")
+%       fileName  - Filename inside src/io/
+%       filePath  - Full path to the .dat asset
+%       label     - Human-readable display label
+%       aliases   - Lowercase lookup aliases
+%       isBuiltIn - Logical true
+%
+%   See also: resolveDefaultAnalyteSpectrumPath, getDefaultAnalyteSpectrum, resolveAnalyteLibrary
+
+    ioDir = string(fileparts(mfilename("fullpath")));
+
+    rawEntries = { ...
+        "CH4",  "DefaultAnalyteSpectrum.dat",      "12CH4 (Methane)",        ["ch4", "methane", "12ch4", "default", ""]; ...
+        "C2H4", "DefaultAnalyteSpectrum_C2H4.dat", "12C2H4 (Ethylene)",      ["c2h4", "ethylene", "ethene", "12c2h4"]; ...
+        "H2S",  "DefaultAnalyteSpectrum_H2S.dat",  "H2S (Hydrogen Sulfide)", ["h2s", "hydrogen sulfide", "hydrogen_sulfide", "sulfane"]; ...
+        "NH3",  "DefaultAnalyteSpectrum_NH3.dat",  "NH3 (Ammonia)",          ["nh3", "ammonia"]; ...
+        "C2H2", "DefaultAnalyteSpectrum_C2H2.dat", "C2H2 (Acetylene)",       ["c2h2", "acetylene", "ethyne"]; ...
+        "H2O",  "DefaultAnalyteSpectrum_H2O.dat",  "H2O (Water)",            ["h2o", "water", "water_vapor", "water vapor", "steam"] ...
+    };
+
+    n = size(rawEntries, 1);
+    template = struct( ...
+        "key", "", ...
+        "fileName", "", ...
+        "filePath", "", ...
+        "label", "", ...
+        "aliases", strings(1, 0), ...
+        "isBuiltIn", true);
+    catalog = repmat(template, 1, n);
+    for k = 1:n
+        catalog(k).key       = rawEntries{k, 1};
+        catalog(k).fileName  = rawEntries{k, 2};
+        catalog(k).filePath  = string(fullfile(ioDir, rawEntries{k, 2}));
+        catalog(k).label     = rawEntries{k, 3};
+        catalog(k).aliases   = rawEntries{k, 4};
+        catalog(k).isBuiltIn = true;
+    end
+end

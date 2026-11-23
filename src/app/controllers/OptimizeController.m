@@ -139,6 +139,8 @@ classdef OptimizeController < handle
             metricsMin = obj.safeNum(d, "metricsShiftMin", sMin);
             metricsMax = obj.safeNum(d, "metricsShiftMax", sMax);
 
+            [analyteFile, analyteSpec, analyteLib] = obj.resolveVariantAnalyteContext(metricVariant, rep, false);
+
             cfg = localizeMaximaConfig( ...
                 WorkDir = workDir, ...
                 DataSource = dataSource, ...
@@ -146,8 +148,9 @@ classdef OptimizeController < handle
                 ModelFile = modelFile, ...
                 RiCsvFile = riCsvFile, ...
                 PredictionFile = predictionFile, ...
-                AnalyteSpectrumFile = resolveAnalyteFile(obj.session), ...
-                AnalyteSpectrum = resolveAnalyteSpectrum(obj.session, FallbackToDefault=false), ...
+                AnalyteSpectrumFile = analyteFile, ...
+                AnalyteSpectrum = analyteSpec, ...
+                AnalyteLibrary = analyteLib, ...
                 RecomputePredictions = (dataSource ~= "predictions"), ...
                 LambdaLaser = laserWl, ...
                 PLimits = [pMin, pMax], ...
@@ -245,6 +248,8 @@ classdef OptimizeController < handle
             useBasins = obj.safeBool(d, "useWatershedBasins", true);
             basinSens = max(0, obj.safeNum(d, "basinSensitivity", 0.5)) / 100;   % UI: % of range
 
+            [analyteFileOpt, analyteSpecOpt, analyteLibOpt] = obj.resolveVariantAnalyteContext(metricVariant, rep, false);
+
             cfg = localizeMaximaConfig( ...
                 WorkDir          = workDir, ...
                 DataSource       = obj.safeStr(d, "dataSource", "model"), ...
@@ -253,8 +258,9 @@ classdef OptimizeController < handle
                 ModelFile        = modelFile, ...
                 RiCsvFile        = riCsvFile, ...
                 PredictionFile   = predictionFile, ...
-                AnalyteSpectrumFile = resolveAnalyteFile(obj.session), ...
-                AnalyteSpectrum  = resolveAnalyteSpectrum(obj.session, FallbackToDefault=false), ...
+                AnalyteSpectrumFile = analyteFileOpt, ...
+                AnalyteSpectrum  = analyteSpecOpt, ...
+                AnalyteLibrary   = analyteLibOpt, ...
                 RecomputePredictions = (mode ~= "refine"), ...
                 LambdaLaser      = laserWl, ...
                 PLimits          = [pMin, pMax], ...
@@ -620,10 +626,20 @@ classdef OptimizeController < handle
             end
             if iscell(seeds), seeds = [seeds{:}]; end
 
-            baseMetric = obj.getOptimizeState("baseMetric");
-            if isempty(baseMetric), baseMetric = "EF_vol"; end
-            metricVariant = obj.getOptimizeState("metricVariant");
-            if isempty(metricVariant), metricVariant = "avg"; end
+            baseMetric = obj.safeStr(d, "metric", "");
+            if strlength(baseMetric) == 0
+                baseMetric = obj.getOptimizeState("baseMetric");
+            end
+            if isempty(baseMetric) || strlength(string(baseMetric)) == 0
+                baseMetric = "EF_vol";
+            end
+            metricVariant = obj.safeStr(d, "metricVariant", "");
+            if strlength(metricVariant) == 0
+                metricVariant = obj.getOptimizeState("metricVariant");
+            end
+            if isempty(metricVariant) || strlength(string(metricVariant)) == 0
+                metricVariant = "avg";
+            end
             canonicalMetric = canonicalMetricName(baseMetric, metricVariant);
 
             db_ = obj.session.db;
@@ -690,10 +706,20 @@ classdef OptimizeController < handle
             bIds = double(basinMap.basinIds(:));
             nB = numel(bIds);
             
-            baseMetric = obj.getOptimizeState("baseMetric");
-            if isempty(baseMetric), baseMetric = "EF_vol"; end
-            metricVariant = obj.getOptimizeState("metricVariant");
-            if isempty(metricVariant), metricVariant = "avg"; end
+            baseMetric = obj.safeStr(d, "metric", "");
+            if strlength(baseMetric) == 0
+                baseMetric = obj.getOptimizeState("baseMetric");
+            end
+            if isempty(baseMetric) || strlength(string(baseMetric)) == 0
+                baseMetric = "EF_vol";
+            end
+            metricVariant = obj.safeStr(d, "metricVariant", "");
+            if strlength(metricVariant) == 0
+                metricVariant = obj.getOptimizeState("metricVariant");
+            end
+            if isempty(metricVariant) || strlength(string(metricVariant)) == 0
+                metricVariant = "avg";
+            end
             masterMetric = canonicalMetricName(baseMetric, metricVariant);
 
             % Pre-allocate SoA columns matching createDatabaseStruct
@@ -1346,6 +1372,7 @@ classdef OptimizeController < handle
                 ExportGraphics      = false);
 
             analyteSpecPred = resolveAnalyteSpectrum(obj.session, FallbackToDefault=true, Reporter=rep);
+            analyteLibPred = resolveAnalyteLibrary(obj.session, IncludeBuiltIn=true, IncludeCustom=true, FallbackToDefault=false, Reporter=rep);
             loadPredArgs = { ...
                 "Recompute", true, ...
                 "Model", obj.session.model, ...
@@ -1355,6 +1382,7 @@ classdef OptimizeController < handle
                 "LambdaLaser", laserWl, ...
                 "StokesShiftLimits", [sMin, sMax], ...
                 "AnalyteSpectrum", analyteSpecPred, ...
+                "AnalyteLibrary", analyteLibPred, ...
                 "InterpResolution", sRes, ...
                 "PredictionFile", cfg.predictionFile, ...
                 "SaveAfterGeneration", false, ...
@@ -1515,12 +1543,9 @@ classdef OptimizeController < handle
             laserWl = obj.safeNum(d, "laserWavelength", 785);
             allData = obj.ensureDerivedMetricSlice(allData, baseMetric, metricVariant, laserWl);
 
-            if metricVariant == "weighted" || metricVariant == "analyte"
-                variantForField = "analyte";
-            elseif metricVariant == "laser"
-                variantForField = "laser";
-            elseif metricVariant == "broad" || metricVariant == "broadband"
-                variantForField = "broad";
+            parsedVar = parseMetricVariantName(metricVariant, IsVariantToken=true);
+            if strlength(parsedVar.variant) > 0 && parsedVar.variantKind ~= "spectral"
+                variantForField = parsedVar.variant;
             else
                 variantForField = "avg";
             end
@@ -1594,12 +1619,9 @@ classdef OptimizeController < handle
                 laserWl = 785;
             end
 
-            if metricVariant == "weighted" || metricVariant == "analyte"
-                variantForField = "analyte";
-            elseif metricVariant == "laser"
-                variantForField = "laser";
-            elseif metricVariant == "broad" || metricVariant == "broadband"
-                variantForField = "broad";
+            parsedVar = parseMetricVariantName(metricVariant, IsVariantToken=true);
+            if strlength(parsedVar.variant) > 0 && parsedVar.variantKind ~= "spectral"
+                variantForField = parsedVar.variant;
             else
                 variantForField = "avg";
             end
@@ -1619,7 +1641,7 @@ classdef OptimizeController < handle
 
             if ~isfield(allData, avgFieldName) && isfield(allData, specField)
                 specMat = double(allData.(specField));
-                if variantForField == "laser"
+                if parsedVar.variantKind == "laser"
                     if isfield(allData, "LaserWl") && isscalar(allData.LaserWl)
                         laserWl = double(allData.LaserWl);
                     elseif isfield(allData, "LaserWavelength") && isscalar(allData.LaserWavelength)
@@ -1633,17 +1655,25 @@ classdef OptimizeController < handle
                         lIdx = 1;
                     end
                     allData.(avgFieldName) = specMat(:, lIdx);
-                elseif variantForField == "avg" || variantForField == "broad"
+                elseif parsedVar.variantKind == "broad"
                     allData.(avgFieldName) = mean(specMat, 2, "omitnan");
-                elseif variantForField == "analyte"
-                    analyteSpec = resolveAnalyteSpectrum(obj.session, FallbackToDefault=true);
+                elseif parsedVar.variantKind == "analyte"
+                    [~, analyteSpec, ~] = obj.resolveVariantAnalyteContext(metricVariant, [], true);
                     if isstruct(analyteSpec) && isfield(analyteSpec, "shift_cm") && isfield(allData, "RamanShift")
-                        shifts = allData.RamanShift(:)';
-                        aw = interp1(analyteSpec.shift_cm(:), analyteSpec.intensity(:), shifts, "makima", 0);
-                        aw = max(0, aw);
-                        if sum(aw) > 0
-                            weights = aw / sum(aw);
-                            allData.(avgFieldName) = specMat * weights(:);
+                        shifts = double(allData.RamanShift(1, :));
+                        if isfield(allData, "RamanWindow") && numel(allData.RamanWindow) >= 2 && any(allData.RamanWindow > 0)
+                            win = double(allData.RamanWindow(1, 1:2));
+                            sMask = (shifts > 0) & (shifts >= win(1)) & (shifts <= win(2));
+                        else
+                            sMask = shifts > 0;
+                        end
+                        if nnz(sMask) >= 2
+                            weights = computeAnalyteGridWeights(shifts(sMask), analyteSpec, "makima");
+                            if any(weights > 0)
+                                allData.(avgFieldName) = specMat(:, sMask) * weights(:);
+                            else
+                                allData.(avgFieldName) = mean(specMat, 2, "omitnan");
+                            end
                         else
                             allData.(avgFieldName) = mean(specMat, 2, "omitnan");
                         end
@@ -1651,6 +1681,28 @@ classdef OptimizeController < handle
                         allData.(avgFieldName) = mean(specMat, 2, "omitnan");
                     end
                 end
+            end
+        end
+
+        function [analyteFile, analyteSpec, analyteLib] = resolveVariantAnalyteContext(obj, metricVariant, rep, fallbackToDefault)
+            if nargin < 4, fallbackToDefault = false; end
+            analyteFile = resolveAnalyteFile(obj.session);
+            parsedVar = parseMetricVariantName(metricVariant, IsVariantToken=true);
+            analyteLib = resolveAnalyteLibrary(obj.session, IncludeBuiltIn=true, IncludeCustom=true, ...
+                ExplicitFile=analyteFile, FallbackToDefault=false, Reporter=rep);
+            analyteSpec = struct();
+            if strlength(parsedVar.analyteKey) > 0
+                for k = 1:numel(analyteLib)
+                    if strcmpi(string(analyteLib(k).key), parsedVar.analyteKey)
+                        analyteSpec = analyteLib(k).spectrum;
+                        analyteFile = string(analyteLib(k).filePath);
+                        break;
+                    end
+                end
+            end
+            if ~isstruct(analyteSpec) || ~isfield(analyteSpec, "shift_cm") || isempty(analyteSpec.shift_cm)
+                analyteSpec = resolveAnalyteSpectrum(obj.session, ExplicitFile=analyteFile, ...
+                    FallbackToDefault=fallbackToDefault, Reporter=rep);
             end
         end
 

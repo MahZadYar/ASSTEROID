@@ -223,6 +223,74 @@ classdef DatabaseController < handle
                         obj.sendToHTML("LoadComplete", ...
                             sprintf("%s branch loaded from %s", branchName, resolvedPath));
 
+                    case "AddCustomAnalyte"
+                        fp = "";
+                        if isstruct(eventData) && isfield(eventData, "path")
+                            fp = strtrim(string(eventData.path));
+                        end
+                        if strlength(fp) == 0 || ~isfile(fp)
+                            error("DatabaseController:FileNotFound", "Analyte file not found: %s", fp);
+                        end
+                        spec = resolveAnalyteSpectrum(sess, ExplicitFile=fp, FallbackToDefault=false);
+                        kCustom = sanitizeAnalyteKey(fp);
+                        [~, stem, ~] = fileparts(char(fp));
+                        lbl = string(stem) + " (Custom)";
+                        if ~isfield(sess.db, "Global") || ~isstruct(sess.db.Global)
+                            sess.db.Global = struct();
+                        end
+                        obj.upsertCustomAnalyteLibrary(kCustom, lbl, fp, spec);
+                        if isfield(sess.db.Global, "SelectedAnalytes")
+                            curSel = strtrim(string(sess.db.Global.SelectedAnalytes(:)'));
+                            curSel = curSel(strlength(curSel) > 0);
+                            if ~any(strcmpi(curSel, kCustom))
+                                sess.db.Global.SelectedAnalytes = [curSel, kCustom];
+                            end
+                        end
+                        if ~isfield(sess.db.Global, "AnalyteSpectrumFile") || strlength(string(sess.db.Global.AnalyteSpectrumFile)) == 0
+                            sess.db.Global.AnalyteSpectrumFile = fp;
+                            sess.analyteSpectrum = spec;
+                        end
+                        sess.markDirty();
+                        obj.syncFigStateAfterBranchChange("Analyte", fp);
+                        obj.broadcastStatus();
+                        obj.sendToHTML("LoadComplete", sprintf("Added custom analyte '%s' from %s", kCustom, fp));
+
+                    case "RemoveCustomAnalyte"
+                        rk = "";
+                        if isstruct(eventData) && isfield(eventData, "key")
+                            rk = strtrim(string(eventData.key));
+                        end
+                        if isfield(sess.db, "Global") && isfield(sess.db.Global, "AnalyteLibrary") ...
+                                && isstruct(sess.db.Global.AnalyteLibrary) && strlength(rk) > 0
+                            lib = sess.db.Global.AnalyteLibrary;
+                            keep = arrayfun(@(e) ~strcmpi(string(e.key), rk), lib);
+                            sess.db.Global.AnalyteLibrary = lib(keep);
+                            if isfield(sess.db.Global, "SelectedAnalytes")
+                                curSel = strtrim(string(sess.db.Global.SelectedAnalytes(:)'));
+                                sess.db.Global.SelectedAnalytes = curSel(~strcmpi(curSel, rk));
+                            end
+                            sess.markDirty();
+                            obj.broadcastStatus();
+                        end
+
+                    case "SetSelectedAnalytes"
+                        selKeys = string.empty(1, 0);
+                        if isstruct(eventData) && isfield(eventData, "keys") && ~isempty(eventData.keys)
+                            rawK = eventData.keys;
+                            if iscell(rawK)
+                                selKeys = strtrim(string(cellfun(@string, rawK, "UniformOutput", true)));
+                            else
+                                selKeys = strtrim(string(rawK(:)'));
+                            end
+                            selKeys = unique(selKeys(strlength(selKeys) > 0), "stable");
+                        end
+                        if ~isfield(sess.db, "Global") || ~isstruct(sess.db.Global)
+                            sess.db.Global = struct();
+                        end
+                        sess.db.Global.SelectedAnalytes = selKeys;
+                        sess.markDirty();
+                        obj.broadcastStatus();
+
                     case "ClearBranch"
                         branchName = string(eventData.branch);
                         obj.clearBranch(branchName);
@@ -353,6 +421,12 @@ classdef DatabaseController < handle
                     analyteSpec = resolveAnalyteSpectrum(sess, ExplicitFile=fpStr, FallbackToDefault=false);
                     sess.db.Global.AnalyteSpectrumFile = fpStr;
                     sess.analyteSpectrum = analyteSpec;
+                    [~, ~, ~, isBI] = resolveDefaultAnalyteSpectrumPath(fpStr, Strict=false);
+                    if ~isBI
+                        kCustom = sanitizeAnalyteKey(fpStr);
+                        [~, stem, ~] = fileparts(char(fpStr));
+                        obj.upsertCustomAnalyteLibrary(kCustom, string(stem) + " (Custom)", fpStr, analyteSpec);
+                    end
 
                 otherwise
                     error("DatabaseController:UnknownBranch", ...
@@ -429,6 +503,28 @@ classdef DatabaseController < handle
     end
 
     methods (Access = private)
+        function upsertCustomAnalyteLibrary(obj, key, label, filePath, spec)
+            sess = obj.session;
+            if ~isfield(sess.db, "Global") || ~isstruct(sess.db.Global)
+                sess.db.Global = struct();
+            end
+            entry = struct("key", string(key), "label", string(label), ...
+                "filePath", string(filePath), "spectrum", spec);
+            if ~isfield(sess.db.Global, "AnalyteLibrary") || ~isstruct(sess.db.Global.AnalyteLibrary) ...
+                    || isempty(sess.db.Global.AnalyteLibrary)
+                sess.db.Global.AnalyteLibrary = entry;
+                return;
+            end
+            lib = sess.db.Global.AnalyteLibrary;
+            idx = find(arrayfun(@(e) strcmpi(string(e.key), string(key)), lib), 1);
+            if isempty(idx)
+                lib(end+1) = entry;
+            else
+                lib(idx) = entry;
+            end
+            sess.db.Global.AnalyteLibrary = lib;
+        end
+
         function syncFigStateAfterBranchChange(obj, branchName, fpStr)
             fig_ = obj.fig;
             if isempty(fig_) || ~isvalid(fig_) || ~isstruct(fig_.UserData)

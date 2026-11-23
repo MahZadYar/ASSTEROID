@@ -34,6 +34,7 @@ function [simData, updatedCount] = recomputeDerivedMetrics(simData, cfg, analyte
 
     present = false(size(baseMetrics));
     metricVariants = getConfigField(cfg, "metricVariants", struct());
+    analyteLib = normalizeAnalyteLibraryArg(getConfigField(cfg, "analyteLibrary", struct([])));
 
     % Only create _analyte fields when a valid analyte spectrum is provided.
     % Without an analyte spectrum the field would stay NaN, misleading callers.
@@ -56,6 +57,12 @@ function [simData, updatedCount] = recomputeDerivedMetrics(simData, cfg, analyte
             end
             if hasValidAnalyte && isVariantEnabled(metricVariants, metric + "_analyte")
                 simData.(metric + "_analyte") = nan(nRows, 1);
+            end
+            for li = 1:numel(analyteLib)
+                libField = metric + "_" + analyteLib(li).key;
+                if isVariantEnabled(metricVariants, libField)
+                    simData.(libField) = nan(nRows, 1);
+                end
             end
         end
     end
@@ -158,6 +165,12 @@ function [simData, updatedCount] = recomputeDerivedMetrics(simData, cfg, analyte
                     if hasValidAnalyte && isVariantEnabled(metricVariants, metric + "_analyte")
                         simData.(metric + "_analyte")(i) = computeAnalyteWeightedMetric(shiftDense, mvDense, analyteSpectrum);
                     end
+                    for li = 1:numel(analyteLib)
+                        libField = metric + "_" + analyteLib(li).key;
+                        if isVariantEnabled(metricVariants, libField)
+                            simData.(libField)(i) = computeAnalyteWeightedMetric(shiftDense, mvDense, analyteLib(li).spectrum);
+                        end
+                    end
                 end
             end
         end
@@ -231,6 +244,28 @@ function enabled = isVariantEnabled(metricVariants, key)
         enabled = logical(metricVariants.(key));
     else
         enabled = true;
+    end
+end
+
+function out = normalizeAnalyteLibraryArg(libRaw)
+    out = struct("key", {}, "spectrum", {});
+    if isempty(libRaw) || ~isstruct(libRaw)
+        return;
+    end
+    for k = 1:numel(libRaw)
+        e = libRaw(k);
+        if ~isfield(e, "key") || strlength(string(e.key)) == 0
+            continue;
+        end
+        if isfield(e, "spectrum") && isstruct(e.spectrum)
+            spec = e.spectrum;
+        else
+            spec = e;
+        end
+        if isstruct(spec) && isfield(spec, "shift_cm") && ~isempty(spec.shift_cm) ...
+                && isfield(spec, "intensity") && ~isempty(spec.intensity)
+            out(end+1) = struct("key", string(e.key), "spectrum", spec); %#ok<AGROW>
+        end
     end
 end
 

@@ -68,10 +68,12 @@ function values = evaluateMetricAtPoints(results, baseMetric, seeds)
             allData = results.allData;
             variant = "broad";
             if isfield(evalCfg, "metricVariant"), variant = string(evalCfg.metricVariant); end
-            if variant == "weighted" || variant == "analyte", vField = "analyte";
-            elseif variant == "laser", vField = "laser";
-            elseif variant == "avg", vField = "avg";
-            else, vField = "broad"; end
+            parsedVar = parseMetricVariantName(variant);
+            if strlength(parsedVar.variant) > 0 && parsedVar.variantKind ~= "spectral"
+                vField = parsedVar.variant;
+            else
+                vField = "broad";
+            end
             avgFieldName = char(resolveDerivedMetricField(baseMetric, vField, allData));
             if isfield(allData, avgFieldName) && isfield(allData, "period") && isfield(allData, "radius")
                 P = double(allData.period(:));
@@ -113,14 +115,11 @@ function values = evaluateFromModel(predictor, baseMetric, seeds, lambdaSamples,
 %evaluateFromModel Evaluate metric at each seed via DNN predictor.
 %   seeds.P / seeds.R in nm; lambdaSamples in µm.
     values = NaN(numel(seeds), 1);
-    metricVariant = "";
+    metricVariant = "broad";
     if isfield(cfg, "metricVariant"), metricVariant = string(cfg.metricVariant); end
-    if metricVariant == "weighted" || metricVariant == "analyte"
-        variantForField = "analyte";
-    elseif metricVariant == "laser"
-        variantForField = "laser";
-    elseif metricVariant == "avg"
-        variantForField = "avg";
+    parsedVar = parseMetricVariantName(metricVariant, IsVariantToken=true);
+    if strlength(parsedVar.variant) > 0 && parsedVar.variantKind ~= "spectral"
+        variantForField = parsedVar.variant;
     else
         variantForField = "broad";
     end
@@ -130,13 +129,26 @@ function values = evaluateFromModel(predictor, baseMetric, seeds, lambdaSamples,
     if isfield(cfg, "lambdaLaser"), lambdaLaser = cfg.lambdaLaser; end
 
     analyteSpecEval = struct();
-    if metricVariant == "weighted" || metricVariant == "analyte"
+    if parsedVar.variantKind == "analyte"
         explicitFile = "";
         if isfield(cfg, "analyteSpectrumFile"), explicitFile = string(cfg.analyteSpectrumFile); end
         cachedSpec = struct();
         if isfield(cfg, "analyteSpectrum") && isstruct(cfg.analyteSpectrum), cachedSpec = cfg.analyteSpectrum; end
-        analyteSpecEval = resolveAnalyteSpectrum(struct(), ...
-            ExplicitFile=explicitFile, CachedSpectrum=cachedSpec, FallbackToDefault=true);
+        libCtx = struct();
+        if isfield(cfg, "analyteLibrary") && isstruct(cfg.analyteLibrary) && ~isempty(cfg.analyteLibrary)
+            libCtx.Global = struct("AnalyteLibrary", cfg.analyteLibrary);
+        end
+        if strlength(parsedVar.analyteKey) > 0
+            matched = resolveAnalyteLibrary(libCtx, Keys=parsedVar.analyteKey, ...
+                ExplicitFile=explicitFile, CachedSpectrum=cachedSpec, FallbackToDefault=false);
+            if ~isempty(matched)
+                analyteSpecEval = matched(1).spectrum;
+            end
+        end
+        if ~isstruct(analyteSpecEval) || ~isfield(analyteSpecEval, "shift_cm") || isempty(analyteSpecEval.shift_cm)
+            analyteSpecEval = resolveAnalyteSpectrum(libCtx, ...
+                ExplicitFile=explicitFile, CachedSpectrum=cachedSpec, FallbackToDefault=true);
+        end
     end
 
     for i = 1:numel(seeds)
@@ -146,7 +158,7 @@ function values = evaluateFromModel(predictor, baseMetric, seeds, lambdaSamples,
             continue;
         end
         try
-            if metricVariant == "weighted" || metricVariant == "analyte"
+            if parsedVar.variantKind == "analyte"
                 soa = predictor.predictGrid(pNm * 1e-3, rNm * 1e-3, lambdaSamples, ...
                     "LaserWavelength", lambdaLaser, "RamanWindow", stokesLimits, ...
                     "AnalyteSpectrum", analyteSpecEval);
@@ -157,6 +169,12 @@ function values = evaluateFromModel(predictor, baseMetric, seeds, lambdaSamples,
             avgFieldName = char(resolveDerivedMetricField(baseMetric, variantForField, soa));
             if isfield(soa, avgFieldName) && ~isempty(soa.(avgFieldName))
                 values(i) = double(soa.(avgFieldName)(1));
+            elseif parsedVar.variantKind == "analyte"
+                % predictGrid populated <baseMetric>_analyte using analyteSpecEval
+                fallbackField = char(resolveDerivedMetricField(baseMetric, "analyte", soa));
+                if isfield(soa, fallbackField) && ~isempty(soa.(fallbackField))
+                    values(i) = double(soa.(fallbackField)(1));
+                end
             end
         catch
         end

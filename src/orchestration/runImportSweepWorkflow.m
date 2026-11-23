@@ -47,11 +47,26 @@ end
     inputPath = resolveInputFile(cfg);
     reporter.complete("ResolveInput", sprintf("Input: %s", inputPath));
 
-    %% 2. Load analyte Raman spectrum
+    %% 2. Load analyte Raman spectrum & optional multi-analyte library
     reporter.start("LoadAnalyte", "Resolving analyte Raman spectrum...");
     [analyteSpectrum, resolvedAnalytePath] = resolveAnalyteSpectrum(struct(), ...
         ExplicitFile=cfg.analyteSpectrumFile, FallbackToDefault=true, Reporter=reporter);
-    if strlength(cfg.analyteSpectrumFile) > 0 && strlength(resolvedAnalytePath) > 0
+    analyteKeysCfg = string.empty;
+    if isfield(cfg, "analyteKeys") && ~isempty(cfg.analyteKeys)
+        analyteKeysCfg = strtrim(string(cfg.analyteKeys(:)));
+        analyteKeysCfg = analyteKeysCfg(strlength(analyteKeysCfg) > 0);
+    end
+    hasExplicitLib = isfield(cfg, "analyteLibrary") && isstruct(cfg.analyteLibrary) && ~isempty(cfg.analyteLibrary);
+    if ~hasExplicitLib && ~isempty(analyteKeysCfg)
+        existingDbCtx = getConfigField(cfg, "existingDb", struct([]));
+        cfg.analyteLibrary = resolveAnalyteLibrary(existingDbCtx, ...
+            Keys=analyteKeysCfg, ExplicitFile=cfg.analyteSpectrumFile, ...
+            FallbackToDefault=false, Reporter=reporter);
+    end
+    if isfield(cfg, "analyteLibrary") && ~isempty(cfg.analyteLibrary)
+        reporter.complete("LoadAnalyte", sprintf("Loaded %s plus %d analyte library variant(s).", ...
+            resolvedAnalytePath, numel(cfg.analyteLibrary)));
+    elseif strlength(cfg.analyteSpectrumFile) > 0 && strlength(resolvedAnalytePath) > 0
         reporter.complete("LoadAnalyte", sprintf("Loaded analyte spectrum: %s", resolvedAnalytePath));
     else
         reporter.complete("LoadAnalyte", sprintf("Using built-in analyte spectrum: %s", resolvedAnalytePath));
@@ -663,14 +678,52 @@ function entry = processGeometryGroup(idx, cols, keyValues, ...
                 entry.(broadFieldName) = spectralData(laserIdx);
             end
 
-            % _analyte variant: analyte-weighted average
+            % _analyte variant(s): active spectrum plus optional multi-analyte library
+            analyteLib = getConfigField(cfg, "analyteLibrary", struct([]));
             analyteFieldName = mn + "_analyte";
-            if isVariantEnabled(mv, analyteFieldName) && nnz(validStokes) >= 2 && shiftRange > 0
-                entry.(analyteFieldName) = computeAnalyteVariant( ...
-                    RamanShift_cm, validStokes, shiftMin, shiftMax, ...
-                    interpSamples, spectralData, analyteSpectrum, cfg.spectralInterpMethod);
-            elseif isVariantEnabled(mv, analyteFieldName)
-                entry.(analyteFieldName) = NaN;
+            wantActive = isVariantEnabled(mv, analyteFieldName);
+            wantAnyLib = false;
+            if isstruct(analyteLib) && ~isempty(analyteLib)
+                for li = 1:numel(analyteLib)
+                    if isVariantEnabled(mv, mn + "_" + string(analyteLib(li).key))
+                        wantAnyLib = true;
+                        break;
+                    end
+                end
+            end
+
+            denseShiftVals = [];
+            denseSpecVals = [];
+            if (wantActive || wantAnyLib) && nnz(validStokes) >= 2 && shiftRange > 0
+                [denseShiftVals, denseSpecVals] = computeDenseShiftCurve( ...
+                    RamanShift_cm, validStokes, shiftMin, shiftMax, interpSamples, ...
+                    spectralData, cfg.spectralInterpMethod);
+            end
+
+            if wantActive
+                if ~isempty(denseSpecVals)
+                    entry.(analyteFieldName) = computeAnalyteWeightedMetric(denseShiftVals, denseSpecVals, analyteSpectrum);
+                else
+                    entry.(analyteFieldName) = NaN;
+                end
+            end
+
+            if isstruct(analyteLib) && ~isempty(analyteLib)
+                for li = 1:numel(analyteLib)
+                    kName = string(analyteLib(li).key);
+                    if strlength(kName) == 0, continue; end
+                    libFieldName = mn + "_" + kName;
+                    if ~isVariantEnabled(mv, libFieldName)
+                        continue;
+                    end
+                    if ~isempty(denseSpecVals)
+                        sp = analyteLib(li);
+                        if isfield(sp, "spectrum") && isstruct(sp.spectrum), sp = sp.spectrum; end
+                        entry.(libFieldName) = computeAnalyteWeightedMetric(denseShiftVals, denseSpecVals, sp);
+                    else
+                        entry.(libFieldName) = NaN;
+                    end
+                end
             end
         end
     else
@@ -698,16 +751,22 @@ function avg = computeSpectralAverage(RamanShift_cm, mask, shiftMin, shiftMax, .
     end
 end
 
-function val = computeAnalyteVariant(RamanShift_cm, mask, shiftMin, shiftMax, ...
-        interpSamples, spectralData, analyteSpectrum, interpMethod)
-    %computeAnalyteVariant Analyte-weighted spectral average.
+function [shiftDense, dense] = computeDenseShiftCurve(RamanShift_cm, mask, shiftMin, shiftMax, ...
+        interpSamples, spectralData, interpMethod)
+    %computeDenseShiftCurve Interpolate spectral slice once onto dense Raman shift grid.
     shiftDense = linspace(shiftMin, shiftMax, interpSamples);
     rs = RamanShift_cm(mask);
     data = spectralData(mask);
     [rs, rsOrd] = sort(rs);
     data = data(rsOrd);
-
     dense = safeInterpolate(rs, data, shiftDense, interpMethod);
+end
+
+function val = computeAnalyteVariant(RamanShift_cm, mask, shiftMin, shiftMax, ...
+        interpSamples, spectralData, analyteSpectrum, interpMethod)
+    %computeAnalyteVariant Analyte-weighted spectral average.
+    [shiftDense, dense] = computeDenseShiftCurve( ...
+        RamanShift_cm, mask, shiftMin, shiftMax, interpSamples, spectralData, interpMethod);
     val = computeAnalyteWeightedMetric(shiftDense, dense, analyteSpectrum);
 end
 

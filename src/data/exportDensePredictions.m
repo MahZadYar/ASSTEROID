@@ -83,41 +83,53 @@ function outputPath = exportDensePredictions(allData, options)
     for mIdx = 1:numel(options.Metrics)
         baseMetric = options.Metrics(mIdx);
         for vIdx = 1:numel(options.Variants)
-            variant = options.Variants(vIdx);
-            if ~isfield(variantMap, variant)
-                continue;
-            end
-            suffix = variantMap.(variant);
-            fieldName = baseMetric + suffix;
-            if isfield(allData, fieldName)
-                exported.(fieldName) = allData.(fieldName);
-                includedFields(end+1) = fieldName; %#ok<AGROW>
-            elseif variant == "laser"
-                legacyField = baseMetric + "_approx";
-                if isfield(allData, legacyField)
-                    exported.(fieldName) = allData.(legacyField);
+            variant = string(options.Variants(vIdx));
+            pVar = parseMetricVariantName(variant, IsVariantToken=true);
+            if isfield(variantMap, variant)
+                suffix = variantMap.(variant);
+                fieldName = baseMetric + suffix;
+                if isfield(allData, fieldName)
+                    exported.(fieldName) = allData.(fieldName);
+                    includedFields(end+1) = fieldName; %#ok<AGROW>
+                elseif variant == "laser"
+                    legacyField = baseMetric + "_approx";
+                    if isfield(allData, legacyField)
+                        exported.(fieldName) = allData.(legacyField);
+                        includedFields(end+1) = fieldName; %#ok<AGROW>
+                    else
+                        skippedFields(end+1) = fieldName; %#ok<AGROW>
+                    end
+                elseif variant == "broad" || variant == "broadband"
+                    legacyField = baseMetric + "_avg";
+                    if isfield(allData, legacyField)
+                        exported.(fieldName) = allData.(legacyField);
+                        includedFields(end+1) = fieldName; %#ok<AGROW>
+                    else
+                        skippedFields(end+1) = fieldName; %#ok<AGROW>
+                    end
+                elseif variant == "avg"
+                    broadField = baseMetric + "_broad";
+                    if isfield(allData, broadField)
+                        exported.(fieldName) = allData.(broadField);
+                        includedFields(end+1) = fieldName; %#ok<AGROW>
+                    else
+                        skippedFields(end+1) = fieldName; %#ok<AGROW>
+                    end
+                else
+                    skippedFields(end+1) = fieldName; %#ok<AGROW>
+                end
+            elseif pVar.isVariantToken && pVar.variantKind == "analyte" && strlength(pVar.analyteKey) > 0
+                fieldName = canonicalMetricName(baseMetric, pVar.variant);
+                if isfield(allData, fieldName)
+                    exported.(fieldName) = allData.(fieldName);
+                    includedFields(end+1) = fieldName; %#ok<AGROW>
+                elseif isfield(allData, baseMetric + "_analyte_" + pVar.analyteKey)
+                    legacyAnalyteField = baseMetric + "_analyte_" + pVar.analyteKey;
+                    exported.(fieldName) = allData.(legacyAnalyteField);
                     includedFields(end+1) = fieldName; %#ok<AGROW>
                 else
                     skippedFields(end+1) = fieldName; %#ok<AGROW>
                 end
-            elseif variant == "broad" || variant == "broadband"
-                legacyField = baseMetric + "_avg";
-                if isfield(allData, legacyField)
-                    exported.(fieldName) = allData.(legacyField);
-                    includedFields(end+1) = fieldName; %#ok<AGROW>
-                else
-                    skippedFields(end+1) = fieldName; %#ok<AGROW>
-                end
-            elseif variant == "avg"
-                broadField = baseMetric + "_broad";
-                if isfield(allData, broadField)
-                    exported.(fieldName) = allData.(broadField);
-                    includedFields(end+1) = fieldName; %#ok<AGROW>
-                else
-                    skippedFields(end+1) = fieldName; %#ok<AGROW>
-                end
-            else
-                skippedFields(end+1) = fieldName; %#ok<AGROW>
             end
         end
     end

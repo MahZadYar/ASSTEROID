@@ -6,75 +6,11 @@
 <link rel="stylesheet" href="shared/css/assteroid_components.css">
 <script src="shared/js/matlab_bridge.js"></script>
 <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    /* Stage 4 responsive multi-column prediction step grid */
     body {
-        font-family: 'Segoe UI', system-ui, sans-serif;
-        background: var(--bg-primary);
-        color: var(--text-primary);
-        font-size: 13px;
-        padding: 0;
-        overflow: hidden;
-        height: 100vh;
         display: flex;
         flex-direction: column;
     }
-    h2 {
-        font-size: 15px; font-weight: 600; color: var(--accent);
-        margin: 0; padding: 10px 12px 8px 12px;
-        border-bottom: 1px solid var(--border);
-        flex-shrink: 0;
-    }
-    .main-container {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-    }
-    .steps-container {
-        flex: 1;
-        overflow-y: auto;
-        padding: 12px;
-        min-height: 0;
-    }
-    .step {
-        background: var(--bg-secondary);
-        border-radius: 8px;
-        margin: 0 auto 10px auto;
-        max-width: 1400px;
-        border: 1px solid var(--border);
-        overflow: hidden;
-    }
-    .step-header {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 12px;
-        background: var(--bg-tertiary);
-        cursor: pointer;
-        user-select: none;
-    }
-    .step-number {
-        width: 22px; height: 22px;
-        background: var(--accent);
-        color: #000;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 11px;
-        font-weight: 700;
-    }
-    .step-header.completed .step-number { background: var(--success); }
-    .step-header.active .step-number { background: var(--accent); }
-    .step-header.inactive .step-number { background: var(--text-secondary); }
-    .step-title {
-        font-size: 12px;
-        font-weight: 600;
-        color: var(--text-primary);
-        flex: 1;
-    }
-    .step-toggle::before { content: '▾'; color: var(--text-secondary); }
-    .step-header.collapsed .step-toggle::before { content: '▸'; }
     .step-content {
         padding: 12px;
         display: grid;
@@ -83,43 +19,6 @@
         align-items: start;
     }
     .step-content > .section { margin-bottom: 0; }
-    .step-header.collapsed + .step-content { display: none; }
-    .section {
-        background: var(--bg-primary);
-        border-radius: 6px; padding: 10px;
-        margin-bottom: 8px;
-        border: 1px solid var(--border);
-    }
-    .section-title {
-        font-size: 11px; font-weight: 600; color: var(--text-secondary);
-        text-transform: uppercase; letter-spacing: 0.5px;
-        margin-bottom: 8px; cursor: pointer; user-select: none;
-    }
-    .section-title::before { content: '▸ '; }
-    .section-title.open::before { content: '▾ '; }
-    .field { margin-bottom: 8px; }
-    .field label {
-        display: block; font-size: 11px; color: var(--text-secondary);
-        margin-bottom: 3px; font-weight: 500;
-    }
-    .field input[type="text"], .field input[type="number"], .field select {
-        width: 100%; padding: 6px 8px;
-        background: var(--input-bg); border: 1px solid var(--border);
-        border-radius: 4px; color: var(--text-primary);
-        font-size: 12px; outline: none;
-    }
-    .field input:focus, .field select:focus { border-color: var(--accent); }
-    .field-row { display: flex; gap: 8px; align-items: flex-end; }
-    .field-row .field { flex: 1; }
-    .browse-row { display: flex; gap: 4px; }
-    .browse-row input { flex: 1; }
-    .browse-row button {
-        padding: 6px 10px; background: var(--bg-tertiary);
-        border: 1px solid var(--border); border-radius: 4px;
-        color: var(--text-primary); cursor: pointer; font-size: 11px;
-        white-space: nowrap;
-    }
-    .browse-row button:hover { background: var(--accent); color: #fff; }
     .toggle-row {
         display: flex; align-items: center; gap: 8px; padding: 4px 0;
     }
@@ -127,71 +26,19 @@
         font-size: 12px; color: var(--text-primary); cursor: pointer; margin: 0;
     }
     input[type="checkbox"] {
-        accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;
+        width: 16px; height: 16px;
     }
     .metrics-grid {
         display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px;
     }
-    .btn-primary {
-        padding: 10px 16px;
-        background: var(--accent); color: #000; border: none;
-        border-radius: 6px; font-size: 12px; font-weight: 600;
-        cursor: pointer; transition: background 0.2s;
-    }
-    .btn-primary:hover { background: var(--accent-hover); }
-    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-    .btn-stop {
-        background: #c62828 !important;
-        color: #ffffff !important;
-        border: 1px solid #e53935 !important;
-        border-radius: 6px;
-        padding: 6px 12px;
-        font-size: 11px;
-        font-weight: 700;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 5px;
-        transition: all 0.2s ease;
-        box-shadow: 0 2px 5px rgba(198, 40, 40, 0.4);
-    }
-    .btn-stop:hover {
-        background: #e53935 !important;
-        box-shadow: 0 3px 8px rgba(229, 57, 53, 0.6);
-    }
-    .btn-stop:active {
-        background: #b71c1c !important;
-    }
-    .btn-stop:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-        box-shadow: none;
-    }
-    .btn-secondary {
-        padding: 8px 12px;
-        background: var(--bg-tertiary); color: var(--text-primary);
-        border: 1px solid var(--border); border-radius: 6px;
-        font-size: 11px; cursor: pointer; transition: background 0.2s;
-    }
-    .btn-secondary:hover { background: var(--border); }
     .btn-row {
         display: flex; gap: 8px; margin-top: 10px;
     }
-    .btn-row .btn-primary { flex: 1; }
-
-    input[type="number"], .status-badge {
-        font-variant-numeric: tabular-nums;
+    .btn-row .btn-primary,
+    .btn-row .btn-secondary {
+        flex: 1;
+        margin-top: 0;
     }
-    button:focus-visible, input:focus-visible, select:focus-visible {
-        outline: 2px solid var(--accent) !important;
-        outline-offset: 2px !important;
-    }
-    button:active {
-        transform: scale(0.98);
-    }
-
-    /* Bottom Panel - Progress Console */
     .bottom-panel {
         background: var(--bg-secondary);
         border-top: 1px solid var(--border);
@@ -199,34 +46,12 @@
         flex-shrink: 0;
     }
     #progressArea {
-        background: var(--bg-secondary); border: 1px solid var(--border);
-        border-radius: 6px; padding: 8px;
-        font-family: 'Cascadia Code', 'Consolas', monospace;
-        font-size: 11px; color: var(--text-secondary);
-        max-height: 120px; overflow-y: auto;
-        white-space: pre-wrap; word-break: break-all;
+        max-height: 120px;
     }
     .progress-bar-container {
-        width: 100%; height: 4px; background: var(--bg-tertiary);
-        border-radius: 2px; margin-top: 6px; overflow: hidden;
+        margin-top: 6px;
     }
-    .progress-bar {
-        height: 100%; background: var(--accent);
-        border-radius: 2px; width: 0%; transition: width 0.3s ease;
-    }
-    .status-badge {
-        display: inline-block; padding: 2px 8px;
-        border-radius: 10px; font-size: 10px; font-weight: 600;
-    }
-    .status-idle { background: var(--bg-tertiary); color: var(--text-secondary); }
-    .status-running { background: #1b5e20; color: #a5d6a7; }
-    .status-done { background: #0d47a1; color: #90caf9; }
-    .status-error { background: #b71c1c; color: #ef9a9a; }
     .hint { font-size: 10px; color: var(--text-secondary); margin-top: 4px; }
-    .req-badge { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 8px; }
-    .req-ok { color: #66bb6a; }
-    .req-missing { color: #ef5350; }
-    .req-optional { color: var(--text-secondary); }
 </style>
 <script type="text/javascript">
 function setup(htmlComponent) {
@@ -263,7 +88,11 @@ function setup(htmlComponent) {
         updateDbBanner(event.Data);
         updateVisRequirements(event.Data);
         updatePredictMetricsFromDb(event.Data);
+        updatePredictAnalyteLibrary(
+            event.Data ? event.Data.analyteLibrary : null,
+            event.Data ? event.Data.selectedAnalytes : null);
     });
+    updatePredictAnalyteLibrary(null, null);
     htmlComponent.addEventListener("SaveComplete", function(event) {
         appendLog(event.Data || "Database saved.");
     });
@@ -327,10 +156,109 @@ function purgePredictions() {
     }
 }
 
+var DEFAULT_PRED_ANALYTES = [
+    { key: "CH4",  label: "12CH4 (Methane)",        peakShift_cm: 2917 },
+    { key: "C2H4", label: "12C2H4 (Ethylene)",      peakShift_cm: 3021 },
+    { key: "H2S",  label: "H2S (Hydrogen Sulfide)", peakShift_cm: 2617 },
+    { key: "NH3",  label: "NH3 (Ammonia)",          peakShift_cm: 3337 },
+    { key: "C2H2", label: "C2H2 (Acetylene)",       peakShift_cm: 1974 },
+    { key: "H2O",  label: "H2O (Water)",            peakShift_cm: 3657 }
+];
+
+function collectCheckedAnalyteKeys() {
+    var keys = [];
+    document.querySelectorAll(".pred-analyte-cb:checked").forEach(function(cb) {
+        if (cb.dataset && cb.dataset.key) keys.push(cb.dataset.key);
+    });
+    return keys;
+}
+
+var predWorkingAnalytes = null;
+var predAnalytesTouched = false;
+
+function toggleAllPredictAnalytes(modeOrState) {
+    predAnalytesTouched = true;
+    var cbs = document.querySelectorAll(".pred-analyte-cb");
+    if (modeOrState === "working" && Array.isArray(predWorkingAnalytes)) {
+        var selSet = new Set(predWorkingAnalytes.map(function(k) { return String(k || "").toLowerCase(); }));
+        cbs.forEach(function(cb) {
+            var checked = selSet.has(String(cb.dataset.key || "").toLowerCase());
+            cb.checked = checked;
+            if (cb.parentElement) cb.parentElement.classList.toggle("selected", checked);
+        });
+        return;
+    }
+    var state = !!modeOrState;
+    cbs.forEach(function(cb) {
+        cb.checked = state;
+        if (cb.parentElement) cb.parentElement.classList.toggle("selected", state);
+    });
+}
+
+function updatePredictAnalyteLibrary(lib, selectedAnalytes) {
+    var box = document.getElementById("predictAnalyteKeysContainer");
+    if (!box) return;
+    var items = (Array.isArray(lib) && lib.length > 0) ? lib : DEFAULT_PRED_ANALYTES;
+    if (Array.isArray(selectedAnalytes)) {
+        predWorkingAnalytes = selectedAnalytes.slice();
+    }
+    var hadExisting = box.querySelectorAll(".pred-analyte-cb").length > 0;
+    var prevChecked = new Set();
+    if (hadExisting && predAnalytesTouched) {
+        box.querySelectorAll(".pred-analyte-cb:checked").forEach(function(cb) {
+            prevChecked.add(cb.dataset.key);
+        });
+    }
+    var workingSet = Array.isArray(predWorkingAnalytes)
+        ? new Set(predWorkingAnalytes.map(function(k) { return String(k || "").toLowerCase(); }))
+        : null;
+
+    box.innerHTML = "";
+    items.forEach(function(item) {
+        if (!item || !item.key) return;
+        var lab = document.createElement("label");
+        lab.className = "analyte-chip";
+        var cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.className = "pred-analyte-cb";
+        cb.dataset.key = item.key;
+        var isChecked = (hadExisting && predAnalytesTouched)
+            ? prevChecked.has(item.key)
+            : (workingSet ? workingSet.has(String(item.key).toLowerCase()) : true);
+        cb.checked = isChecked;
+        lab.classList.toggle("selected", isChecked);
+        cb.onchange = function() {
+            predAnalytesTouched = true;
+            lab.classList.toggle("selected", cb.checked);
+        };
+        var pk = (typeof item.peakShift_cm === "number" && isFinite(item.peakShift_cm))
+            ? (" (" + Math.round(item.peakShift_cm) + " cm\u207b\u00b9)") : "";
+        var span = document.createElement("span");
+        span.textContent = item.key + pk;
+        span.title = item.label || item.key;
+        lab.appendChild(cb);
+        lab.appendChild(span);
+        box.appendChild(lab);
+    });
+}
+
 function collectPredictConfig() {
+    var analyteKeys = collectCheckedAnalyteKeys();
+    var includeLegacyAnalyte = chk("predIncludeLegacyAnalyte");
     var selectedFields = [];
     document.querySelectorAll('.metric-variant-cb:checked').forEach(function(cb) {
-        selectedFields.push(cb.dataset.field);
+        var f = cb.dataset.field;
+        if (f && f.endsWith("_analyte")) {
+            var baseName = f.slice(0, -"_analyte".length);
+            if (includeLegacyAnalyte || analyteKeys.length === 0) {
+                selectedFields.push(f);
+            }
+            analyteKeys.forEach(function(key) {
+                selectedFields.push(baseName + "_" + key);
+            });
+        } else if (f) {
+            selectedFields.push(f);
+        }
     });
     var linked = document.getElementById("linkMetricsToGrid").checked;
     return {
@@ -355,7 +283,8 @@ function collectPredictConfig() {
         svdMaxRank: numOr("svdMaxRank", 32),
         svdMaxError: numOr("svdMaxError", 0.005),
         sidecarSubtype: val("sidecarSubtype") || "single",
-        selectedFields: selectedFields
+        selectedFields: selectedFields,
+        analyteKeys: analyteKeys
     };
 }
 
@@ -747,11 +676,14 @@ document.addEventListener("DOMContentLoaded", function() {
 </head>
 <body>
     <div id="dbStatusBanner" style="display:none;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);padding:6px 10px;margin-bottom:8px;font-size:var(--font-size-sm);color:var(--text-secondary);"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px 8px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
-        <h2 style="margin:0;padding:0;border:none;">🔮 Stage 4 — Prediction & Interpolation</h2>
-        <div style="display:flex;gap:6px;align-items:center;">
-            <button class="btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="window.htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
-            <button class="btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="window.htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
+    <div class="stage-header">
+        <div class="stage-title-group">
+            <h2>🔮 Stage 4 — Prediction &amp; Interpolation</h2>
+            <span class="v7-version-pill">v7.0</span>
+        </div>
+        <div class="stage-actions">
+            <button class="btn-header" onclick="window.htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
+            <button class="btn-header highlight" onclick="window.htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
         </div>
     </div>
 
@@ -952,6 +884,21 @@ document.addEventListener("DOMContentLoaded", function() {
                                     </tr>
                                 </tbody>
                             </table>
+                            <div style="margin-top:8px;padding:7px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);">
+                                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap;">
+                                    <span style="font-size:11px;font-weight:700;color:var(--pal-c80);">Working Analytes (<code>_&lt;KEY&gt;</code>)</span>
+                                    <div style="display:flex;align-items:center;gap:8px;">
+                                        <label style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--text-secondary);cursor:pointer;">
+                                            <input type="checkbox" id="predIncludeLegacyAnalyte" checked>
+                                            Active DB (<code>_analyte</code>)
+                                        </label>
+                                        <button type="button" onclick="toggleAllPredictAnalytes('working')" style="background:none;border:none;color:var(--pal-c80);cursor:pointer;font-size:10px;font-weight:600;padding:0;">Working</button>
+                                        <button type="button" onclick="toggleAllPredictAnalytes(true)" style="background:none;border:none;color:var(--pal-c80);cursor:pointer;font-size:10px;font-weight:600;padding:0;">All</button>
+                                        <button type="button" onclick="toggleAllPredictAnalytes(false)" style="background:none;border:none;color:var(--pal-c80);cursor:pointer;font-size:10px;font-weight:600;padding:0;">None</button>
+                                    </div>
+                                </div>
+                                <div id="predictAnalyteKeysContainer" class="analyte-pill-grid"></div>
+                            </div>
                             <p class="hint">Metrics synchronize automatically with <code>db.Model</code> (DNN mode) or <code>db.Sim</code> (Interpolation mode).</p>
                             <div style="margin-top:10px;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);">
                                 <div class="field" style="margin-bottom:6px;">

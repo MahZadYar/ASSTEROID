@@ -74,10 +74,10 @@ function figOut = assteroid_app(workFolder)
     figW = min(1700, screenSize(3) - 80);
     figH = min(1020, screenSize(4) - 80);
 
-    fig = uifigure("Name", "☄️ ASSTEROID — Optimal Inverse Design Platform", ...
+    fig = uifigure("Name", "☄️ ASSTEROID v7.0 — Multi-Analyte Inverse Design Platform", ...
         "Tag", "ASSTEROID_MAIN_APP", ...
         "Position", [(screenSize(3)-figW)/2, (screenSize(4)-figH)/2, figW, figH], ...
-        "Color", [6, 8, 18]/255, ...
+        "Color", [2, 0, 35]/255, ...
         "Resize", "on", ...
         "CloseRequestFcn", @onAppClose, ...
         "DeleteFcn", @(s, ~) cleanupConsole(s));
@@ -115,7 +115,7 @@ function figOut = assteroid_app(workFolder)
     mainGrid.ColumnWidth = {"1x"};
     mainGrid.Padding = [0 0 0 0];
     mainGrid.RowSpacing = 0;
-    mainGrid.BackgroundColor = [6, 8, 18]/255;
+    mainGrid.BackgroundColor = [2, 0, 35]/255;
 
     tabGroup = uitabgroup(mainGrid, ...
         "SelectionChangedFcn", @(src, ev) handleMainTabSelection(src, ev, fig));
@@ -132,7 +132,7 @@ function figOut = assteroid_app(workFolder)
     fig.UserData.handles.mainGrid    = mainGrid;
     initConsoleDiary(fig);
 
-    tabColors = [6, 8, 18]/255;
+    tabColors = [3, 0, 51]/255;
 
     %% ====================================================================
     %  STAGE 0 — Database Manager
@@ -165,16 +165,16 @@ function figOut = assteroid_app(workFolder)
     ax2 = uiaxes(visPanel2, ...
         "Units",     "normalized", ...
         "Position",  [0.05 0.05 0.9 0.9], ...
-        "Color",     [12, 16, 32]/255, ...
-        "XColor",    [160, 178, 214]/255, ...
-        "YColor",    [160, 178, 214]/255, ...
-        "GridColor", [46, 62, 98]/255, ...
-        "GridAlpha", 0.6, ...
+        "Color",     [4, 2, 58]/255, ...
+        "XColor",    [167, 187, 249]/255, ...
+        "YColor",    [167, 187, 249]/255, ...
+        "GridColor", [56, 74, 224]/255, ...
+        "GridAlpha", 0.28, ...
         "Box",       "on");
     ax2.XGrid = "on"; ax2.YGrid = "on";
     xlabel(ax2, "Period (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
     ylabel(ax2, "Radius (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
-    title(ax2, "Sampling Density & Generated Points", "Color", [248, 248, 248]/255);
+    title(ax2, "Sampling Density & Generated Points", "Color", [107, 209, 203]/255, "FontWeight", "bold");
 
     samplingController = SamplingController(session, fig, h2, ax2);
     fig.UserData.handles.samplingController = samplingController;
@@ -228,16 +228,16 @@ function figOut = assteroid_app(workFolder)
     ax5opt = uiaxes(visPanel5, ...
         "Units",     "normalized", ...
         "Position",  [0.05 0.05 0.9 0.9], ...
-        "Color",     [12, 16, 32]/255, ...
-        "XColor",    [160, 178, 214]/255, ...
-        "YColor",    [160, 178, 214]/255, ...
-        "GridColor", [46, 62, 98]/255, ...
-        "GridAlpha", 0.6, ...
+        "Color",     [4, 2, 58]/255, ...
+        "XColor",    [167, 187, 249]/255, ...
+        "YColor",    [167, 187, 249]/255, ...
+        "GridColor", [56, 74, 224]/255, ...
+        "GridAlpha", 0.28, ...
         "Box",       "on");
     ax5opt.XGrid = "on"; ax5opt.YGrid = "on";
     xlabel(ax5opt, "Period (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
     ylabel(ax5opt, "Radius (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
-    title(ax5opt, "Optimization Landscape", "Color", [248, 248, 248]/255);
+    title(ax5opt, "Optimization Landscape", "Color", [107, 209, 203]/255, "FontWeight", "bold");
 
     optController = OptimizeController(session, fig, h5, ax5opt);
     fig.UserData.handles.optimizeController = optController;
@@ -262,17 +262,17 @@ function figOut = assteroid_app(workFolder)
         "Units", "pixels", ...
         "Position", [1, 1, max(10, round(visPanel6.Position(3))), max(10, round(visPanel6.Position(4)))]);
 
-    tab6a = uitab(visTabGroup6, "Title", "1D Spectra", "BackgroundColor", [12, 16, 32]/255);
+    tab6a = uitab(visTabGroup6, "Title", "1D Spectra", "BackgroundColor", [3, 0, 51]/255);
     ax6a = createDarkAxes(tab6a, "Wavelength (nm)", "Metric value", "1D Spectra");
 
-    tab6b = uitab(visTabGroup6, "Title", "2D Map", "BackgroundColor", [12, 16, 32]/255);
+    tab6b = uitab(visTabGroup6, "Title", "2D Map", "BackgroundColor", [3, 0, 51]/255);
     ax6b = createDarkAxes(tab6b, "Period (nm)", "Radius (nm)", "2D Map");
 
-    tab6c = uitab(visTabGroup6, "Title", "3D Volume", "BackgroundColor", [12, 16, 32]/255);
+    tab6c = uitab(visTabGroup6, "Title", "3D Volume", "BackgroundColor", [3, 0, 51]/255);
     viewer6 = viewer3d(tab6c, ...
         "Units", "normalized", ...
         "Position", [0 0 1 1], ...
-        "BackgroundColor", "black", "BackgroundGradient", "off");
+        "BackgroundColor", [2, 0, 35]/255, "BackgroundGradient", "off");
 
     fig.UserData.handles.mainTabGroup      = tabGroup;
     fig.UserData.handles.visualizeHtml     = h6;
@@ -326,7 +326,7 @@ function figOut = assteroid_app(workFolder)
     end
 
     %% Startup console greeting -----------------------------------------------
-    logToConsole(fig, "ASSTEROID computational engine initialized. Ready.", "system");
+    logToConsole(fig, "ASSTEROID v7.0 computational engine initialized (Multi-Analyte Engine + OKHSL Suite). Ready.", "system");
     logToConsole(fig, sprintf("Working directory: %s", workFolder), "info");
     if defaultDb ~= ""
         logToConsole(fig, sprintf("Auto-loaded workspace database: %s", defaultDb), "success");
@@ -693,14 +693,36 @@ end
 function status = buildDbStatusStruct(fig)
 %buildDbStatusStruct  Build a struct summarizing the current DB state.
     db = fig.UserData.db;
-    if (isempty(db) || ~isstruct(db)) && isfield(fig.UserData, "session") ...
-            && ~isempty(fig.UserData.session) && isvalid(fig.UserData.session) ...
-            && ~isempty(fig.UserData.session.db) && isstruct(fig.UserData.session.db)
-        db = fig.UserData.session.db;
-        fig.UserData.db = db;
-        fig.UserData.dbFile = fig.UserData.session.dbFile;
-        fig.UserData.dbDirty = fig.UserData.session.dbDirty;
-        fig.UserData.workDir = fig.UserData.session.workDir;
+    hasSess = isfield(fig.UserData, "session") && ~isempty(fig.UserData.session) ...
+        && isvalid(fig.UserData.session);
+    if hasSess
+        sess = fig.UserData.session;
+        if (isempty(db) || ~isstruct(db)) && ~isempty(sess.db) && isstruct(sess.db)
+            db = sess.db;
+            fig.UserData.db = db;
+            fig.UserData.dbFile = sess.dbFile;
+            fig.UserData.dbDirty = sess.dbDirty;
+            fig.UserData.workDir = sess.workDir;
+        elseif isstruct(db)
+            sess.db = db;
+            sess.dbFile = fig.UserData.dbFile;
+            sess.dbDirty = fig.UserData.dbDirty;
+            sess.workDir = fig.UserData.workDir;
+        end
+        status = sess.getStatusStruct();
+        activeModel = [];
+        if isfield(fig.UserData, "visExport") && isstruct(fig.UserData.visExport) ...
+                && isfield(fig.UserData.visExport, "model") && ~isempty(fig.UserData.visExport.model)
+            activeModel = fig.UserData.visExport.model;
+        end
+        mTargets = discoverModelTargetMetrics(db, activeModel);
+        if ~isempty(mTargets)
+            status.modelTargetNames = cellstr(mTargets);
+        end
+        if ~isempty(activeModel)
+            status.hasModel = true;
+        end
+        return;
     end
 
     status = struct( ...
@@ -724,6 +746,10 @@ function status = buildDbStatusStruct(fig)
         "hasRI",         false, ...
         "hasAnalyte",    false, ...
         "analyteFile",   "", ...
+        "analyteLibrary", {cell(0, 1)}, ...
+        "analyteKeys",   {{}}, ...
+        "predAnalyteKeys", {{}}, ...
+        "simAnalyteKeys", {{}}, ...
         "hasOptima",     false, ...
         "optimaCount",   0, ...
         "workDir",       fig.UserData.workDir, ...
@@ -1313,7 +1339,7 @@ function [h, visPanel] = buildTabLayout(parentTab, htmlFile)
 
     % Visualization panel
     visPanel = uipanel(grid, ...
-        "BackgroundColor", [6, 8, 18]/255, ...
+        "BackgroundColor", [2, 0, 35]/255, ...
         "BorderType", "none");
     visPanel.Layout.Column = 2;
 end
@@ -1337,7 +1363,7 @@ function [h, visPanel] = buildImportTabLayout(parentTab, htmlFile)
     % Create a visPanel for QA plots — hidden by default.
     % runImportPipeline can show this by adjusting grid.ColumnWidth.
     visPanel = uipanel(parentTab, ...
-        "BackgroundColor", [6, 8, 18]/255, ...
+        "BackgroundColor", [2, 0, 35]/255, ...
         "BorderType", "none", ...
         "Visible", "off");
 end
@@ -1358,7 +1384,7 @@ function varargout = buildOptimizeTabLayout(parentTab, htmlFile)
     hUnified.Data = struct("mode", "unified");
 
     visPanel = uipanel(grid, ...
-        "BackgroundColor", [6, 8, 18]/255, ...
+        "BackgroundColor", [2, 0, 35]/255, ...
         "BorderType", "none");
     visPanel.Layout.Column = 2;
 
@@ -5641,6 +5667,12 @@ function [spec, scal] = localClassifyVisualizeFields(S, n)
         end
     end
     isVariant = endsWith(scal, ["_laser", "_broad", "_avg", "_analyte"]) | startsWith(scal, ["BEE_", "AEE_"]);
+    for si = 1:numel(scal)
+        if ~isVariant(si)
+            ps = parseMetricVariantName(scal(si));
+            isVariant(si) = ps.isDerived && ~ps.isVariantToken;
+        end
+    end
     scal = [scal(isVariant), scal(~isVariant)];
 end
 
@@ -6130,7 +6162,19 @@ function mf = detectMetricFields(allData)
            "LaserWl","lambda_exc_nm","RamanWindow","RamanWindowEffective", ...
            "p","r","particle_r","f","kappa_V","kappa_S","VolCorr","SurfCorr","V_corr","S_corr"];
     flds = string(fieldnames(allData));
-    mf = flds(~endsWith(flds, ["_broad", "_avg", "_laser", "_analyte", "_approx"]) & ~ismember(flds,exc));
+    keepSpec = true(size(flds));
+    for fi = 1:numel(flds)
+        fn = flds(fi);
+        if any(fn == exc) || endsWith(fn, ["_broad", "_avg", "_laser", "_analyte", "_approx"])
+            keepSpec(fi) = false;
+        else
+            pf = parseMetricVariantName(fn);
+            if pf.isDerived
+                keepSpec(fi) = false;
+            end
+        end
+    end
+    mf = flds(keepSpec);
 end
 
 function loadCustomColormap(fig)

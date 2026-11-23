@@ -20,6 +20,7 @@ function allData = loadOrGeneratePredictions(options)
         options.StokesShiftLimits (1,2) double = [100, 4200]
         options.MetricsShiftLimits double = []
         options.AnalyteSpectrum struct = struct()
+        options.AnalyteLibrary struct = struct([])
         options.InterpResolution (1,1) double = 2
         options.BatchSize (1,1) double = 1000
         options.SaveAfterGeneration (1,1) logical = true
@@ -80,9 +81,12 @@ function allData = loadOrGeneratePredictions(options)
                 @(frac, msg) reporter.progress("GeneratePredictions", frac, msg)}];
         end
 
-        % Add optional analyte spectrum
+        % Add optional analyte spectrum & library
         if ~isempty(fieldnames(options.AnalyteSpectrum))
             predArgs = [predArgs, {"AnalyteSpectrum", options.AnalyteSpectrum}];
+        end
+        if ~isempty(options.AnalyteLibrary)
+            predArgs = [predArgs, {"AnalyteLibrary", options.AnalyteLibrary}];
         end
 
         % Add optional interpolation resolution
@@ -147,9 +151,16 @@ function allData = loadOrGeneratePredictions(options)
         if hasReporter
             reporter.warn("LoadPredictions", "Converting legacy grid format to SoA...");
         end
-        allData = convertGridToSoA(loadedPred.predictions, ...
+        convertArgs = { ...
             "LaserWavelength", options.LambdaLaser, ...
-            "RamanWindow", options.StokesShiftLimits);
+            "RamanWindow", options.StokesShiftLimits};
+        if ~isempty(fieldnames(options.AnalyteSpectrum))
+            convertArgs = [convertArgs, {"AnalyteSpectrum", options.AnalyteSpectrum}];
+        end
+        if ~isempty(options.AnalyteLibrary)
+            convertArgs = [convertArgs, {"AnalyteLibrary", options.AnalyteLibrary}];
+        end
+        allData = convertGridToSoA(loadedPred.predictions, convertArgs{:});
         allData = localNormalizePredictionFieldNames(allData);
         if hasReporter
             reporter.complete("LoadPredictions", "Converted legacy predictions to SoA format.");

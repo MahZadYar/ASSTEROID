@@ -29,6 +29,7 @@ function allDataRaw = predictPointsSurrogate(options)
         options.StokesShiftLimits double = [100, 4200]
         options.InterpResolution double = 5
         options.AnalyteSpectrum struct = struct()
+        options.AnalyteLibrary struct = struct([])
         options.BatchSize double = 1000
         options.Reporter = []
         options.MetricsWindow double = []
@@ -41,5 +42,6 @@ function allDataRaw = predictPointsSurrogate(options)
     allDataRaw = buildPointPredictionSoA( ...
         predictor, options.P, options.R, options.LambdaSamples, ...
         options.LambdaLaser, options.StokesShiftLimits, options.InterpResolution, ...
-        options.AnalyteSpectrum, options.Reporter, "PredictInterpolate", options.MetricsWindow);
+        options.AnalyteSpectrum, options.Reporter, "PredictInterpolate", ...
+        options.MetricsWindow, options.AnalyteLibrary);
 end

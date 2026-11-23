@@ -11,6 +11,7 @@ function predictions = predict_dense_spectrum(model, pVec, rVec, lambdaVec, ri, 
 %   'LaserWavelength'  - laser wavelength in nm (default: first lambda * 1e3)
 %   'RamanWindow'      - [min, max] Raman shift in cm^-1 (default: [100, 3500])
 %   'AnalyteSpectrum'  - struct with .shift_cm and .intensity for analyte-weighted metrics
+%   'AnalyteLibrary'   - struct array (.key, .spectrum) for simultaneous *_analyte_<KEY> metrics
 %   'InterpResolution' - interpolation resolution in 1/cm for averaging (default: 1)
 %
 % Output:
@@ -33,7 +34,8 @@ function predictions = predict_dense_spectrum(model, pVec, rVec, lambdaVec, ri, 
 
 opts = struct('ChunkSize', 200000, 'Verbose', true, 'LaserWavelength', [], ...
     'RamanWindow', [100, 3500], 'MetricsRamanWindow', [], ...
-    'AnalyteSpectrum', struct(), 'InterpResolution', 1, 'BatchSize', 2000, ...
+    'AnalyteSpectrum', struct(), 'AnalyteLibrary', struct([]), ...
+    'InterpResolution', 1, 'BatchSize', 2000, ...
     'ProgressFcn', [], 'ExecutionEnvironment', "auto", 'MiniBatchSize', 32768);
 if mod(numel(varargin), 2) ~= 0
     error('predict_dense_spectrum:Args', 'Name-value pairs expected.');
@@ -163,21 +165,32 @@ if canAvg
     shiftRange = shiftVec(end) - shiftVec(1);
 end
 
-% Analyte weights
+% Analyte weights (active single spectrum + optional multi-analyte library)
 analyteSpec = opts.AnalyteSpectrum;
 hasAnalyte  = isstruct(analyteSpec) && isfield(analyteSpec, 'shift_cm') && ...
               ~isempty(analyteSpec.shift_cm) && canAvg;
 analyteWeights = [];
 if hasAnalyte
-    aw = interp1(analyteSpec.shift_cm(:), analyteSpec.intensity(:), ...
-                 shiftVec(:)', 'makima', 0);
-    aw = max(0, aw(:)');
-    if sum(aw) > 0
-        analyteWeights = aw / sum(aw);
-    else
+    analyteWeights = computeAnalyteGridWeights(shiftVec, analyteSpec, "makima");
+    if ~any(analyteWeights > 0)
         hasAnalyte = false;
     end
 end
+
+analyteLib = opts.AnalyteLibrary;
+libKeys = strings(1, 0);
+libWeights = zeros(numel(shiftVec), 0);
+if canAvg && isstruct(analyteLib) && ~isempty(analyteLib)
+    rawW = computeAnalyteGridWeights(shiftVec, analyteLib, "makima");
+    for li = 1:numel(analyteLib)
+        if isfield(analyteLib(li), 'key') && strlength(string(analyteLib(li).key)) > 0 ...
+                && size(rawW, 2) >= li && any(rawW(:, li) > 0)
+            libKeys(end+1) = string(analyteLib(li).key); %#ok<AGROW>
+            libWeights(:, end+1) = rawW(:, li); %#ok<AGROW>
+        end
+    end
+end
+hasLib = ~isempty(libKeys);
 
 for t = 1:numTargets
     tName   = targetNames{t};
@@ -192,9 +205,16 @@ for t = 1:numTargets
         % _broad (canonical) and _avg (backward-compatible alias)
         predictions.([tName, '_broad']) = broadVal;
         predictions.([tName, '_avg'])   = broadVal;
-        % _analyte: analyte-spectrum-weighted average
+        % _analyte: active analyte-spectrum-weighted average
         if hasAnalyte
             predictions.([tName, '_analyte']) = stokesMat * analyteWeights(:);
+        end
+        % _<KEY>: vectorized multi-analyte evaluation (e.g. EE_V_H2S, EE_S_CH4)
+        if hasLib
+            libVals = stokesMat * libWeights; % [numValid × K]
+            for li = 1:numel(libKeys)
+                predictions.([tName, '_', char(libKeys(li))]) = libVals(:, li);
+            end
         end
     else
         predictions.([tName, '_broad']) = specMat(:, laserIdx);
@@ -258,5 +278,26 @@ if isfield(predictions, 'EF_surf_analyte')
 elseif isfield(predictions, 'EE_S_analyte')
     predictions.AEE_surf        = predictions.EE_S_analyte;
     predictions.EF_surf_analyte = predictions.EE_S_analyte;
+end
+
+% Synchronize legacy/canonical aliases for any _<KEY> analyte fields
+if hasLib
+    aliasPairs = { ...
+        "EF_vol",      "EE_V"; ...
+        "EF_surf",     "EE_S"; ...
+        "Absorptance", "Abs" ...
+    };
+    for li = 1:numel(libKeys)
+        sfx = ['_', char(libKeys(li))];
+        for ap = 1:size(aliasPairs, 1)
+            fA = [char(aliasPairs{ap, 1}), sfx];
+            fB = [char(aliasPairs{ap, 2}), sfx];
+            if isfield(predictions, fA) && ~isfield(predictions, fB)
+                predictions.(fB) = predictions.(fA);
+            elseif isfield(predictions, fB) && ~isfield(predictions, fA)
+                predictions.(fA) = predictions.(fB);
+            end
+        end
+    end
 end
 end

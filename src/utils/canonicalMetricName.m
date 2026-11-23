@@ -3,6 +3,7 @@ function metricName = canonicalMetricName(baseMetric, metricVariant)
 %   metricName = canonicalMetricName("EE_V", "laser")   -> "EE_V_laser"
 %   metricName = canonicalMetricName("EE_V", "broad")   -> "EE_V_broad"
 %   metricName = canonicalMetricName("EE_V", "analyte") -> "EE_V_analyte"
+%   metricName = canonicalMetricName("EE_V", "H2S")     -> "EE_V_H2S"
 %   metricName = canonicalMetricName("EF_vol", "avg")   -> "EF_vol_avg"
 
     arguments
@@ -11,21 +12,20 @@ function metricName = canonicalMetricName(baseMetric, metricVariant)
     end
 
     b = string(baseMetric);
-    v = lower(string(metricVariant));
-    if strlength(b) == 0
-        metricName = "";
+    if isempty(b)
+        metricName = b;
         return;
     end
-    switch v
-        case "laser"
-            metricName = b + "_laser";
-        case {"weighted", "analyte"}
-            metricName = b + "_analyte";
-        case {"broad", "broadband"}
-            metricName = b + "_broad";
-        case "avg"
-            metricName = b + "_avg";
-        otherwise
-            metricName = b + "_broad";
+
+    parsed = parseMetricVariantName(metricVariant, IsVariantToken=true);
+    if parsed.isVariantToken && strlength(parsed.variant) > 0
+        sfx = "_" + parsed.variant;
+    else
+        sfx = "_broad";
     end
+
+    metricName = strings(size(b));
+    nonEmpty = strlength(b) > 0;
+    metricName(nonEmpty) = b(nonEmpty) + sfx;
+    metricName(~nonEmpty) = "";
 end

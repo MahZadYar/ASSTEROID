@@ -25,6 +25,17 @@ function [filtered, includedFields] = selectPredictionFieldsCanonical(allData, s
             baseMetrics = ["Abs", "EF_max", "EE_V", "EE_S"];
         end
         suffixes = ["", "_laser", "_broad", "_analyte"];
+        % Also preserve any keyed analyte (<base>_<KEY>) scalar columns already computed in allData
+        allFn = string(fieldnames(allData));
+        for fi = 1:numel(allFn)
+            pf = parseMetricVariantName(allFn(fi));
+            if pf.isDerived && ~pf.isVariantToken && strlength(pf.analyteKey) > 0
+                sfx = "_" + pf.analyteKey;
+                if ~ismember(sfx, suffixes)
+                    suffixes(end+1) = sfx; %#ok<AGROW>
+                end
+            end
+        end
         selectedFields = strings(1, 0);
         for bi = 1:numel(baseMetrics)
             for si = 1:numel(suffixes)
@@ -132,15 +143,13 @@ function alts = expandAliasCandidates(name)
         ["EF_max", "E4_max", "M2_max", "E4"], ...
         ["ECC", "ECCheck"]};
 
-    suffixes = ["_laser", "_broad", "_avg", "_analyte", "_approx"];
-    base = name;
-    sfx = "";
-    for s = suffixes
-        if endsWith(name, s)
-            base = extractBefore(name, strlength(name) - strlength(s) + 1);
-            sfx = s;
-            break;
-        end
+    parsed = parseMetricVariantName(name);
+    if parsed.isDerived && ~parsed.isVariantToken && strlength(parsed.baseRaw) > 0
+        base = parsed.baseRaw;
+        sfx = "_" + parsed.variant;
+    else
+        base = name;
+        sfx = "";
     end
 
     alts = name;

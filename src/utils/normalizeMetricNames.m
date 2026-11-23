@@ -57,17 +57,26 @@ aliasValues = {'EE_V','EE_V','EE_V','EE_V', ...
                'EF_vol', 'EF_surf', 'EF_vol', 'EF_surf', 'EF_vol', 'EF_surf'};
 aliasMap = containers.Map(aliasKeys, aliasValues);
 
-% Normalize input strings
-normalizedInputs = lower(regexprep(string(metricsInput), '\s+', ''));
-metricsCanonical = cell(size(normalizedInputs));
+% Normalize input strings using canonical parser so _analyte_<KEY> and legacy suffixes strip cleanly
+rawInputs = string(metricsInput);
+metricsCanonical = cell(size(rawInputs));
 
-for idx = 1:numel(normalizedInputs)
+for idx = 1:numel(rawInputs)
+    trimmed = regexprep(rawInputs(idx), '\s+', '');
+    parsed = parseMetricVariantName(trimmed);
+    if parsed.isDerived && ~parsed.isVariantToken && strlength(parsed.baseRaw) > 0
+        baseClean = parsed.baseRaw;
+    else
+        baseClean = trimmed;
+    end
+
     % Remove non-alphanumeric characters
-    key = regexprep(normalizedInputs(idx), '[^a-z0-9_]', '');
-    
-    % Strip derived suffixes to map to base metric
+    key = regexprep(lower(baseClean), '[^a-z0-9_]', '');
+
+    % Strip any remaining derived suffixes to map to base metric
+    key = regexprep(key, '_(analyte|weighted)(?:_[a-z0-9_]+)?$', '');
     key = regexprep(key, '_(broad|broadband|avg|analyte|weighted|laser|approx)$', '');
-    
+
     % Attempt alias lookup
     if isKey(aliasMap, key)
         metricsCanonical{idx} = aliasMap(key);
@@ -77,8 +86,8 @@ for idx = 1:numel(normalizedInputs)
         if ~isempty(matchIdx)
             metricsCanonical{idx} = availableTargets{matchIdx};
         else
-            % Accept dynamically detected metrics directly as char
-            metricsCanonical{idx} = char(metricsInput(idx));
+            % Accept dynamically detected metrics directly as char (preserving stripped base case)
+            metricsCanonical{idx} = char(baseClean);
         end
     end
 end

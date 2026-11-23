@@ -294,6 +294,19 @@ function [mergedEntry, isUpdated] = mergeEntryWithNewWavelengths(oldEntry, newEn
 
     hasValidAnalyte = isstruct(analyteSpectrum) && ...
         isfield(analyteSpectrum, "shift_cm") && ~isempty(analyteSpectrum.shift_cm);
+    analyteLib = struct("key", {}, "spectrum", {});
+    if isfield(cfg, "analyteLibrary") && isstruct(cfg.analyteLibrary) && ~isempty(cfg.analyteLibrary)
+        for li = 1:numel(cfg.analyteLibrary)
+            eLib = cfg.analyteLibrary(li);
+            if isfield(eLib, "key") && strlength(string(eLib.key)) > 0
+                sp = eLib;
+                if isfield(eLib, "spectrum") && isstruct(eLib.spectrum), sp = eLib.spectrum; end
+                if isfield(sp, "shift_cm") && ~isempty(sp.shift_cm) && isfield(sp, "intensity") && ~isempty(sp.intensity)
+                    analyteLib(end+1) = struct("key", string(eLib.key), "spectrum", sp); %#ok<AGROW>
+                end
+            end
+        end
+    end
 
     mv = struct();
     if isfield(cfg, "metricVariants") && isstruct(cfg.metricVariants)
@@ -344,22 +357,49 @@ function [mergedEntry, isUpdated] = mergeEntryWithNewWavelengths(oldEntry, newEn
             mergedEntry = rmfield(mergedEntry, fn + "_broad");
         end
 
-        % Analyte-weighted variant
-        if isVariantEnabledLocal(mv, fn + "_analyte")
-            validStokes = stokesWindowMask & isfinite(data);
-            if hasValidAnalyte && nnz(validStokes) >= 2 && shiftRange > 0
-                rs = RamanShift_cm(validStokes);
-                dvals = data(validStokes);
-                [rs, sOrd] = sort(rs);
-                dvals = dvals(sOrd);
-                shiftDense = linspace(shiftMin, shiftMax, interpSamples);
-                dense = safeInterpolateLocal(rs, dvals, shiftDense, interpMethod);
-                mergedEntry.(fn + "_analyte") = computeAnalyteWeightedMetric(shiftDense, dense, analyteSpectrum);
+        % Analyte-weighted variant(s): compute dense spectrum once for active + library analytes
+        wantActiveAnalyte = isVariantEnabledLocal(mv, fn + "_analyte");
+        wantAnyLibAnalyte = false;
+        for li = 1:numel(analyteLib)
+            if isVariantEnabledLocal(mv, fn + "_" + analyteLib(li).key)
+                wantAnyLibAnalyte = true;
+                break;
+            end
+        end
+
+        validStokes = stokesWindowMask & isfinite(data);
+        denseForAnalyte = [];
+        shiftDenseForAnalyte = [];
+        if (wantActiveAnalyte || wantAnyLibAnalyte) && nnz(validStokes) >= 2 && shiftRange > 0
+            rs = RamanShift_cm(validStokes);
+            dvals = data(validStokes);
+            [rs, sOrd] = sort(rs);
+            dvals = dvals(sOrd);
+            shiftDenseForAnalyte = linspace(shiftMin, shiftMax, interpSamples);
+            denseForAnalyte = safeInterpolateLocal(rs, dvals, shiftDenseForAnalyte, interpMethod);
+        end
+
+        if wantActiveAnalyte
+            if hasValidAnalyte && ~isempty(denseForAnalyte)
+                mergedEntry.(fn + "_analyte") = computeAnalyteWeightedMetric(shiftDenseForAnalyte, denseForAnalyte, analyteSpectrum);
             else
                 mergedEntry.(fn + "_analyte") = NaN;
             end
         elseif isfield(mergedEntry, fn + "_analyte")
             mergedEntry = rmfield(mergedEntry, fn + "_analyte");
+        end
+
+        for li = 1:numel(analyteLib)
+            libField = fn + "_" + analyteLib(li).key;
+            if isVariantEnabledLocal(mv, libField)
+                if ~isempty(denseForAnalyte)
+                    mergedEntry.(libField) = computeAnalyteWeightedMetric(shiftDenseForAnalyte, denseForAnalyte, analyteLib(li).spectrum);
+                else
+                    mergedEntry.(libField) = NaN;
+                end
+            elseif isfield(mergedEntry, libField)
+                mergedEntry = rmfield(mergedEntry, libField);
+            end
         end
     end
 
@@ -388,9 +428,8 @@ end
 %  ========================================================================
 
 function tf = isDerivedVariantName(fn)
-    fn = char(fn);
-    tf = endsWith(fn, '_laser') || endsWith(fn, '_broad') || ...
-         endsWith(fn, '_avg') || endsWith(fn, '_analyte');
+    parsed = parseMetricVariantName(string(fn));
+    tf = parsed.isDerived && ~parsed.isVariantToken;
 end
 
 function out = preferNonEmptyFields(eA, eB)

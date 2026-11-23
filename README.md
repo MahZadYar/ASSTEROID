@@ -3,7 +3,7 @@
 **Adaptive Sampling, Surrogate Training, Exploration and Refinement for Optimal Inverse Design**
 
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2026a%20%7C%20R2026b-blue.svg)](https://www.mathworks.com/products/matlab.html)
-[![Version](https://img.shields.io/badge/Version-6.5-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
+[![Version](https://img.shields.io/badge/Version-7.0-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.1021%2Facsnano.XXXXXXX-orange.svg)](#citation)
 [![Zenodo](https://img.shields.io/badge/Data-10.5281%2Fzenodo.XXXXXXX-blue.svg)](#dataset--trained-models)
@@ -90,7 +90,7 @@ flowchart LR
     subgraph S4 ["🔮 Stage 4: Dense Prediction"]
         NetFile --> DenseInference["Dense Grid Inference<br/>&gt; 1.2M Coordinates"]
         DenseInference --> Quad["makima Splines &<br/>Raman Quadrature"]
-        Quad --> Efficacies["7 Continuous Optical<br/>Efficacy Landscapes"]
+        Quad --> Efficacies["Continuous Optical<br/>Enhancement Efficacy Landscapes"]
     end
 
     subgraph S5 ["🔍 Stage 5: Multimodal Optimization"]
@@ -148,7 +148,7 @@ flowchart TD
 #### 📥 Stage 1: Data Ingestion & Quality Control
 * **CLI Entry Point:** [`scripts/pipeline/run_import_prl_sweep.m`](scripts/pipeline/run_import_prl_sweep.m)
 * **Core Orchestrator:** [`src/orchestration/runImportSweepWorkflow.m`](src/orchestration/runImportSweepWorkflow.m)
-* **Function:** Ingests raw full-wave FEM parametric sweep exports (`.dat`/`.csv`), normalizes headers across solver versions, validates electromagnetic passivity ($0 \leq A \leq 1$), compensates for varying unit-cell footprints ($A_{\text{cell}} = \frac{\sqrt{3}}{2}P^2$), and merges records into the canonical Structure-of-Arrays database.
+* **Function:** Ingests raw full-wave FEM parametric sweep exports (`.dat`/`.csv`), normalizes headers across solver versions, validates electromagnetic passivity ($0 \leq \mathrm{Abs} \leq 1$), compensates for varying unit-cell footprints ($A_{\text{cell}} = \frac{\sqrt{3}}{2}P^2$), and merges records into the canonical Structure-of-Arrays database.
 
 #### 🎯 Stage 2: Adaptive Exploration & Rejection Sampling
 * **CLI Entry Point:** [`scripts/sampling/run_AdaptiveParameterSampling.m`](scripts/sampling/run_AdaptiveParameterSampling.m)
@@ -160,10 +160,10 @@ flowchart TD
 * **Core Orchestrator:** [`src/orchestration/runTrainingWorkflow.m`](src/orchestration/runTrainingWorkflow.m)
 * **Function:** Trains an 8-input (`v3_physics`), 3-head neural surrogate—by default the **Geometry–Spectrum Factorized Tensor Network (`"gs_tensor"`)**, a λ-blind geometry encoder $G(P, r)$ gating a spectral–geometric residual stream through geometry-conditioned bilinear residual blocks with identity skips and physically bounded heads; the legacy **Standard Residual Network (`"resnet"`)**, **Low-Rank Tensor-Product ResNet (`"tensor_resnet"`)** and the **`"lean_resnet"`** ablation remain selectable—mapping geometric scale ($\ln P, \ln r, \ln \lambda$), $C^2$-smoothed experimental gold permittivity ($\varepsilon_1(\lambda), \varepsilon_2(\lambda)$), electrodynamic ratios ($P/\lambda, r/\lambda$) and the log lateral gap ($\ln g_{\text{norm}}$) to far-field absorptance $\mathrm{Abs}(\lambda)$ and the unit-cell-normalized volumetric and surface Enhancement Efficacy spectra $\mathrm{EE}_V(\lambda)$ and $\mathrm{EE}_S(\lambda)$. Supports both uniform `"mse"` and **Peak-Weighted MSE (`"peak_mse"`)** ($w_{\text{peak}}(T) = 1 + 0.5\max(T,0)^2$), automatic Duan log-normal smearing calibration to eliminate Jensen's inequality peak underestimation, Layer Normalization, GELU activations, and real-time epoch-throttled log-log training diagnostics. Computes a three-tier performance audit (Empirical Holdout, Inverse Density Weighted global design-space expectation, and Resonance Optima Regions of Interest) with automated LaTeX table generation.
 
-#### 🔮 Stage 4: Dense Landscape Prediction & Spectral Efficacy
+#### 🔮 Stage 4: Dense Landscape Prediction & Spectral Enhancement Efficacy
 * **CLI Entry Point:** [`scripts/pipeline/run_prediction_vis.m`](scripts/pipeline/run_prediction_vis.m)
 * **Core Orchestrator:** [`src/orchestration/runPredictionVisWorkflow.m`](src/orchestration/runPredictionVisWorkflow.m)
-* **Function:** Evaluates the surrogate across an ultra-dense continuous grid ($> 1.2 \times 10^6$ nodes at $\Delta P = \Delta r = 0.7 \, \text{nm}$). Reconstructs high-resolution continuous Stokes spectra ($100$--$3600 \, \text{cm}^{-1}$) via Modified Akima Hermite splines (`makima`) and evaluates all single-frequency and spectrally integrated optical efficacy landscapes.
+* **Function:** Evaluates the surrogate across an ultra-dense continuous grid ($> 1.2 \times 10^6$ nodes at $\Delta P = \Delta r = 0.7 \, \text{nm}$). Reconstructs high-resolution continuous Stokes spectra ($100$--$4200 \, \text{cm}^{-1}$) via Modified Akima Hermite splines (`makima`) and evaluates all single-wavelength and spectrally integrated optical Enhancement Efficacy landscapes (including simultaneous multi-analyte `*_<KEY>` reductions for selected working analytes).
 
 #### 🔍 Stage 5: Topology-Aware Multimodal Optimization & Basin Curation
 * **CLI Entry Point:** [`scripts/pipeline/run_locate_maxima.m`](scripts/pipeline/run_locate_maxima.m)
@@ -180,24 +180,25 @@ flowchart TD
 ## Data Model & Metric Reference
 
 ### Canonical Metrics
-ASSTEROID operates across seven fundamental optical figures of merit evaluated at the laser line ($\lambda_L = 785 \, \text{nm}$) and integrated across the Stokes Raman shift band:
+ASSTEROID operates across the eight canonical optical figures of merit—four single-wavelength ($\lambda_L = 785\text{ nm}$) benchmarks ($\mathrm{Abs}^L, \mathrm{EF}_{\max}^L, \mathrm{EE}_S^L, \mathrm{EE}_V^L$) and four two-frequency unit-cell Enhancement Efficacy metrics ($\mathrm{EE}_S^{\text{broad}}, \mathrm{EE}_V^{\text{broad}}, \mathrm{EE}_S^{\text{analyte}}, \mathrm{EE}_V^{\text{analyte}}$)—plus simultaneous clean-keyed per-analyte variants (`*_<KEY>`, e.g., `EE_V_CH4`, `EE_V_H2S`) across the built-in 6-gas Raman fingerprint library (`CH4`, `C2H4`, `H2S`, `NH3`, `C2H2`, `H2O`) and user-registered custom spectra (with selectable workspace working analytes via `db.Global.SelectedAnalytes`, plus backward-compatible `*_analyte_<KEY>` reading):
 
-| Metric Symbol | Code Identifier | Description | Physical Focus |
+| Metric Symbol | Canonical Field (Legacy Alias) | Description | Physical Focus |
 |:---|:---|:---|:---|
-| $A_L$ | `Absorptance` (at $\lambda_L$) | Far-field optical absorbance | Energy dissipation & coupling |
-| $\text{EF}_{S, \text{approx}}^{\text{cell}}$ | `EF_surf` (at $\lambda_L$) | Cell-normalized surface proxy ($E^4$ proxy) | Surface loading at laser line |
-| $\text{EF}_{V, \text{approx}}^{\text{cell}}$ | `EF_vol` (at $\lambda_L$) | Cell-normalized volume proxy ($E^4$ proxy) | Volumetric loading at laser line |
-| $\eta_S^{\text{broad}}$ | `EF_surf_avg` | Broadband surface enhancement efficacy | Surface enhancement across Raman band |
-| $\eta_V^{\text{broad}}$ | `EF_vol_avg` | Broadband volumetric enhancement efficacy | Volume enhancement across Raman band |
-| $\eta_S^{\text{analyte}}$ | `EF_surf_analyte` | Analyte-weighted surface efficacy | Surface overlap with molecular Raman fingerprint |
-| $\eta_V^{\text{analyte}}$ | `EF_vol_analyte` | Analyte-weighted volumetric efficacy | Volume overlap with molecular Raman fingerprint |
+| $\mathrm{Abs}^L$ | `Abs_laser` (`Absorptance_laser`) | Far-field optical absorptance $1 - R(\omega_L)$ | Energy dissipation & coupling |
+| $\mathrm{EF}_{\max}^L$ | `EF_max_laser` (`M2_max_laser`) | Single-point hotspot maximum $\max \|\widetilde{\mathbf{E}}_L\|^4 / |E_{0,L}|^4$ | Peak local field localization |
+| $\mathrm{EE}_S^L$ | `EE_S_laser` (`EF_surf_laser`) | Single-wavelength surface Enhancement Efficacy ($\kappa_S \langle \mathrm{EF}^L \rangle_S$) | Surface loading at laser line |
+| $\mathrm{EE}_V^L$ | `EE_V_laser` (`EF_vol_laser`) | Single-wavelength volumetric Enhancement Efficacy ($\kappa_V \langle \mathrm{EF}^L \rangle_V$) | Volumetric loading at laser line |
+| $\mathrm{EE}_S^{\text{broad}}$ | `EE_S_broad` (`EF_surf_avg`) | Broadband surface Enhancement Efficacy ($[100, 4200]\text{ cm}^{-1}$) | Surface enhancement across Raman band |
+| $\mathrm{EE}_V^{\text{broad}}$ | `EE_V_broad` (`EF_vol_avg`) | Broadband volumetric Enhancement Efficacy ($[100, 4200]\text{ cm}^{-1}$) | Volumetric enhancement across Raman band |
+| $\mathrm{EE}_S^{\text{analyte}}$ | `EE_S_analyte` / `EE_S_<KEY>` (`EE_S_analyte_<KEY>`) | Analyte-weighted surface Enhancement Efficacy | Surface overlap with molecular Raman fingerprint |
+| $\mathrm{EE}_V^{\text{analyte}}$ | `EE_V_analyte` / `EE_V_<KEY>` (`EE_V_analyte_<KEY>`) | Analyte-weighted volumetric Enhancement Efficacy | Volumetric overlap with molecular Raman fingerprint |
 
 ### Structure-of-Arrays (SoA) Format
-All dataset MAT files (`allData.mat`, `prl_sweep_*.mat`) store variables in a memory-aligned SoA layout:
-* **Geometry Vectors:** `period` ($N \times 1$ in nm), `radius` ($N \times 1$ in nm)
-* **Spectral Coordinates:** `lambda` ($N \times L$ in nm), `f` ($N \times L$ in Hz), `RamanShift` ($N \times L$ in $\text{cm}^{-1}$)
-* **Full Spectral Responses:** `Absorptance`, `EF_vol`, `EF_surf` ($N \times L$ numeric matrices)
-* **Integrated Scalars:** `EF_vol_avg`, `EF_surf_avg`, `EF_vol_analyte`, `EF_surf_analyte` ($N \times 1$)
+All dataset MAT files store variables in a memory-aligned SoA layout:
+* **Geometry Vectors:** `period` ($N \times 1$ in nm), `radius` ($N \times 1$ in nm), `kappa_S`, `kappa_V` ($N \times 1$)
+* **Spectral Coordinates:** `lambda` ($1 \times L$ or $N \times L$ in nm), `RamanShift` ($1 \times L$ or $N \times L$ in $\text{cm}^{-1}$)
+* **Full Spectral Responses:** `Abs`, `EF_max`, `EE_V`, `EE_S` ($N \times L$ numeric matrices; legacy aliases `Absorptance`, `EF_vol`, `EF_surf` supported)
+* **Integrated Scalars:** `*_laser`, `*_broad` / `*_avg`, `*_analyte`, and per-analyte `*_<KEY>` ($N \times 1$ in `double`)
 
 ```mermaid
 classDiagram
@@ -279,7 +280,7 @@ The application provides:
 
 ### Interactive Multimodal Seed Curation & Optimization Workflow
 The optimization canvas (Stage 5) provides a robust 4-step interactive cycle:
-1. **Preview Landscape**: Evaluates the surrogate across an ultra-dense $(P, r)$ grid for any canonical metric ($A_L, \text{EF}_V^{\text{cell}}, \text{EF}_S^{\text{cell}}, \eta_V^{\text{broad}}, \eta_V^{\text{analyte}}$).
+1. **Preview Landscape**: Evaluates the surrogate across an ultra-dense $(P, r)$ grid for any canonical metric ($\mathrm{Abs}^L, \mathrm{EF}_{\max}^L, \mathrm{EE}_S^L, \mathrm{EE}_V^L, \mathrm{EE}_S^{\text{broad}}, \mathrm{EE}_V^{\text{broad}}, \mathrm{EE}_S^{\text{analyte}}, \mathrm{EE}_V^{\text{analyte}}$, or any selected keyed `<KEY>` target such as `EE_V_H2S`).
 2. **Topological Seed Detection**: Automatically identifies discrete candidate stationary points ($\nabla F \approx 0, \nabla^2 F < 0$) using 8-connected local extrema filtering and non-maximum suppression.
 3. **Manual Curation & Semantic Tagging**: Researchers can prune boundary artifacts, adjust coordinates directly in the reactive table, and assign physical modal tags (*Mode I*, *Mode II+*, *SLR Dipole*).
 4. **Continuous Refinement**: Dispatches MultiStart constrained optimization (`fmincon` with analytical `dlgradient`) from curated seeds, preserving custom tags and saving full convergence histories (`IterPath`) to `maximaResults.mat`.
@@ -319,6 +320,12 @@ Comprehensive architectural specifications, mathematical formalisms, and user ma
 * [Surrogate Checkpoint Guide](docs/checkpoint_guide.md): Checkpointing, training interruption handling, and fine-tuning procedures.
 
 ---
+
+## What's New in Version 7.0
+
+* 🧪 **Simultaneous Multi-Analyte Suite & Clean `<KEY>` Naming (`*_<KEY>`)**: Keyed analyte metrics drop the redundant `_analyte_` infix and store directly as clean identifiers such as `EE_V_CH4`, `EE_V_C2H4`, `EE_V_H2S`, `EE_V_NH3`, `EE_V_C2H2`, `EE_V_H2O`, and sanitized custom keys (e.g., `EE_V_CO_probe`) across Stages 0, 1, 4, 5, and 6 ([`knownAnalyteKeysRegistry`](src/utils/knownAnalyteKeysRegistry.m), [`parseMetricVariantName`](src/utils/parseMetricVariantName.m), [`resolveDerivedMetricField`](src/utils/resolveDerivedMetricField.m)), while retaining full backward-compatible reading of legacy `*_analyte_<KEY>` and generic single-analyte `*_analyte`.
+* ✅ **Workspace Working Analytes Selection (`db.Global.SelectedAnalytes`)**: Stage 0 adds an interactive **Working Analytes** chip matrix (`SetSelectedAnalytes` with *All* / *Built-in* / *Clear* controls and ★ active-fallback selection), synchronized automatically into Stage 1 (`RecalculateDerived` / import), Stage 4 (dense prediction pills), Stage 5 (optimization target selector), and Stage 6 (grouped 2D scalar fields ordered with working analytes first).
+* 🎨 **Unified OKHSL v7.0 Platform Theme & Polish**: Full visual overhaul across all seven HTML5 tabs, global console, and MATLAB plot canvases built strictly on the canonical `Pallette.svg` OKHSL hierarchy — `A10`–`A40` cobalt fills/backgrounds, `B50`/`B60` electric-violet primary buttons & interactive rims, `C60`–`C80` SERS-teal highlights & completion indicators, `D70`/`D80` luminous gold warnings/optima callouts, and semantic red error/abort controls — anchored by unified `.stage-header` banners (`v7.0` pill) and a Stage 0 `ASSTEROID v7.0` release launch card.
 
 ## What's New in Version 6.5
 
@@ -365,7 +372,7 @@ Comprehensive test suites are located in [`tests/`](tests/). Run all tests to ve
 ```matlab
 setup_project
 
-% Run complete automated test suite (19 suites, 100% coverage):
+% Run complete automated test suite (40 suites, 100% passing):
 summary = run_all_tests();
 disp(summary)
 
@@ -374,6 +381,7 @@ run("tests/test_soa_conversion.m")          % SoA conversion and grid reshaping
 run("tests/test_unit_conversion.m")         % Dimensional unit consistency
 run("tests/test_interp_column_order.m")     % Spectral column alignment verification
 run("tests/test_defaults.m")                % Built-in dispersion and analyte checks
+run("tests/test_multi_analyte_pipeline.m")  % Multi-analyte *<KEY> suite & SelectedAnalytes
 run("tests/test_surrogate_v2.m")            % Benchmark surrogate pipeline, log targets, AD gradients
 run("tests/test_gs_tensor.m")               % gs_tensor architecture, bounded heads, v3 features
 ```

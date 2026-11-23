@@ -218,6 +218,11 @@ classdef AssteroidSession < handle
                 "hasRI",          obj.riLoaded, ...
                 "hasAnalyte",     false, ...
                 "analyteFile",    "", ...
+                "analyteLibrary", {cell(0, 1)}, ...
+                "analyteKeys",    {{}}, ...
+                "selectedAnalytes", {{}}, ...
+                "predAnalyteKeys", {{}}, ...
+                "simAnalyteKeys", {{}}, ...
                 "hasOptima",      false, ...
                 "optimaCount",    0, ...
                 "workDir",        obj.workDir, ...
@@ -292,6 +297,27 @@ classdef AssteroidSession < handle
                 status.hasOptima = nOpt > 0;
                 status.optimaCount = nOpt;
             end
+
+            % Multi-analyte catalog + working selection + discovered DB analyte keys
+            try
+                [libMeta, libKeys] = AssteroidSession.summarizeAnalyteLibrary(obj);
+                status.analyteLibrary = libMeta;
+                status.analyteKeys    = libKeys;
+                if isfield(db_, "Global") && isstruct(db_.Global) && isfield(db_.Global, "SelectedAnalytes")
+                    rawSel = strtrim(string(db_.Global.SelectedAnalytes(:)'));
+                    rawSel = rawSel(strlength(rawSel) > 0);
+                    status.selectedAnalytes = cellstr(rawSel);
+                else
+                    status.selectedAnalytes = libKeys;
+                end
+            catch
+            end
+            if isfield(db_, "Sim") && isstruct(db_.Sim)
+                status.simAnalyteKeys = cellstr(AssteroidSession.discoverBranchAnalyteKeys(db_.Sim));
+            end
+            if isfield(db_, "Pred") && isstruct(db_.Pred)
+                status.predAnalyteKeys = cellstr(AssteroidSession.discoverBranchAnalyteKeys(db_.Pred));
+            end
         end
 
         function tf = hasSimData(obj)
@@ -319,6 +345,45 @@ classdef AssteroidSession < handle
 
         function set.dirty(obj, val)
             obj.dbDirty = logical(val);
+        end
+    end
+
+    methods (Static)
+        function [libMeta, libKeys] = summarizeAnalyteLibrary(target)
+        % SUMMARIZEANALYTELIBRARY JSON-safe metadata array for all available analytes.
+            lib = resolveAnalyteLibrary(target, IncludeBuiltIn=true, IncludeCustom=true, FallbackToDefault=false);
+            n = numel(lib);
+            libMeta = cell(n, 1);
+            keys = strings(1, n);
+            for k = 1:n
+                keys(k) = string(lib(k).key);
+                libMeta{k} = struct( ...
+                    "key",          char(lib(k).key), ...
+                    "variant",      char(lib(k).variant), ...
+                    "label",        char(lib(k).label), ...
+                    "filePath",     char(lib(k).filePath), ...
+                    "isBuiltIn",    logical(lib(k).isBuiltIn), ...
+                    "isActive",     logical(lib(k).isActive), ...
+                    "peakShift_cm", double(lib(k).peakShift_cm));
+            end
+            libKeys = cellstr(keys);
+        end
+
+        function keys = discoverBranchAnalyteKeys(branch)
+        % DISCOVERBRANCHANALYTEKEYS Unique keyed analyte suffixes (_<KEY> / _analyte_<KEY>) present in a DB branch.
+            keys = strings(1, 0);
+            if ~isstruct(branch) || isempty(fieldnames(branch))
+                return;
+            end
+            fns = string(fieldnames(branch));
+            for k = 1:numel(fns)
+                p = parseMetricVariantName(fns(k));
+                if p.isDerived && ~p.isVariantToken && strlength(p.analyteKey) > 0
+                    if ~ismember(p.analyteKey, keys)
+                        keys(end+1) = p.analyteKey; %#ok<AGROW>
+                    end
+                end
+            end
         end
     end
 end

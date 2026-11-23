@@ -56,6 +56,7 @@ arguments
     options.TrainLambdaNm double = []
     options.PredictedSoA struct = struct()
     options.AnalyteSpectrum struct = struct()
+    options.AnalyteLibrary struct = struct([])
     options.LaserWavelength (1,1) double = NaN
     options.RamanWindow double = []
     options.InterpResolution (1,1) double {mustBePositive} = 1
@@ -307,15 +308,40 @@ if ~(isfield(analyte, "shift_cm") && isfield(analyte, "intensity") && ~isempty(a
     end
 end
 
+analyteLib = options.AnalyteLibrary;
+if isempty(analyteLib)
+    % Collect any analyte_<KEY> referenced by optimizedMetric so Tier 4 verifies them identically
+    extraKeys = strings(1, 0);
+    for oi = 1:numel(optimizedMetric)
+        po = parseMetricVariantName(optimizedMetric(oi));
+        if po.variantKind == "analyte" && strlength(po.analyteKey) > 0
+            extraKeys(end+1) = po.analyteKey; %#ok<AGROW>
+        end
+    end
+    extraKeys = unique(extraKeys, "stable");
+    if ~isempty(extraKeys)
+        analyteLib = resolveAnalyteLibrary(struct(), Keys=extraKeys, FallbackToDefault=false);
+    end
+end
+
 derivedCfg = importSweepConfig(LaserWavelength=laserWl, RamanWindow=ramanWindow, ...
     DetectShiftWindow=detectWindow, InterpResolution=options.InterpResolution, ...
-    SpectralInterpMethod=options.SpectralInterpMethod);
+    SpectralInterpMethod=options.SpectralInterpMethod, AnalyteLibrary=analyteLib);
 silentRep = ProgressReporter.silent();
 [femDerived, ~]  = recomputeDerivedMetrics(femSpec, derivedCfg, analyte, silentRep);
 [predDerived, ~] = recomputeDerivedMetrics(pred, derivedCfg, analyte, silentRep);
 
 scalarNames = ["Abs_laser", "EF_max_laser", "EE_S_laser", "EE_V_laser", ...
                "EE_S_broad", "EE_V_broad", "EE_S_analyte", "EE_V_analyte"];
+for li = 1:numel(analyteLib)
+    kSfx = "_" + string(analyteLib(li).key);
+    for bc = ["EE_V", "EE_S"]
+        cand = bc + kSfx;
+        if ~ismember(cand, scalarNames)
+            scalarNames(end+1) = cand; %#ok<AGROW>
+        end
+    end
+end
 scalarRows = {};
 for m = scalarNames
     if ~isfield(femDerived, m) || ~isfield(predDerived, m), continue; end
@@ -480,18 +506,12 @@ function m = normalizeMetricName(name)
     name = string(name);
     m = "";
     if strlength(name) == 0 || ismissing(name), return; end
-    variants = ["_laser", "_broad", "_avg", "_analyte", "_weighted"];
-    base = name; variant = "";
-    for v = variants
-        if endsWith(name, v)
-            base = extractBefore(name, strlength(name) - strlength(v) + 1);
-            variant = v;
-            break;
-        end
+    parsed = parseMetricVariantName(name);
+    if ~parsed.isDerived || strlength(parsed.variant) == 0
+        m = canonicalBase(name);
+    else
+        m = canonicalBase(parsed.baseRaw) + "_" + parsed.variant;
     end
-    if variant == "_avg", variant = "_broad"; end
-    if variant == "_weighted", variant = "_analyte"; end
-    m = canonicalBase(base) + variant;
 end
 
 function col = stringColumn(S, name, n, defaultVals)

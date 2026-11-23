@@ -37,13 +37,15 @@ function [allMetrics, defaultTargets] = discoverSimSpectralMetrics(simData, opti
                       "f", "RamanShift", "RamanWindow", "RamanWindowEffective", ...
                       "LaserWl", "lambda_exc_nm", "kappa_V", "kappa_S", "VolCorr", "SurfCorr", ...
                       "Source", "Parent", "Method", "ModelRef", "StokesWindow", "Shifts"];
-    derivedSuffixes = ["_laser", "_broad", "_avg", "_analyte"];
-
     rawFields = string(fieldnames(simData));
     discovered = strings(1, 0);
     for i = 1:numel(rawFields)
         fn = rawFields(i);
-        if ismember(fn, reservedFields) || endsWith(fn, derivedSuffixes)
+        if ismember(fn, reservedFields)
+            continue;
+        end
+        parsedFn = parseMetricVariantName(fn);
+        if parsedFn.isDerived
             continue;
         end
         val = simData.(char(fn));

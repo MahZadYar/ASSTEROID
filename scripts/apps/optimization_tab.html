@@ -2,55 +2,50 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<title>ASSTEROID v7.0 — Stage 5 Optimization</title>
 <link rel="stylesheet" href="shared/css/assteroid_tokens.css">
 <link rel="stylesheet" href="shared/css/assteroid_components.css">
 <script src="shared/js/matlab_bridge.js"></script>
 <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-        font-family: 'Segoe UI', system-ui, sans-serif;
-        background: var(--bg-primary);
-        color: var(--text-primary);
-        font-size: 13px;
         padding: 0;
-        overflow: hidden;
-        height: 100vh;
         display: flex;
         flex-direction: column;
     }
 
-    /* View Switcher Bar */
+    /* View Switcher Bar (A20/A30 fill + B50 rim + C70/C80 highlight) */
     .view-switch-bar {
         display: flex;
-        background: var(--bg-tertiary);
+        background: rgba(8, 0, 80, 0.78);
         border-bottom: 1px solid var(--border);
-        padding: 4px 8px;
-        gap: 4px;
+        padding: 5px 10px;
+        gap: 6px;
         flex-shrink: 0;
     }
     .view-btn {
         flex: 1;
-        padding: 4px 6px;
+        padding: 5px 8px;
         font-size: 11px;
         font-weight: 600;
-        background: transparent;
-        border: 1px solid transparent;
-        border-radius: 4px;
+        background: rgba(22, 0, 142, 0.32);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-sm);
         color: var(--text-secondary);
         cursor: pointer;
-        transition: all 0.15s ease;
+        transition: all var(--transition-fast);
         text-align: center;
         white-space: nowrap;
     }
     .view-btn:hover {
-        background: rgba(255, 255, 255, 0.05);
+        background: rgba(127, 0, 224, 0.25);
+        border-color: var(--pal-b60);
         color: var(--text-primary);
     }
     .view-btn.active {
-        background: var(--bg-primary);
-        border-color: var(--border);
-        color: var(--accent);
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        background: linear-gradient(135deg, rgba(39, 146, 141, 0.26) 0%, rgba(22, 0, 142, 0.72) 100%);
+        border-color: var(--pal-c70);
+        color: var(--pal-c80);
+        box-shadow: 0 0 8px var(--accent-glow);
     }
 
     /* View Mode: Split (Default Unified) */
@@ -136,176 +131,19 @@
     body.panel-right .bottom-right-section { display: flex !important; border-top: none; }
     body.panel-right #seedsTableSection { display: flex !important; }
     body.panel-right .bottom-left-section { flex: 1; border-top: 1px solid var(--border); }
-    h2 {
-        font-size: 15px; font-weight: 600; color: var(--accent);
-        margin: 0; padding: 10px 12px 8px 12px;
-        border-bottom: 1px solid var(--border);
-        flex-shrink: 0;
-    }
-    .main-container {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-    }
-    .steps-container {
-        flex: 1;
-        overflow-y: auto;
-        padding: 12px;
-        min-height: 0;
-    }
-    .step {
-        background: var(--bg-secondary);
-        border-radius: 8px;
-        margin-bottom: 10px;
-        border: 1px solid var(--border);
-        overflow: hidden;
-    }
-    .step-header {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 12px;
-        background: var(--bg-tertiary);
-        cursor: pointer;
-        user-select: none;
-    }
-    .step-number {
-        width: 22px; height: 22px;
-        background: var(--accent);
-        color: #000;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 11px;
-        font-weight: 700;
-    }
-    .step-header.completed .step-number { background: var(--success); }
-    .step-header.active .step-number { background: var(--accent); }
-    .step-header.inactive .step-number { background: var(--text-secondary); }
-    .step-title {
-        font-size: 12px;
-        font-weight: 600;
-        color: var(--text-primary);
-        flex: 1;
-    }
-    .step-toggle::before { content: '▾'; color: var(--text-secondary); }
-    .step-header.collapsed .step-toggle::before { content: '▸'; }
-    .step-content {
-        padding: 12px;
-        display: block;
-    }
-    .step-header.collapsed + .step-content { display: none; }
-    .section {
-        background: var(--bg-primary);
-        border-radius: 6px; padding: 10px;
-        margin-bottom: 8px;
-        border: 1px solid var(--border);
-    }
-    .section-title {
-        font-size: 11px; font-weight: 600; color: var(--text-secondary);
-        text-transform: uppercase; letter-spacing: 0.5px;
-        margin-bottom: 8px; cursor: pointer; user-select: none;
-    }
-    .section-title::before { content: '▸ '; }
-    .section-title.open::before { content: '▾ '; }
-    .field { margin-bottom: 8px; }
-    .field label {
-        display: block; font-size: 11px; color: var(--text-secondary);
-        margin-bottom: 3px; font-weight: 500;
-    }
-    .field input[type="text"], .field input[type="number"], .field select {
-        width: 100%; padding: 6px 8px;
-        background: var(--input-bg); border: 1px solid var(--border);
-        border-radius: 4px; color: var(--text-primary);
-        font-size: 12px; outline: none;
-    }
-    .field input:focus, .field select:focus { border-color: var(--accent); }
-    .field-row { display: flex; gap: 8px; align-items: flex-end; }
-    .field-row .field { flex: 1; }
-    .browse-row { display: flex; gap: 4px; }
-    .browse-row input { flex: 1; }
-    .browse-row button {
-        padding: 6px 10px; background: var(--bg-tertiary);
-        border: 1px solid var(--border); border-radius: 4px;
-        color: var(--text-primary); cursor: pointer; font-size: 11px;
-        white-space: nowrap;
-    }
-    .browse-row button:hover { background: var(--accent); color: #fff; }
-    .toggle-row {
-        display: flex; align-items: center; gap: 8px; padding: 4px 0;
-    }
-    .toggle-row label {
-        font-size: 12px; color: var(--text-primary); cursor: pointer; margin: 0;
-    }
-    input[type="checkbox"] {
-        accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer;
-    }
-    .btn-primary {
-        padding: 10px 16px;
-        background: var(--accent); color: #000; border: none;
-        border-radius: 6px; font-size: 12px; font-weight: 600;
-        cursor: pointer; transition: background 0.2s;
-    }
-    .btn-primary:hover { background: var(--accent-hover); }
-    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-    .btn-secondary {
-        padding: 8px 12px;
-        background: var(--bg-tertiary); color: var(--text-primary);
-        border: 1px solid var(--border); border-radius: 6px;
-        font-size: 11px; cursor: pointer; transition: background 0.2s;
-    }
-    .btn-secondary:hover { background: var(--border); }
-    .btn-row {
-        display: flex; gap: 8px; margin-top: 10px;
-    }
-    .btn-row .btn-primary { flex: 1; }
 
-    input[type="number"], table td, .status-badge {
-        font-variant-numeric: tabular-nums;
-    }
-    button:focus-visible, input:focus-visible, select:focus-visible {
-        outline: 2px solid var(--accent) !important;
-        outline-offset: 2px !important;
-    }
-    button:active {
-        transform: scale(0.98);
-    }
-    
-    .btn-stop {
-        background: #c62828 !important;
-        color: #ffffff !important;
-        border: 1px solid #e53935 !important;
-        border-radius: 6px;
-        padding: 6px 12px;
-        font-size: 11px;
-        font-weight: 700;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 5px;
-        transition: all 0.2s ease;
-        box-shadow: 0 2px 5px rgba(198, 40, 40, 0.4);
-    }
-    .btn-stop:hover {
-        background: #e53935 !important;
-        box-shadow: 0 3px 8px rgba(229, 57, 53, 0.6);
-    }
-    .btn-stop:active {
-        background: #b71c1c !important;
-    }
-    .btn-stop:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-        box-shadow: none;
-    }
-    
+    .step { max-width: none; }
+    .toggle-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+    .toggle-row label { font-size: 12px; color: var(--text-primary); cursor: pointer; margin: 0; }
+    input[type="checkbox"] { width: 16px; height: 16px; }
+    .btn-row { display: flex; gap: 8px; margin-top: 10px; }
+    .btn-row .btn-primary { flex: 1; width: auto; margin-top: 0; }
+    input[type="number"], table td, .status-badge { font-variant-numeric: tabular-nums; }
+
     /* Bottom Panel - Vertical Stack Layout */
     .bottom-panel {
         flex: 1;
-        background: var(--bg-secondary);
+        background: rgba(8, 0, 80, 0.72);
         border-top: 1px solid var(--border);
         display: flex;
         flex-direction: column;
@@ -314,7 +152,7 @@
     .bottom-panel.hidden { display: none; }
     .bottom-right-section.hidden { display: none; }
     .bottom-left-section {
-        background: var(--bg-secondary);
+        background: rgba(3, 0, 51, 0.85);
         padding: 8px;
         overflow-y: auto;
         flex: 1;
@@ -333,13 +171,13 @@
         align-items: center;
         justify-content: space-between;
         padding: 8px 12px;
-        background: var(--bg-tertiary);
+        background: linear-gradient(90deg, rgba(22, 0, 142, 0.72) 0%, rgba(8, 0, 80, 0.85) 100%);
         border-bottom: 1px solid var(--border);
     }
     .bottom-header h3 {
         font-size: 12px;
-        font-weight: 600;
-        color: var(--accent);
+        font-weight: 700;
+        color: var(--pal-c80);
         margin: 0;
     }
     .bottom-controls { display: flex; gap: 6px; align-items: center; }
@@ -357,100 +195,61 @@
         min-height: 0;
     }
     table { width: 100%; border-collapse: collapse; font-size: 11px; color: var(--text-primary); }
-    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
-    th { 
-        color: var(--text-secondary); font-weight: 600; 
-        position: sticky; top: 0; 
-        background: var(--bg-secondary); z-index: 1; 
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border-subtle); }
+    th {
+        color: var(--pal-a80); font-weight: 700;
+        position: sticky; top: 0;
+        background: rgba(8, 0, 80, 0.96); z-index: 1;
+        border-bottom: 1px solid var(--border);
         font-size: 10px;
     }
-    th.sortable {
-        cursor: pointer;
-        user-select: none;
-        white-space: nowrap;
-    }
-    th.sortable:hover { color: var(--accent); }
-    th.sort-asc::after  { content: ' ▲'; color: var(--accent); }
-    th.sort-desc::after { content: ' ▼'; color: var(--accent); }
-    tr:hover { background: var(--bg-tertiary); }
+    th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+    th.sortable:hover { color: var(--pal-c80); }
+    th.sort-asc::after  { content: ' ▲'; color: var(--pal-c80); }
+    th.sort-desc::after { content: ' ▼'; color: var(--pal-c80); }
+    tr:hover { background: rgba(127, 0, 224, 0.14); }
     td input[type="text"], td input[type="number"] {
-        width: 100%;
-        padding: 3px 5px;
-        background: var(--bg-primary);
-        border: 1px solid var(--border);
-        color: var(--text-primary);
-        font-size: 11px;
-        border-radius: 2px;
+        width: 100%; padding: 3px 5px;
+        background: var(--input-bg); border: 1px solid var(--border);
+        color: var(--text-primary); font-size: 11px; border-radius: var(--radius-sm);
     }
     td .val-display {
-        display: inline-block;
-        width: 100%;
-        padding: 3px 5px;
-        color: var(--text-primary);
-        font-size: 11px;
-        font-family: 'Cascadia Code', 'Consolas', monospace;
-        text-align: right;
+        display: inline-block; width: 100%; padding: 3px 5px;
+        color: var(--text-primary); font-size: 11px;
+        font-family: var(--font-mono); text-align: right;
     }
-    td input:focus { border-color: var(--accent); outline: none; }
     .seed-checkbox { width: 14px; height: 14px; }
     .bottom-actions {
-        display: flex;
-        gap: 8px;
-        padding: 8px 12px;
-        background: var(--bg-tertiary);
+        display: flex; gap: 8px; padding: 8px 12px;
+        background: rgba(8, 0, 80, 0.85);
         border-top: 1px solid var(--border);
         align-items: center;
     }
     .bottom-actions .spacer { flex: 1; }
-    
-    /* Progress Area */
+
     #progressArea {
-        background: var(--bg-secondary); border: 1px solid var(--border);
-        border-radius: 6px; padding: 8px; margin-top: 8px;
-        font-family: 'Cascadia Code', 'Consolas', monospace;
-        font-size: 11px; color: var(--text-secondary);
-        overflow-y: auto;
-        white-space: pre-wrap; word-break: break-all;
+        max-height: none;
         flex: 1;
         min-height: 0;
+        margin-top: 8px;
     }
-    .progress-bar-container {
-        width: 100%; height: 4px; background: var(--bg-tertiary);
-        border-radius: 2px; margin-top: 6px; overflow: hidden;
-    }
-    .progress-bar {
-        height: 100%; background: var(--accent);
-        border-radius: 2px; width: 0%; transition: width 0.3s ease;
-    }
-    .status-badge {
-        display: inline-block; padding: 2px 8px;
-        border-radius: 10px; font-size: 10px; font-weight: 600;
-    }
-    .status-idle { background: var(--bg-tertiary); color: var(--text-secondary); }
-    .status-running { background: #1b5e20; color: #a5d6a7; }
-    .status-done { background: #0d47a1; color: #90caf9; }
-    .status-error { background: #b71c1c; color: #ef9a9a; }
-    .hint { font-size: 10px; color: var(--text-secondary); margin-top: 4px; }
-    .req-badge { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 8px; }
-    .req-ok { color: #66bb6a; }
-    .req-missing { color: #ef5350; }
-    .req-optional { color: var(--text-secondary); }
+    .hint { font-size: var(--font-size-xs); color: var(--text-secondary); margin-top: 4px; }
 
-    /* Watershed basin controls */
-    .basin-slider { width: 100%; accent-color: var(--accent); cursor: pointer; }
+    /* Watershed basin controls & semantic OKHSL status badges */
+    .basin-slider { width: 100%; accent-color: var(--pal-c70); cursor: pointer; }
     .mode-dimmed { opacity: 0.4; transition: opacity 0.2s ease; }
     .basin-display, .depth-display { font-size: 11px; color: var(--text-secondary); }
     .status-display {
-        display: inline-block; padding: 1px 6px; border-radius: 8px;
-        font-size: 10px; white-space: nowrap; color: var(--text-secondary);
+        display: inline-block; padding: 1px 6px; border-radius: var(--radius-full);
+        font-size: 10px; font-weight: 600; white-space: nowrap; color: var(--text-secondary);
     }
-    .status-display.status-peak { background: rgba(102, 187, 106, 0.18); color: #81c784; }
-    .status-display.status-single { background: rgba(144, 202, 249, 0.15); color: #90caf9; }
-    .status-display.status-ridge { background: rgba(255, 213, 79, 0.18); color: #ffd54f; }
-    .status-display.status-multi { background: rgba(255, 167, 38, 0.18); color: #ffb74d; }
-    .status-display.status-duplicate { background: rgba(186, 104, 200, 0.18); color: #ce93d8; }
+    .status-display.status-peak      { background: var(--success-bg); color: var(--pal-c80); border: 1px solid var(--success-border); }
+    .status-display.status-single    { background: var(--info-bg); color: var(--pal-a80); border: 1px solid var(--info-border); }
+    .status-display.status-ridge     { background: var(--warning-bg); color: var(--pal-d80); border: 1px solid var(--warning-border); }
+    .status-display.status-multi     { background: rgba(201, 148, 44, 0.24); color: var(--pal-d90); border: 1px solid var(--pal-d70); }
+    .status-display.status-duplicate { background: var(--ai-bg); color: var(--pal-b80); border: 1px solid var(--ai-border); }
     .status-display.status-fallback,
-    .status-display.status-edge { background: rgba(239, 83, 80, 0.16); color: #ef9a9a; }
+    .status-display.status-edge      { background: var(--error-bg); color: var(--error-bright); border: 1px solid var(--error-border); }
 </style>
 <script type="text/javascript">
 function setup(htmlComponent) {
@@ -482,7 +281,9 @@ function setup(htmlComponent) {
     htmlComponent.addEventListener("DbStatus", function(event) {
         updateDbBanner(event.Data);
         updateOptRequirements(event.Data);
+        updateOptAnalyteVariants(event.Data);
     });
+    updateOptAnalyteVariants(null);
     htmlComponent.addEventListener("SaveComplete", function(event) {
         appendLog(event.Data || "Database saved.");
     });
@@ -665,6 +466,72 @@ function notifyMetricChange() {
         metric: metric,
         metricVariant: metricVariant
     });
+}
+
+var DEFAULT_OPT_ANALYTES = [
+    { key: "CH4",  label: "12CH4 (Methane)",        peakShift_cm: 2917 },
+    { key: "C2H4", label: "12C2H4 (Ethylene)",      peakShift_cm: 3021 },
+    { key: "H2S",  label: "H2S (Hydrogen Sulfide)", peakShift_cm: 2617 },
+    { key: "NH3",  label: "NH3 (Ammonia)",          peakShift_cm: 3337 },
+    { key: "C2H2", label: "C2H2 (Acetylene)",       peakShift_cm: 1974 },
+    { key: "H2O",  label: "H2O (Water)",            peakShift_cm: 3657 }
+];
+
+function updateOptAnalyteVariants(d) {
+    var sel = document.getElementById("metricVariant");
+    var grp = document.getElementById("optAnalyteVariantsGroup");
+    if (!sel || !grp) return;
+
+    var prev = sel.value;
+    var items = (d && Array.isArray(d.analyteLibrary) && d.analyteLibrary.length > 0)
+        ? d.analyteLibrary.slice() : DEFAULT_OPT_ANALYTES.slice();
+    var seen = new Set(items.map(function(it) { return String(it.key || "").toLowerCase(); }));
+
+    var hasSelected = (d && Array.isArray(d.selectedAnalytes) && d.selectedAnalytes.length > 0);
+    var selectedSet = new Set(hasSelected ? d.selectedAnalytes.map(function(k) { return String(k || "").toLowerCase(); }) : []);
+    var dbKeySet = new Set();
+
+    // Also include any extra keys already present in db.Pred or db.Sim
+    var extraLists = [d ? d.predAnalyteKeys : null, d ? d.simAnalyteKeys : null];
+    extraLists.forEach(function(arr) {
+        if (!Array.isArray(arr)) return;
+        arr.forEach(function(k) {
+            var ks = String(k || "").trim();
+            if (!ks) return;
+            dbKeySet.add(ks.toLowerCase());
+            if (!seen.has(ks.toLowerCase())) {
+                seen.add(ks.toLowerCase());
+                items.push({ key: ks, label: ks + " (in DB)", peakShift_cm: NaN });
+            }
+        });
+    });
+
+    grp.innerHTML = "";
+    items.forEach(function(it) {
+        if (!it || !it.key) return;
+        var kLow = String(it.key).toLowerCase();
+        // If workspace working analytes are selected, keep selected items, cached DB items, and current selection
+        if (hasSelected && !selectedSet.has(kLow) && !dbKeySet.has(kLow) && prev !== it.key && prev !== ("analyte_" + it.key)) {
+            return;
+        }
+        var opt = document.createElement("option");
+        opt.value = it.key;
+        var pk = (typeof it.peakShift_cm === "number" && isFinite(it.peakShift_cm))
+            ? (" \u00b7 ~" + Math.round(it.peakShift_cm) + " cm\u207b\u00b9") : "";
+        var workTag = (hasSelected && selectedSet.has(kLow)) ? " [Working]" : "";
+        opt.textContent = "Analyte: " + (it.label || it.key) + pk + " (_" + it.key + ")" + workTag;
+        grp.appendChild(opt);
+    });
+
+    if (prev) {
+        var normPrev = prev.replace(/^analyte_/i, "");
+        for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === prev || sel.options[i].value === normPrev) {
+                sel.value = sel.options[i].value;
+                break;
+            }
+        }
+    }
 }
 
 function setViewMode(mode) {
@@ -1734,14 +1601,17 @@ function toggleAllDbOptima(masterCb) {
 </script>
 </head>
 <body>
-    <div id="dbStatusBanner" style="display:none;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-md);padding:6px 10px;margin-bottom:8px;font-size:var(--font-size-sm);color:var(--text-secondary);"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px 8px 12px;border-bottom:1px solid var(--border);flex-shrink:0;">
-        <h2 style="margin:0;padding:0;border:none;">🔍 Stage 5 — Optimization</h2>
-        <div style="display:flex;gap:6px;">
-            <button class="btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="window.htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
-            <button class="btn-secondary" style="padding:4px 10px;font-size:11px;" onclick="window.htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
+    <header class="stage-header">
+        <div class="stage-title-group">
+            <h2>🔍 Stage 5 — Optimization</h2>
+            <span class="v7-version-pill">v7.0</span>
         </div>
-    </div>
+        <div class="stage-actions">
+            <button class="btn-header" onclick="window.htmlComponent.sendEventToMATLAB('RefreshDbState',{})">&#8635; Refresh</button>
+            <button class="btn-header highlight" onclick="window.htmlComponent.sendEventToMATLAB('SaveDatabaseRequest',{})">&#128190; Save DB</button>
+        </div>
+    </header>
+    <div id="dbStatusBanner" style="display:none;margin:8px 12px 0 12px;"></div>
 
     <div class="view-switch-bar">
         <button class="view-btn active" id="btnViewSplit" onclick="setViewMode('split')">🗂️ Split View</button>
@@ -1934,7 +1804,8 @@ function toggleAllDbOptima(masterCb) {
                                     <select id="metricVariant">
                                         <option value="laser" selected>At Laser Wavelength (_laser)</option>
                                         <option value="broad">Broadband Average (_broad)</option>
-                                        <option value="analyte">Analyte-Weighted (_analyte)</option>
+                                        <option value="analyte">Active DB Analyte (_analyte)</option>
+                                        <optgroup id="optAnalyteVariantsGroup" label="Analyte Variants (_<KEY>)"></optgroup>
                                     </select>
                                 </div>
                             </div>

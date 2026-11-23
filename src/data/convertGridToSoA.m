@@ -92,6 +92,7 @@ function allData = convertGridToSoA(input1, varargin)
         'RamanShift', [], ...
         'IncludeInvalid', false, ...
         'AnalyteSpectrum', struct(), ...
+        'AnalyteLibrary', struct([]), ...
         'InterpResolution', 1 ...
     );
     opts = parseNameValue(opts, nvArgs{:});
@@ -294,18 +295,22 @@ function allData = convertGridToSoA(input1, varargin)
         end
     end
 
-    % Compute analyte-weighted metrics if analyte spectrum provided
+    % Compute analyte-weighted metrics if active spectrum and/or library provided
     analyteSpec = opts.AnalyteSpectrum;
     hasAnalyte = isstruct(analyteSpec) && isfield(analyteSpec, 'shift_cm') && ...
                  isfield(analyteSpec, 'intensity') && ~isempty(analyteSpec.shift_cm);
+    analyteLib = struct([]);
+    if isfield(opts, 'AnalyteLibrary') && isstruct(opts.AnalyteLibrary) && ~isempty(opts.AnalyteLibrary)
+        analyteLib = opts.AnalyteLibrary;
+    end
+    hasLib = ~isempty(analyteLib);
 
-    if hasAnalyte
+    if hasAnalyte || hasLib
         ramanWindow = opts.RamanWindow;
         interpRes = opts.InterpResolution;
 
         for i = 1:numel(metricFields)
             mf = metricFields{i};
-            analyteField = [mf, '_analyte'];
 
             if ~isfield(allData, mf)
                 continue;
@@ -315,8 +320,9 @@ function allData = convertGridToSoA(input1, varargin)
             if size(metricData, 2) < 2, continue; end
             ramanShifts = allData.RamanShift;  % [N × L] or [1 × L]
             analyteVals = NaN(N, 1);
+            libVals = NaN(N, numel(analyteLib));
 
-            % Compute analyte-weighted metric for each geometry
+            % Compute analyte-weighted metrics for each geometry (single makima pass per row)
             for row = 1:N
                 if size(ramanShifts, 1) == 1
                     shiftRow = ramanShifts(1, :);
@@ -325,7 +331,6 @@ function allData = convertGridToSoA(input1, varargin)
                 end
                 metricRow = metricData(row, :);
 
-                % Filter to Stokes range within Raman window
                 stokesMask = (shiftRow > 0) & (shiftRow >= ramanWindow(1)) & (shiftRow <= ramanWindow(2));
                 if nnz(stokesMask) < 2
                     continue;
@@ -334,11 +339,9 @@ function allData = convertGridToSoA(input1, varargin)
                 rs = shiftRow(stokesMask);
                 mv = metricRow(stokesMask);
 
-                % Sort by shift
                 [rs, rsOrd] = sort(rs);
                 mv = mv(rsOrd);
 
-                % Build dense interpolation grid
                 shiftMin = min(rs);
                 shiftMax = max(rs);
                 interpSamples = max(2, round((shiftMax - shiftMin) / interpRes));
@@ -350,11 +353,24 @@ function allData = convertGridToSoA(input1, varargin)
                     continue;
                 end
 
-                % Compute analyte-weighted metric
-                analyteVals(row) = computeAnalyteWeightedMetric(shiftDense, mvDense, analyteSpec);
+                if hasAnalyte
+                    analyteVals(row) = computeAnalyteWeightedMetric(shiftDense, mvDense, analyteSpec);
+                end
+                for li = 1:numel(analyteLib)
+                    sp = analyteLib(li);
+                    if isfield(sp, 'spectrum') && isstruct(sp.spectrum), sp = sp.spectrum; end
+                    libVals(row, li) = computeAnalyteWeightedMetric(shiftDense, mvDense, sp);
+                end
             end
 
-            allData.(analyteField) = analyteVals;
+            if hasAnalyte
+                allData.([mf, '_analyte']) = analyteVals;
+            end
+            for li = 1:numel(analyteLib)
+                if isfield(analyteLib(li), 'key') && strlength(string(analyteLib(li).key)) > 0
+                    allData.([mf, '_', char(analyteLib(li).key)]) = libVals(:, li);
+                end
+            end
         end
         fprintf('Computed analyte-weighted metrics for %d geometries.\n', N);
     end

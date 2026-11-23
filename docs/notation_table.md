@@ -20,10 +20,11 @@ This table maps the canonical mathematical notation used in the manuscript (`Del
   - `ECC` — Energy conservation check $\mathrm{Abs}(\omega) + R(\omega) - 1$
   - `kappa_S`, `kappa_V` — Unit-cell geometric loading capacity factors $\kappa_S, \kappa_V$
 - **ASSTEROID Derived Scalar Metrics (`[N × 1]` vectors derived in MATLAB)**:
-  - For any imported spectral metric `<metric>`, the ASSTEROID suite extracts three user-selectable scalar reductions via `<metric>_laser`, `<metric>_broad`, and `<metric>_analyte` (keeping `"laser"` in code for readability):
+  - For any imported spectral metric `<metric>`, the ASSTEROID suite extracts single-wavelength, broadband, active-analyte, and per-analyte library scalar reductions via `<metric>_laser`, `<metric>_broad`, `<metric>_analyte`, and `<metric>_<KEY>` (parsed via `parseMetricVariantName.m`; legacy `<metric>_analyte_<KEY>` remains supported as a read/migration fallback):
     - **Single-wavelength / laser-line benchmarks (`_laser`)**: `Abs_laser` ($\mathrm{Abs}^L$), `EF_max_laser` ($\mathrm{EF}_{\max}^L$), `EE_S_laser` ($\mathrm{EE}_S^L$), `EE_V_laser` ($\mathrm{EE}_V^L$)
     - **Broadband spectral figures of merit (`_broad`)**: `EE_S_broad` ($\mathrm{EE}_S^{\text{broad}}$), `EE_V_broad` ($\mathrm{EE}_V^{\text{broad}}$), `Abs_broad`, `EF_max_broad`
-    - **Analyte-weighted spectral figures of merit (`_analyte`)**: `EE_S_analyte` ($\mathrm{EE}_S^{\text{analyte}}$), `EE_V_analyte` ($\mathrm{EE}_V^{\text{analyte}}$), `Abs_analyte`, `EF_max_analyte`
+    - **Active-analyte spectral figures of merit (`_analyte`)**: `EE_S_analyte` ($\mathrm{EE}_S^{\text{analyte}}$), `EE_V_analyte` ($\mathrm{EE}_V^{\text{analyte}}$), `Abs_analyte`, `EF_max_analyte`
+    - **Keyed multi-analyte spectral figures of merit (`_<KEY>`)**: e.g., `EE_V_CH4`, `EE_V_C2H4`, `EE_V_H2S`, `EE_V_NH3`, `EE_V_C2H2`, `EE_V_H2O`, or sanitized custom `<KEY>` (`sanitizeAnalyteKey.m` / `knownAnalyteKeysRegistry.m`) from `db.Global.AnalyteLibrary` and selected workspace set `db.Global.SelectedAnalytes` (variant token `"<KEY>"`).
 
 ---
 
@@ -58,8 +59,8 @@ This table maps the canonical mathematical notation used in the manuscript (`Del
 | $\mathrm{EE}(\mathbf{g})$ | --- | --- | Generalized multi-dimensional Enhancement Efficacy master functional (eq.~14) | Analytical formulation (`sections/02_theory.tex`) |
 | $\mathrm{EE}_{S}^{\text{broad}}$ | `EE_S_broad` | `EE_S_avg`, `EF_surf_broad`, `EF_surf_avg`, `BEE_surf` | Broadband surface Enhancement Efficacy (`trapz` over Raman window) | `src/orchestration/runImportSweepWorkflow.m`, `recomputeDerivedMetrics.m` |
 | $\mathrm{EE}_{V}^{\text{broad}}$ | `EE_V_broad` | `EE_V_avg`, `EF_vol_broad`, `EF_vol_avg`, `BEE_vol` | Broadband volumetric Enhancement Efficacy (`trapz` over Raman window) | `src/orchestration/runImportSweepWorkflow.m`, `recomputeDerivedMetrics.m` |
-| $\mathrm{EE}_{S}^{\text{analyte}}$ | `EE_S_analyte` | `EF_surf_analyte`, `AEE_surf` | Analyte-weighted surface Enhancement Efficacy | `src/physics/computeAnalyteWeightedMetric.m`, `recomputeDerivedMetrics.m` |
-| $\mathrm{EE}_{V}^{\text{analyte}}$ | `EE_V_analyte` | `EF_vol_analyte`, `AEE_vol` | Analyte-weighted volumetric Enhancement Efficacy | `src/physics/computeAnalyteWeightedMetric.m`, `recomputeDerivedMetrics.m` |
+| $\mathrm{EE}_{S}^{\text{analyte}}$ | `EE_S_analyte` / `EE_S_<KEY>` | `EF_surf_analyte`, `AEE_surf`, `EE_S_analyte_<KEY>`, `EF_surf_analyte_<KEY>` | Analyte-weighted surface Enhancement Efficacy (active analyte or keyed library entry) | `src/physics/computeAnalyteWeightedMetric.m`, `computeAnalyteGridWeights.m`, `recomputeDerivedMetrics.m` |
+| $\mathrm{EE}_{V}^{\text{analyte}}$ | `EE_V_analyte` / `EE_V_<KEY>` | `EF_vol_analyte`, `AEE_vol`, `EE_V_analyte_<KEY>`, `EF_vol_analyte_<KEY>` | Analyte-weighted volumetric Enhancement Efficacy (active analyte or keyed library entry) | `src/physics/computeAnalyteWeightedMetric.m`, `computeAnalyteGridWeights.m`, `recomputeDerivedMetrics.m` |
 | $I_{\text{analyte, norm}}(\Delta\widetilde{\nu})$ | `analyteRamanSpectrum` | --- | Normalized analyte Raman cross-section ($w_{\text{spec}}$) | `src/io/loadAndNormalizeAnalyteSpectrum.m` |
 | $n_{\text{Au}}, k_{\text{Au}}, \varepsilon_1, \varepsilon_2$ | `n_real`, `n_imag` / `nFunc`, `kFunc` | --- | Complex refractive index and permittivity of gold | `src/io/load_gold_refractive_index.m` |
 | $\nabla F$, $\nabla^2 F$ | `gradMagnitude`, `laplacianField` | --- | Fitness landscape gradients and discrete Laplacian curvature | `src/modeling/find_local_maxima.m` |
@@ -93,7 +94,7 @@ This table maps the canonical mathematical notation used in the manuscript (`Del
 
 ## 4. Bidirectional Legacy Alias Resolution
 
-All ASSTEROID data and orchestration utilities (`defaultComsolVarNames.m`, `canonicalMetricName.m`, `normalizeMetricNames.m`, `resolveDerivedMetricField.m`, `recomputeDerivedMetrics.m`, `renameLegacyMetricNamesInDatabase.m`) support seamless bidirectional resolution between canonical and legacy names so existing `.mat` databases and pretrained models continue to work without breaking:
+All ASSTEROID data and orchestration utilities (`defaultComsolVarNames.m`, `canonicalMetricName.m`, `parseMetricVariantName.m`, `normalizeMetricNames.m`, `resolveDerivedMetricField.m`, `recomputeDerivedMetrics.m`, `renameLegacyMetricNamesInDatabase.m`) support seamless bidirectional resolution between canonical and legacy names so existing `.mat` databases and pretrained models continue to work without breaking:
 
 | Category | Canonical Name | Accepted Legacy Aliases |
 | :--- | :--- | :--- |
@@ -102,7 +103,7 @@ All ASSTEROID data and orchestration utilities (`defaultComsolVarNames.m`, `cano
 | Geometric loading factors | `kappa_S`, `kappa_V` | `SurfCorr`, `S_corr`, `VolCorr`, `V_corr` |
 | Single-wavelength (`_laser`) | `Abs_laser`, `EF_max_laser`, `EE_S_laser`, `EE_V_laser` | `Absorptance_laser`, `EF_laser_max`, `EF_surf_laser`, `EF_surf_approx`, `EF_vol_laser`, `EF_vol_approx` |
 | Broadband (`_broad`) | `EE_S_broad`, `EE_V_broad`, `Abs_broad`, `EF_max_broad` | `EE_S_avg`, `EF_surf_broad`, `EF_surf_avg`, `BEE_surf`, `EE_V_avg`, `EF_vol_broad`, `EF_vol_avg`, `BEE_vol`, `Abs_avg`, `Absorptance_avg` |
-| Analyte-weighted (`_analyte`) | `EE_S_analyte`, `EE_V_analyte`, `Abs_analyte`, `EF_max_analyte` | `EF_surf_analyte`, `AEE_surf`, `EF_vol_analyte`, `AEE_vol`, `Absorptance_analyte` |
+| Analyte-weighted (`_analyte` / `_<KEY>`) | `EE_S_analyte`, `EE_V_analyte`, `EE_S_<KEY>`, `EE_V_<KEY>`, `Abs_analyte`, `Abs_<KEY>`, `EF_max_analyte`, `EF_max_<KEY>` | `EE_S_analyte_<KEY>`, `EE_V_analyte_<KEY>`, `EF_surf_analyte`, `AEE_surf`, `EF_vol_analyte`, `AEE_vol`, `Absorptance_analyte`, `EF_surf_analyte_<KEY>`, `EF_vol_analyte_<KEY>` |
 
 ---
 

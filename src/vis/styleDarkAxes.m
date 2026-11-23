@@ -12,11 +12,11 @@ function styleDarkAxes(ax, xLabel, yLabel, titleStr)
         return;
     end
 
-    ax.Color = [12, 16, 32]/255;
-    ax.XColor = [160, 178, 214]/255;
-    ax.YColor = [160, 178, 214]/255;
-    ax.GridColor = [46, 62, 98]/255;
-    ax.GridAlpha = 0.6;
+    ax.Color     = [4, 2, 58]/255;       % OKHSL A15-A20 midnight cobalt
+    ax.XColor    = [167, 187, 249]/255;  % OKHSL A80 tick/axis labels
+    ax.YColor    = [167, 187, 249]/255;
+    ax.GridColor = [56, 74, 224]/255;    % OKHSL A50 subtle blue grid
+    ax.GridAlpha = 0.28;
     ax.Box = "on";
     ax.XGrid = "on";
     ax.YGrid = "on";
@@ -27,6 +27,6 @@ function styleDarkAxes(ax, xLabel, yLabel, titleStr)
         ylabel(ax, yLabel, "Color", [248, 248, 248]/255, "FontWeight", "bold");
     end
     if titleStr ~= ""
-        title(ax, titleStr, "Color", [248, 248, 248]/255);
+        title(ax, titleStr, "Color", [107, 209, 203]/255, "FontWeight", "bold"); % OKHSL C80 highlight
     end
 end

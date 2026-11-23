@@ -75,20 +75,35 @@ function results = runLocalizationWorkflow(cfg, reporter)
         discreteOnly = cfg.discreteOnly;
     end
 
-    %% Resolve metric variant (laser / avg / weighted)
+    %% Resolve metric variant (laser / broad / avg / analyte / <KEY>)
     metricVariant = "avg";
     if isfield(cfg, "metricVariant")
         metricVariant = string(cfg.metricVariant);
     end
+    parsedVar = parseMetricVariantName(metricVariant, IsVariantToken=true);
 
-    % For weighted variant: resolve configured analyte spectrum or fall back to built-in default
+    % For analyte variant(s): resolve exact analyte_<KEY> or active analyte spectrum
     analyteSpec = struct();
-    if metricVariant == "weighted" || metricVariant == "analyte"
+    if parsedVar.variantKind == "analyte"
         explicitAnalyteFile = string(getConfigField(cfg, "analyteSpectrumFile", ""));
         cachedAnalyte = getConfigField(cfg, "analyteSpectrum", struct());
-        analyteSpec = resolveAnalyteSpectrum(struct(), ...
-            ExplicitFile=explicitAnalyteFile, CachedSpectrum=cachedAnalyte, ...
-            FallbackToDefault=true, Reporter=reporter);
+        cfgAnalyteCtx = struct();
+        if isfield(cfg, "analyteLibrary") && isstruct(cfg.analyteLibrary) && ~isempty(cfg.analyteLibrary)
+            cfgAnalyteCtx.Global = struct("AnalyteLibrary", cfg.analyteLibrary);
+        end
+        if strlength(parsedVar.analyteKey) > 0
+            matchedLib = resolveAnalyteLibrary(cfgAnalyteCtx, ...
+                Keys=parsedVar.analyteKey, ExplicitFile=explicitAnalyteFile, ...
+                CachedSpectrum=cachedAnalyte, FallbackToDefault=false, Reporter=reporter);
+            if ~isempty(matchedLib)
+                analyteSpec = matchedLib(1).spectrum;
+            end
+        end
+        if ~isstruct(analyteSpec) || ~isfield(analyteSpec, "shift_cm") || isempty(analyteSpec.shift_cm)
+            analyteSpec = resolveAnalyteSpectrum(cfgAnalyteCtx, ...
+                ExplicitFile=explicitAnalyteFile, CachedSpectrum=cachedAnalyte, ...
+                FallbackToDefault=true, Reporter=reporter);
+        end
         if ~isstruct(analyteSpec) || ~isfield(analyteSpec, "shift_cm") || isempty(analyteSpec.shift_cm)
             reporter.warn("AnalyteSpectrum", ...
                 "Could not resolve analyte spectrum. Weighted avg will use uniform weighting.");
@@ -161,7 +176,7 @@ function results = runLocalizationWorkflow(cfg, reporter)
         % For interpolation mode: generate dense predictions via interpolant
         reporter.start("GeneratePredictions", "Generating dense predictions via interpolation...");
         interpPredArgs = {"LaserWavelength", cfg.lambdaLaser, "RamanWindow", cfg.stokesShiftLimits};
-        if (metricVariant == "weighted" || metricVariant == "analyte") && ~isempty(fieldnames(analyteSpec))
+        if parsedVar.variantKind == "analyte" && ~isempty(fieldnames(analyteSpec))
             interpPredArgs = [interpPredArgs, {"AnalyteSpectrum", analyteSpec}];
         end
         allData = predictor.predictGrid(gp.pSamples, gp.rSamples, gp.lambdaSamples, interpPredArgs{:});
@@ -205,6 +220,9 @@ function results = runLocalizationWorkflow(cfg, reporter)
             "StokesShiftLimits", cfg.stokesShiftLimits, ...
             "AnalyteSpectrum", analyteSpec, ...
             "Reporter", reporter};
+        if isfield(cfg, 'analyteLibrary') && isstruct(cfg.analyteLibrary) && ~isempty(cfg.analyteLibrary)
+            modelPredArgs = [modelPredArgs, {"AnalyteLibrary", cfg.analyteLibrary}];
+        end
         if isfield(cfg, 'metricsShiftLimits') && ~isempty(cfg.metricsShiftLimits)
             modelPredArgs = [modelPredArgs, {"MetricsShiftLimits", cfg.metricsShiftLimits}];
         end
@@ -235,15 +253,12 @@ function results = runLocalizationWorkflow(cfg, reporter)
 
     % Compute analyte weights aligned to lambdaSamples for weighted-avg objective
     analyteWeights = [];
-    if (metricVariant == "weighted" || metricVariant == "analyte") && ~isempty(fieldnames(analyteSpec)) && ~isempty(lambdaSamples)
+    if parsedVar.variantKind == "analyte" && ~isempty(fieldnames(analyteSpec)) && ~isempty(lambdaSamples)
         lambdaLaser_um = cfg.lambdaLaser * 1e-3;   % nm → µm
         shiftVec_cm = max(0, 1e4/lambdaLaser_um - 1e4./lambdaSamples(:));  % cm⁻¹
-        wRaw = interp1(double(analyteSpec.shift_cm(:)), double(analyteSpec.intensity(:)), ...
-            shiftVec_cm, 'linear', 0);
-        wRaw = max(0, wRaw);
-        wSum = sum(wRaw);
-        if wSum > 0
-            analyteWeights = wRaw / wSum;
+        wCol = computeAnalyteGridWeights(shiftVec_cm, analyteSpec, "linear");
+        if any(wCol > 0)
+            analyteWeights = wCol;
         end
     end
 
@@ -294,12 +309,8 @@ function results = runLocalizationWorkflow(cfg, reporter)
 
     for metricIdx = 1:numMetrics
         primaryMetric = cfg.metricsToLocate{metricIdx};
-        if metricVariant == "weighted" || metricVariant == "analyte"
-            metricFieldVariant = "analyte";
-        elseif metricVariant == "laser"
-            metricFieldVariant = "laser";
-        elseif metricVariant == "broad" || metricVariant == "broadband"
-            metricFieldVariant = "broad";
+        if strlength(parsedVar.variant) > 0 && parsedVar.variantKind ~= "spectral"
+            metricFieldVariant = parsedVar.variant;
         else
             metricFieldVariant = "avg";
         end
@@ -309,7 +320,7 @@ function results = runLocalizationWorkflow(cfg, reporter)
         % Ensure candidate field exists in allData (derive on the fly if missing)
         if ~isfield(allData, candidateField) && isfield(allData, primaryMetric)
             specMat = double(allData.(primaryMetric));
-            if metricFieldVariant == "laser"
+            if parsedVar.variantKind == "laser"
                 laserWl = cfg.lambdaLaser;
                 if isfield(allData, "LaserWl") && isscalar(allData.LaserWl)
                     laserWl = double(allData.LaserWl);
@@ -324,9 +335,33 @@ function results = runLocalizationWorkflow(cfg, reporter)
                     lIdx = 1;
                 end
                 allData.(candidateField) = specMat(:, lIdx);
-            elseif metricFieldVariant == "analyte"
-                if isstruct(analyteSpec) && isfield(analyteSpec, "intensity") && ~isempty(analyteWeights)
-                    allData.(candidateField) = specMat * analyteWeights(:);
+            elseif parsedVar.variantKind == "analyte"
+                computedSlice = [];
+                if isstruct(analyteSpec) && isfield(analyteSpec, "intensity")
+                    if isfield(allData, "RamanShift") && ~isempty(allData.RamanShift)
+                        shiftsRow = double(allData.RamanShift(1, :));
+                        winLim = cfg.stokesShiftLimits;
+                        if isfield(cfg, "metricsShiftLimits") && numel(cfg.metricsShiftLimits) == 2 && any(cfg.metricsShiftLimits > 0)
+                            winLim = cfg.metricsShiftLimits;
+                        end
+                        if any(winLim > 0)
+                            sMask = (shiftsRow > 0) & (shiftsRow >= winLim(1)) & (shiftsRow <= winLim(2));
+                        else
+                            sMask = shiftsRow > 0;
+                        end
+                        if nnz(sMask) >= 2
+                            wShift = computeAnalyteGridWeights(shiftsRow(sMask), analyteSpec, "makima");
+                            if any(wShift > 0)
+                                computedSlice = specMat(:, sMask) * wShift(:);
+                            end
+                        end
+                    end
+                    if isempty(computedSlice) && ~isempty(analyteWeights) && numel(analyteWeights) == size(specMat, 2)
+                        computedSlice = specMat * analyteWeights(:);
+                    end
+                end
+                if ~isempty(computedSlice)
+                    allData.(candidateField) = computedSlice;
                 else
                     allData.(candidateField) = mean(specMat, 2, "omitnan");
                 end
@@ -469,6 +504,8 @@ function results = runLocalizationWorkflow(cfg, reporter)
 
             res = struct();
             res.metricName = primaryMetric;
+            res.metricVariant = metricFieldVariant;
+            res.primaryMetricAvgField = primaryMetricAvgField;
             res.candidateTable = candidateTable;
             res.maximaResults = maximaResults;
             res.avgMetricGrid = avgMetricGrid;
@@ -528,6 +565,8 @@ function results = runLocalizationWorkflow(cfg, reporter)
         % Store per-metric results
         res = struct();
         res.metricName = primaryMetric;
+        res.metricVariant = metricFieldVariant;
+        res.primaryMetricAvgField = primaryMetricAvgField;
         res.candidateTable = candidateTable;
         res.maximaResults = maximaResults;
         res.avgMetricGrid = avgMetricGrid;
@@ -1128,10 +1167,11 @@ function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runLocalM
                 end
                 if isnan(seedMetric) && nargin >= 10 && ~isempty(predictor) && ~isempty(lambdaSamples)
                     try
-                        if isfield(cfg, 'metricVariant') && string(cfg.metricVariant) == "weighted"
-                            metricFieldVariant = "analyte";
-                        elseif isfield(cfg, 'metricVariant') && string(cfg.metricVariant) == "laser"
-                            metricFieldVariant = "laser";
+                        mvFallback = "avg";
+                        if isfield(cfg, 'metricVariant'), mvFallback = string(cfg.metricVariant); end
+                        pFallback = parseMetricVariantName(mvFallback);
+                        if strlength(pFallback.variant) > 0 && pFallback.variantKind ~= "spectral"
+                            metricFieldVariant = pFallback.variant;
                         else
                             metricFieldVariant = "avg";
                         end
@@ -1144,6 +1184,9 @@ function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runLocalM
                         avgFieldName = char(resolveDerivedMetricField(primaryMetric, metricFieldVariant, soaFb));
                         if isfield(soaFb, avgFieldName)
                             seedMetric = double(soaFb.(avgFieldName)(1));
+                        elseif pFallback.variantKind == "analyte" && ~isempty(analyteWeights) ...
+                                && isfield(soaFb, primaryMetric)
+                            seedMetric = double(soaFb.(primaryMetric)(1, :)) * analyteWeights(:);
                         end
                     catch
                         seedMetric = NaN;
@@ -1640,4 +1683,12 @@ function res = buildEmptyResult(metricName)
     res.gradMagnitude = [];
     res.laplacianField = [];
     res.divergenceField = [];
+end
+
+function val = getConfigField(cfg, fieldName, defaultVal)
+    if isstruct(cfg) && isfield(cfg, fieldName)
+        val = cfg.(fieldName);
+    else
+        val = defaultVal;
+    end
 end
