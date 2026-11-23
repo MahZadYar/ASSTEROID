@@ -312,7 +312,7 @@ Mechanism:
    - Topological watershed transform (`watershed`)
    - Quantitative basin metrics: summit coordinates, peak value, boundary saddle elevation, catchment area $\Omega_k$, and depth/prominence
 4. Filter/curate candidates (thresholds on depth, area, packing ratio $r/P \leq 0.49$)
-5. Interactive curation or automated dispatch (supporting both alphabetical basin labels `A, B, C...` for expanded period sweeps $P > 1400\text{ nm}$ and Roman numeral tags `I`–`IV+`)
+5. Interactive curation or automated dispatch (indexing the 11 modal basins by topological lattice diffraction order $m \in \{0,1,2\}$ and meridional particle surface node count $n_p \in \{0,\dots,5\}$ as `0|1`, `1|0`, `1|1`, `1|2-`, `1|2+`, `1|3-`, `1|3+`, `2|1`, `2|3`, `2|4`, and `2|5`, mapped to internal single-character database keys `A`–`K`)
 6. In-basin MultiStart gradient ascent (`fmincon` with SQP/Interior-Point and analytical `dlgradient`) drawing starts strictly within catchment territory $\Omega_k$ ([src/modeling/find_local_maxima.m](src/modeling/find_local_maxima.m))
 7. Trajectory coalescence clustering and topography classification (`peak`, `ridge`, `multi`, `single`, `fallback`)
 
