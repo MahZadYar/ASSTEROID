@@ -5517,6 +5517,8 @@ function handleVisualizeEvent(src, event, fig)
                 sendVisualizeBranchInfo(src, fig);
             case "Render"
                 runVisualizeRender(src, data, fig);
+            case "Update2DSlice"
+                runVisualizeRender(src, data, fig);
             case "ClearTraces"
                 fig.UserData.visualize.traces = emptyVisualizeTraces();
                 ax = fig.UserData.handles.visualizeAx1D;

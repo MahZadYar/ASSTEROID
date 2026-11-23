@@ -59,6 +59,8 @@ classdef VisualizeController < handle
                         obj.stopProcess();
                     case {"VisModeSelect", "SelectVisMode"}
                         obj.selectMode(eventData);
+                    case "Update2DSlice"
+                        obj.update2DSlice(eventData);
                     otherwise
                         fprintf("[VisualizeController] Unknown event: %s\n", eventName);
                 end
@@ -194,6 +196,130 @@ classdef VisualizeController < handle
                         tabGroup.SelectedTab = obj.getHandle("visualizeTab3D");
                 end
                 drawnow;
+            end
+        end
+
+        function update2DSlice(obj, d)
+        % UPDATE2DSLICE Fast in-place update of 2D map for spectral Raman shift slice slider.
+            try
+                metric = obj.safeStr(d, "metric", "");
+                if strlength(metric) == 0, return; end
+
+                shift = obj.safeNum(d, "sliceShift", 1000);
+                laserWl = obj.safeNum(d, "laserWavelength", 785);
+                if ~(laserWl > 0), laserWl = 785; end
+                lamT = 1 / (1 / laserWl - shift * 1e-7);
+                if ~isfinite(lamT) || lamT <= 0, return; end
+
+                ax = obj.getAx2D();
+                if isempty(ax) || ~isvalid(ax), return; end
+
+                % Look for main 2D map graphic object
+                hMain = findobj(ax, "Tag", "Map2DMain");
+                if isempty(hMain) || ~isvalid(hMain) || ~isstruct(hMain.UserData) || ~isfield(hMain.UserData, "method")
+                    % No existing compatible 2D plot: fallback to full render
+                    obj.runRender(d);
+                    return;
+                end
+
+                [branch, S] = obj.localBranch(d);
+                if ~isfield(S, metric)
+                    return;
+                end
+
+                [v, ~] = obj.extractSpectralSlice(S, metric, lamT);
+                v = double(v(:));
+
+                uData = hMain.UserData;
+                logScale = obj.safeBool(d, "logScale", isfield(uData, "logScale") && uData.logScale);
+                if logScale
+                    v(v <= 0) = NaN;
+                    v = log10(v);
+                end
+
+                validPR = uData.validPR;
+                if numel(v) ~= numel(validPR)
+                    obj.runRender(d);
+                    return;
+                end
+
+                method = uData.method;
+                vFinite = [];
+                switch method
+                    case "grid"
+                        Z = NaN(numel(uData.rU), numel(uData.pU));
+                        Z(uData.linIdx) = v(validPR);
+                        hMain.CData = Z;
+                        vFinite = Z(isfinite(Z));
+
+                    case "triangulated"
+                        vV = v(validPR);
+                        if isfield(uData, "ic") && ~isempty(uData.ic)
+                            vU = accumarray(uData.ic, vV, [uData.uPtsCount, 1], @mean);
+                        else
+                            vU = vV;
+                        end
+                        hMain.FaceVertexCData = vU;
+                        vFinite = vU(isfinite(vU));
+
+                    case "voronoi"
+                        vV = v(validPR);
+                        if isfield(uData, "cellCenterMap") && ~isempty(uData.cellCenterMap)
+                            cellVals = vV(uData.cellCenterMap);
+                            hMain.FaceVertexCData = cellVals;
+                            vFinite = cellVals(isfinite(cellVals));
+                        elseif isfield(uData, "keepCell") && ~isempty(uData.keepCell)
+                            if isfield(uData, "ic") && ~isempty(uData.ic)
+                                vU = accumarray(uData.ic, vV, [uData.uPtsCount, 1], @mean);
+                            else
+                                vU = vV;
+                            end
+                            cellVals = vU(uData.keepCell);
+                            hMain.FaceVertexCData = cellVals;
+                            vFinite = cellVals(isfinite(cellVals));
+                        else
+                            obj.runRender(d);
+                            return;
+                        end
+
+                    case {"natural", "linear", "nearest"}
+                        if isfield(uData, "F") && ~isempty(uData.F)
+                            vV = v(validPR);
+                            uData.F.Values = vV;
+                            Zq = uData.F(uData.Pq, uData.Rq);
+                            if isfield(uData, "mask") && ~isempty(uData.mask)
+                                Zq(uData.mask) = NaN;
+                            end
+                            hMain.CData = Zq;
+                            vFinite = Zq(isfinite(Zq));
+                        else
+                            obj.runRender(d);
+                            return;
+                        end
+
+                    otherwise
+                        obj.runRender(d);
+                        return;
+                end
+
+                % Update color limits if non-empty and non-degenerate
+                if ~isempty(vFinite)
+                    minV = min(vFinite);
+                    maxV = max(vFinite);
+                    if isfinite(minV) && isfinite(maxV) && maxV > minV
+                        clim(ax, [minV, maxV]);
+                    end
+                end
+
+                % Update title
+                titleStr = sprintf("%s @ %g cm⁻¹ (λ = %.1f nm) — db.%s", metric, shift, lamT, branch);
+                title(ax, titleStr, "Color", [0.9 0.92 0.95], "FontSize", 13, "Interpreter", "none");
+
+                drawnow limitrate;
+            catch ME
+                % Fallback cleanly to runRender
+                fprintf("[VisualizeController] update2DSlice in-place fallback: %s\n", ME.message);
+                obj.runRender(d);
             end
         end
     end

@@ -63,6 +63,31 @@
     input[type="checkbox"], input[type="radio"] {
         accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer;
     }
+    input[type="range"] {
+        -webkit-appearance: none; appearance: none;
+        width: 100%; height: 6px;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border);
+        border-radius: 3px; outline: none;
+        accent-color: var(--accent); cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none; appearance: none;
+        width: 14px; height: 14px; border-radius: 50%;
+        background: var(--accent); cursor: pointer;
+        border: 2px solid var(--bg-primary);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+        transition: transform 0.1s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+        transform: scale(1.15);
+    }
+    input[type="range"]::-moz-range-thumb {
+        width: 14px; height: 14px; border-radius: 50%;
+        background: var(--accent); cursor: pointer;
+        border: 2px solid var(--bg-primary);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    }
     .check { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 0; cursor: pointer; }
     .check.disabled { opacity: 0.4; cursor: not-allowed; }
     .check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px; }
@@ -422,6 +447,7 @@ function updateBranchInfo() {
         }
     }
     onInterp2dChange();
+    updateSliceRange();
 }
 
 function onInterp2dChange() {
@@ -739,7 +765,123 @@ function updateRenderAvailability() {
 function onMetric2dChange() {
     var v = val("metric2d");
     var row = document.getElementById("sliceRow");
-    if (row) row.style.display = (v.indexOf("slice:") === 0) ? "" : "none";
+    var isSlice = (v.indexOf("slice:") === 0);
+    if (row) row.style.display = isSlice ? "" : "none";
+    if (isSlice) {
+        updateSliceRange();
+    }
+}
+
+/* ---------- spectral slice helpers & live dispatch ---------- */
+function shiftToWl(shift, laserWl) {
+    if (!laserWl || laserWl <= 0) laserWl = 785;
+    var invLam = (1 / laserWl) - (shift * 1e-7);
+    if (invLam <= 0) return NaN;
+    return 1 / invLam;
+}
+
+function wlToShift(wl, laserWl) {
+    if (!laserWl || laserWl <= 0) laserWl = 785;
+    if (!wl || wl <= 0) return NaN;
+    return ((1 / laserWl) - (1 / wl)) * 1e7;
+}
+
+function updateSliceRange() {
+    var b = getRadio("branch", "");
+    var bi = branchInfo(b);
+    var laserWl = numOr("laser2d", 785);
+    var slider = document.getElementById("sliceShiftSlider");
+    var minLbl = document.getElementById("shiftMinLabel");
+    var maxLbl = document.getElementById("shiftMaxLabel");
+    var shiftInput = document.getElementById("sliceShift");
+
+    var minShift = 100;
+    var maxShift = 4200;
+
+    if (bi && bi.lambdaRange && isFinite(bi.lambdaRange[0]) && isFinite(bi.lambdaRange[1])) {
+        var sMin = Math.max(0, Math.round(wlToShift(bi.lambdaRange[0], laserWl)));
+        var sMax = Math.round(wlToShift(bi.lambdaRange[1], laserWl));
+        if (isFinite(sMin) && isFinite(sMax) && sMax > sMin) {
+            minShift = sMin;
+            maxShift = sMax;
+        }
+    }
+
+    if (slider) {
+        slider.min = minShift;
+        slider.max = maxShift;
+        if (shiftInput) {
+            shiftInput.min = minShift;
+            shiftInput.max = maxShift;
+            var curVal = numOr("sliceShift", 1000);
+            if (curVal < minShift) curVal = minShift;
+            if (curVal > maxShift) curVal = maxShift;
+            slider.value = curVal;
+            shiftInput.value = curVal;
+            updateSliceLabels(curVal);
+        }
+    }
+    if (minLbl) minLbl.textContent = minShift + " cm⁻¹";
+    if (maxLbl) maxLbl.textContent = maxShift + " cm⁻¹";
+}
+
+function updateSliceLabels(shiftVal) {
+    var shift = parseFloat(shiftVal);
+    if (!isFinite(shift)) return;
+    var curLbl = document.getElementById("shiftCurLabel");
+    if (curLbl) curLbl.textContent = Math.round(shift) + " cm⁻¹";
+    var wlTag = document.getElementById("sliceWlTag");
+    if (wlTag) {
+        var wl = shiftToWl(shift, numOr("laser2d", 785));
+        wlTag.textContent = isFinite(wl) ? "λ = " + round2(wl) + " nm" : "";
+    }
+}
+
+var _sliceUpdateTimer = null;
+var _pendingSliceCfg = null;
+
+function onLiveSliceShiftChange(shiftVal) {
+    var numEl = document.getElementById("sliceShift");
+    var slider = document.getElementById("sliceShiftSlider");
+    if (numEl && numEl.value != shiftVal) numEl.value = shiftVal;
+    if (slider && slider.value != shiftVal) slider.value = shiftVal;
+    updateSliceLabels(shiftVal);
+
+    var mode = getRadio("visMode", "1d");
+    if (mode !== "2d") return;
+    var sel = val("metric2d");
+    if (sel.indexOf("slice:") !== 0) return;
+
+    var cfg = collectConfig();
+    _pendingSliceCfg = cfg;
+
+    if (!_sliceUpdateTimer) {
+        _sliceUpdateTimer = setTimeout(function() {
+            _sliceUpdateTimer = null;
+            if (_pendingSliceCfg) {
+                var payload = _pendingSliceCfg;
+                _pendingSliceCfg = null;
+                sendToMATLAB("Update2DSlice", payload);
+            }
+        }, 40);
+    }
+}
+
+function onSliceShiftCommit(shiftVal) {
+    if (_sliceUpdateTimer) {
+        clearTimeout(_sliceUpdateTimer);
+        _sliceUpdateTimer = null;
+    }
+    _pendingSliceCfg = null;
+    updateSliceLabels(shiftVal);
+
+    var mode = getRadio("visMode", "1d");
+    if (mode !== "2d") return;
+    var sel = val("metric2d");
+    if (sel.indexOf("slice:") !== 0) return;
+
+    var cfg = collectConfig();
+    sendToMATLAB("Update2DSlice", cfg);
 }
 
 function onControlChange() {
@@ -963,6 +1105,26 @@ document.addEventListener("DOMContentLoaded", function() {
             updateRenderAvailability();
         });
     }
+    var sSlider = document.getElementById("sliceShiftSlider");
+    if (sSlider) {
+        sSlider.addEventListener("input", function() { onLiveSliceShiftChange(this.value); });
+        sSlider.addEventListener("change", function() { onSliceShiftCommit(this.value); });
+    }
+    var sShift = document.getElementById("sliceShift");
+    if (sShift) {
+        sShift.addEventListener("input", function() { onLiveSliceShiftChange(this.value); });
+        sShift.addEventListener("change", function() { onSliceShiftCommit(this.value); });
+    }
+    var l2 = document.getElementById("laser2d");
+    if (l2) {
+        l2.addEventListener("input", function() {
+            updateSliceRange();
+            onLiveSliceShiftChange(val("sliceShift"));
+        });
+        l2.addEventListener("change", function() {
+            onSliceShiftCommit(val("sliceShift"));
+        });
+    }
     var m3 = document.getElementById("metric3d");
     if (m3) {
         m3.addEventListener("change", function() {
@@ -1158,14 +1320,27 @@ document.addEventListener("DOMContentLoaded", function() {
                         <label class="lbl" for="metric2d">Metric on the (p, r) plane</label>
                         <select id="metric2d"></select>
                     </div>
-                    <div class="field-row" id="sliceRow" style="display:none;">
-                        <div class="field">
-                            <label class="lbl" for="sliceShift">Raman shift (cm⁻¹)</label>
-                            <input type="number" id="sliceShift" value="1000" step="10">
+                    <div id="sliceRow" style="display:none; margin-bottom:8px;">
+                        <div class="field-row">
+                            <div class="field" style="flex:2;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
+                                    <label class="lbl" for="sliceShift" style="margin-bottom:0;">Raman shift (cm⁻¹)</label>
+                                    <span id="sliceWlTag" style="font-size:10px; color:var(--accent); font-weight:600; font-variant-numeric:tabular-nums;">λ = 851.9 nm</span>
+                                </div>
+                                <input type="number" id="sliceShift" value="1000" step="5" min="0" max="5000">
+                            </div>
+                            <div class="field" style="flex:1;">
+                                <label class="lbl" for="laser2d">Laser λ (nm)</label>
+                                <input type="number" id="laser2d" value="785" step="0.1">
+                            </div>
                         </div>
-                        <div class="field">
-                            <label class="lbl" for="laser2d">Laser λ (nm)</label>
-                            <input type="number" id="laser2d" value="785" step="0.1">
+                        <div class="field" style="margin-top:6px; margin-bottom:2px;">
+                            <input type="range" id="sliceShiftSlider" min="100" max="4200" step="5" value="1000">
+                            <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--text-secondary); margin-top:3px; font-variant-numeric:tabular-nums;">
+                                <span id="shiftMinLabel">100 cm⁻¹</span>
+                                <span id="shiftCurLabel" style="color:var(--accent); font-weight:600;">1000 cm⁻¹</span>
+                                <span id="shiftMaxLabel">4200 cm⁻¹</span>
+                            </div>
                         </div>
                     </div>
                     <div class="field" id="interp2dRow">

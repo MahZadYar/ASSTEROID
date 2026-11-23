@@ -101,27 +101,39 @@ function info = plotScatteredMap2D(ax, p, r, v, options)
         hS = pcolor(ax, pU, rU, Z);
         hS.EdgeColor = "none";
         hS.FaceColor = "interp";
+        hS.Tag = "Map2DMain";
+        hS.UserData = struct("method", "grid", "pU", pU, "rU", rU, "linIdx", linIdx, ...
+            "validPR", validPR, "logScale", options.LogScale);
     elseif options.Method == "triangulated"
         info.method = "triangulated";
-        [pU_pts, rU_pts, vU_pts] = localDeduplicatePoints(pV, rV, vV);
+        [pU_pts, rU_pts, vU_pts, ic] = localDeduplicatePoints(pV, rV, vV);
         if numel(vU_pts) >= 3
             try
                 tri = delaunay(pU_pts, rU_pts);
-                patch(ax, "Faces", tri, "Vertices", [pU_pts, rU_pts], ...
+                hP = patch(ax, "Faces", tri, "Vertices", [pU_pts, rU_pts], ...
                     "FaceVertexCData", vU_pts, "FaceColor", "interp", "EdgeColor", "none");
+                hP.Tag = "Map2DMain";
+                hP.UserData = struct("method", "triangulated", "ic", ic, ...
+                    "uPtsCount", size(pU_pts, 1), "validPR", validPR, "logScale", options.LogScale);
             catch
-                scatter(ax, pU_pts, rU_pts, 28, vU_pts, "filled");
+                hSc = scatter(ax, pU_pts, rU_pts, 28, vU_pts, "filled");
+                hSc.Tag = "Map2DMain";
+                hSc.UserData = struct("method", "scatter", "validPR", validPR, "logScale", options.LogScale);
                 info.method = "scatter";
             end
         else
-            scatter(ax, pU_pts, rU_pts, 28, vU_pts, "filled");
+            hSc = scatter(ax, pU_pts, rU_pts, 28, vU_pts, "filled");
+            hSc.Tag = "Map2DMain";
+            hSc.UserData = struct("method", "scatter", "validPR", validPR, "logScale", options.LogScale);
             info.method = "scatter";
         end
     elseif options.Method == "voronoi"
         info.method = "voronoi";
-        rendered = localPlotVoronoiPatch(ax, pV, rV, vV);
+        rendered = localPlotVoronoiPatch(ax, pV, rV, vV, validPR, options.LogScale);
         if ~rendered
-            scatter(ax, pV, rV, 28, vV, "filled");
+            hSc = scatter(ax, pV, rV, 28, vV, "filled");
+            hSc.Tag = "Map2DMain";
+            hSc.UserData = struct("method", "scatter", "validPR", validPR, "logScale", options.LogScale);
             info.method = "scatter";
         end
     else
@@ -165,6 +177,9 @@ function info = plotScatteredMap2D(ax, p, r, v, options)
         else
             hS.FaceColor = "interp";
         end
+        hS.Tag = "Map2DMain";
+        hS.UserData = struct("method", interpType, "F", F, "Pq", Pq, "Rq", Rq, ...
+            "mask", isnan(Zq), "validPR", validPR, "logScale", options.LogScale);
     end
 
     colormap(ax, options.Colormap);
@@ -208,7 +223,7 @@ function info = plotScatteredMap2D(ax, p, r, v, options)
 end
 
 %% ========================================================================
-function [pOut, rOut, vOut] = localDeduplicatePoints(pIn, rIn, vIn)
+function [pOut, rOut, vOut, ic] = localDeduplicatePoints(pIn, rIn, vIn)
 % Average metric values across near-coincident (p, r) points so vertex counts match triangulations.
     scale = max([1; abs(pIn); abs(rIn)]);
     [uPts, ~, ic] = uniquetol([pIn, rIn], 1e-9 * scale, "ByRows", true, "DataScale", 1);
@@ -220,13 +235,16 @@ function [pOut, rOut, vOut] = localDeduplicatePoints(pIn, rIn, vIn)
         pOut = pIn;
         rOut = rIn;
         vOut = vIn;
+        ic = (1:numel(pIn))';
     end
 end
 
-function ok = localPlotVoronoiPatch(ax, pV, rV, vV)
+function ok = localPlotVoronoiPatch(ax, pV, rV, vV, validPR, logScale)
 % Render bounded 2D Voronoi cells using a single NaN-padded patch call (zero rasterization).
+    if nargin < 5, validPR = true(size(pV)); end
+    if nargin < 6, logScale = false; end
     ok = false;
-    [pUse, rUse, vUse] = localDeduplicatePoints(pV, rV, vV);
+    [pUse, rUse, vUse, ic] = localDeduplicatePoints(pV, rV, vV);
     n = numel(pUse);
     if n < 3
         return;
@@ -309,8 +327,11 @@ function ok = localPlotVoronoiPatch(ax, pV, rV, vV)
         offset = offset + nv;
     end
 
-    patch(ax, "Faces", faces, "Vertices", allVerts, ...
+    hP = patch(ax, "Faces", faces, "Vertices", allVerts, ...
         "FaceVertexCData", cellVals, "FaceColor", "flat", "EdgeColor", "none");
+    hP.Tag = "Map2DMain";
+    hP.UserData = struct("method", "voronoi", "keepCell", keepCell, "ic", ic, ...
+        "uPtsCount", n, "validPR", validPR, "logScale", logScale);
     ok = true;
 end
 

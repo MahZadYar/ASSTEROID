@@ -11,10 +11,12 @@ if ~isfolder(testDir), mkdir(testDir); end
 session = AssteroidSession(testDir);
 
 L = 10;
-lam = linspace(790, 850, L);
-N = 20;
-pS = linspace(600, 800, N)';
-rS = linspace(100, 200, N)';
+lam = linspace(790, 950, L);
+[pG, rG] = meshgrid(linspace(600, 800, 5), linspace(100, 200, 4));
+N = numel(pG);
+rng(42);
+pS = pG(:) + 5 * (rand(N, 1) - 0.5);
+rS = rG(:) + 3 * (rand(N, 1) - 0.5);
 
 Sim = struct();
 Sim.period = pS;
@@ -90,6 +92,22 @@ assert(numel(ptObjs) == 1 && strcmp(ptObjs(1).LineStyle, "none") && ~strcmp(ptOb
 ctl2.handleEvent("Render", struct("mode", "2d", "branch", "Optima.Sim", ...
     "metric", "EE_V_broad", "metricKind", "scalar", "renderMethod", "triangulated"));
 fprintf("  ✓ Optima.Sim 1D dropdown lookup & 2D branch rendering verified.\n");
+
+% 3c. Live spectral slice updating via Update2DSlice event
+ctl2.handleEvent("Render", struct("mode", "2d", "branch", "Sim", ...
+    "metric", "EF_vol", "metricKind", "slice", "sliceShift", 1000, "laserWavelength", 785, ...
+    "renderMethod", "triangulated"));
+hMainPatch = findobj(ax2, "Tag", "Map2DMain");
+assert(~isempty(hMainPatch), "2D render must tag main plot object as Map2DMain.");
+assert(contains(string(ax2.Title.String), "1000 cm⁻¹"), "Initial slice title must reflect 1000 cm⁻¹.");
+cData1 = hMainPatch.FaceVertexCData;
+
+ctl2.handleEvent("Update2DSlice", struct("mode", "2d", "branch", "Sim", ...
+    "metric", "EF_vol", "metricKind", "slice", "sliceShift", 1200, "laserWavelength", 785));
+assert(contains(string(ax2.Title.String), "1200 cm⁻¹"), "Live slice update must update title to 1200 cm⁻¹.");
+cData2 = hMainPatch.FaceVertexCData;
+assert(numel(cData1) == numel(cData2), "FaceVertexCData length must be preserved across live updates.");
+fprintf("  ✓ Live 2D spectral slice update (Update2DSlice) verified in-place.\n");
 
 ctl.handleEvent("ClearTraces", struct());
 ctl.handleEvent("StopProcess", struct());
