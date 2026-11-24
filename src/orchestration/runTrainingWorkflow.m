@@ -620,5 +620,9 @@ function dbModel = buildDbModelStruct(model, dataset, cfg, summary, perfReport)
             'testIdx', dataset.testIdx);
     end
 
+    if isfield(model, 'trainingHistory') && isstruct(model.trainingHistory) && ~isempty(fieldnames(model.trainingHistory))
+        dbModel.TrainingHistory = model.trainingHistory;
+    end
+
     dbModel.Model = model;
 end

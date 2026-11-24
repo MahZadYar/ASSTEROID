@@ -464,7 +464,8 @@ itersPerEpoch = ceil(numTrainSamples / batchSize);
 totalIterations = max(1, opts.MaxEpochs * itersPerEpoch);
 
 isPlotMonitor = strcmpi(opts.Plots, "training-progress");
-outputFcn = @(info)localTrainingOutputFcn(info, trainMetricsList, opts.StopTrainingFcn, isPlotMonitor, opts.IterationCallback, totalIterations);
+elapsedTracker = localCreateElapsedTracker(totalIterations);
+outputFcn = @(info)localTrainingOutputFcn(info, trainMetricsList, opts.StopTrainingFcn, isPlotMonitor, opts.IterationCallback, totalIterations, elapsedTracker);
 optionsArgs(end+1:end+2) = {'OutputFcn', outputFcn};
 
 if strcmpi(opts.Optimizer, "lm") && ~strcmpi(opts.LossFunction, "mse")
@@ -529,13 +530,15 @@ if ~isempty(weights)
 end
 
 try
-    net = trainnet(XTrain, YTrain, netArchitecture, lossFcn, trainingOpts);
+    [net, trainInfo] = trainnet(XTrain, YTrain, netArchitecture, lossFcn, trainingOpts);
 catch ME
     error('train_sers_dnn:TrainingFailed', 'trainnet failed: %s\n\nDiagnostics:\n  XTrain: [%d x %d], range [%.3g, %.3g]\n  YTrain: [%d x %d], range [%.3g, %.3g]\n  Network inputs: %d, outputs: %d', ...
         ME.message, size(XTrain, 1), size(XTrain, 2), min(XTrain(:)), max(XTrain(:)), ...
         size(YTrain, 1), size(YTrain, 2), min(YTrain(:)), max(YTrain(:)), ...
         numFeatures, numTargets);
 end
+
+trainingHistory = localBuildTrainingHistory(trainInfo, elapsedTracker, totalIterations, opts.MaxEpochs);
 
 if opts.Verbose
     fprintf('  ✓ Training complete\n');
@@ -664,6 +667,7 @@ if isfield(dataset, 'splitMode')
     performance.splitMode = dataset.splitMode;
 end
 model.performance = performance;
+model.trainingHistory = trainingHistory;
 model.normalize = dataset.normalize;
 model.denormalize = dataset.denormalize;
 if isfield(dataset, 'transformFeatures')
@@ -1061,7 +1065,7 @@ switch split
 end
 end
 
-function stop = localTrainingOutputFcn(info, metricsList, stopCheckFcn, isPlotMonitor, iterCallback, totalIterations) %#ok<INUSD>
+function stop = localTrainingOutputFcn(info, metricsList, stopCheckFcn, isPlotMonitor, iterCallback, totalIterations, elapsedTracker) %#ok<INUSL>
 persistent lastCheckTic
 stop = false;
 
@@ -1076,6 +1080,14 @@ if nargin < 5
 end
 if nargin >= 6 && ~isempty(totalIterations) && isfinite(totalIterations)
     info.TotalIterations = double(totalIterations);
+end
+if nargin >= 7 && isstruct(elapsedTracker) && isfield(info, "State") && strcmpi(string(info.State), "iteration")
+    if isfield(info, "Iteration") && isfield(info, "TimeElapsed")
+        try
+            elapsedTracker.record(info.Iteration, info.TimeElapsed);
+        catch
+        end
+    end
 end
 
 % Fast stop check on every iteration
@@ -1110,6 +1122,91 @@ if ~isPlotMonitor && isempty(iterCallback)
         lastCheckTic = tic;
         drawnow limitrate;
     end
+end
+end
+
+function tracker = localCreateElapsedTracker(totalIterations)
+cap = max(1, double(totalIterations));
+elapsed = nan(cap, 1);
+    function record(iterVal, timeVal)
+        if ~isfinite(iterVal) || iterVal < 1
+            return;
+        end
+        idx = round(double(iterVal));
+        if idx > numel(elapsed)
+            elapsed(max(idx, 2 * numel(elapsed)), 1) = NaN;
+        end
+        if isduration(timeVal)
+            sec = seconds(timeVal);
+        else
+            sec = double(timeVal);
+        end
+        if isscalar(sec) && isfinite(sec)
+            elapsed(idx) = sec;
+        end
+    end
+    function vec = getVector()
+        vec = elapsed;
+    end
+tracker = struct('record', @record, 'getVector', @getVector);
+end
+
+function history = localBuildTrainingHistory(trainInfo, elapsedTracker, totalIterations, maxEpochs)
+history = struct();
+history.iteration = zeros(0, 1);
+history.epoch = zeros(0, 1);
+history.trainingLoss = zeros(0, 1);
+history.trainingRMSE = zeros(0, 1);
+history.learningRate = zeros(0, 1);
+history.elapsedSec = zeros(0, 1);
+history.validationIteration = zeros(0, 1);
+history.validationEpoch = zeros(0, 1);
+history.validationLoss = zeros(0, 1);
+history.validationRMSE = zeros(0, 1);
+history.outputNetworkIteration = NaN;
+history.stopReason = "";
+history.totalIterations = double(totalIterations);
+history.maxEpochs = double(maxEpochs);
+history.timestamp = string(datetime('now', 'Format', 'yyyy-MM-dd HH:mm:ss'));
+
+if ~isstruct(trainInfo) && ~isobject(trainInfo)
+    return;
+end
+
+if isprop(trainInfo, 'OutputNetworkIteration') || isfield(trainInfo, 'OutputNetworkIteration')
+    history.outputNetworkIteration = double(trainInfo.OutputNetworkIteration);
+end
+if isprop(trainInfo, 'StopReason') || isfield(trainInfo, 'StopReason')
+    history.stopReason = string(trainInfo.StopReason);
+end
+
+if (isprop(trainInfo, 'TrainingHistory') || isfield(trainInfo, 'TrainingHistory')) && ~isempty(trainInfo.TrainingHistory)
+    th = trainInfo.TrainingHistory;
+    vars = string(th.Properties.VariableNames);
+    nRows = height(th);
+    if ismember("Iteration", vars), history.iteration = double(th.Iteration(:)); else, history.iteration = (1:nRows)'; end
+    if ismember("Epoch", vars), history.epoch = double(th.Epoch(:)); else, history.epoch = nan(nRows, 1); end
+    if ismember("Loss", vars), history.trainingLoss = double(th.Loss(:)); else, history.trainingLoss = nan(nRows, 1); end
+    if ismember("RMSE", vars), history.trainingRMSE = double(th.RMSE(:)); else, history.trainingRMSE = nan(nRows, 1); end
+    if ismember("LearnRate", vars), history.learningRate = double(th.LearnRate(:)); else, history.learningRate = nan(nRows, 1); end
+
+    elVec = nan(nRows, 1);
+    if nargin >= 2 && isstruct(elapsedTracker)
+        rawEl = elapsedTracker.getVector();
+        validIdx = isfinite(history.iteration) & history.iteration >= 1 & round(history.iteration) <= numel(rawEl);
+        elVec(validIdx) = rawEl(round(history.iteration(validIdx)));
+    end
+    history.elapsedSec = elVec;
+end
+
+if (isprop(trainInfo, 'ValidationHistory') || isfield(trainInfo, 'ValidationHistory')) && ~isempty(trainInfo.ValidationHistory)
+    vh = trainInfo.ValidationHistory;
+    vars = string(vh.Properties.VariableNames);
+    nVal = height(vh);
+    if ismember("Iteration", vars), history.validationIteration = double(vh.Iteration(:)); else, history.validationIteration = nan(nVal, 1); end
+    if ismember("Epoch", vars), history.validationEpoch = double(vh.Epoch(:)); else, history.validationEpoch = nan(nVal, 1); end
+    if ismember("Loss", vars), history.validationLoss = double(vh.Loss(:)); else, history.validationLoss = nan(nVal, 1); end
+    if ismember("RMSE", vars), history.validationRMSE = double(vh.RMSE(:)); else, history.validationRMSE = nan(nVal, 1); end
 end
 end
 
