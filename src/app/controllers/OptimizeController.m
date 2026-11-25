@@ -334,10 +334,13 @@ classdef OptimizeController < handle
                 end
             end
 
-            % Re-use cached predictions when available
+            % Re-use cached predictions when available without decoding heavy
+            % spectral matrices unless a missing derived slice or model-less
+            % prediction-interpolant fallback requires them.
             if isfield(obj.session.db, "Pred") && structRowCount(obj.session.db.Pred) > 0
-                predData = extractBranchAsSoA(obj.session.db, "Pred");
-                predData = obj.ensureDerivedMetricSlice(predData, baseMetric, metricVariant, laserWl);
+                hasModelForPred = strlength(modelFile) > 0 && isfile(modelFile);
+                needFullSpec = (obj.safeStr(d, "dataSource", "model") == "predictions") && ~hasModelForPred && (mode == "refine");
+                [predData, ~] = obj.extractPredForOptimize(baseMetric, metricVariant, laserWl, needFullSpec);
                 cfg.cachedAllData = predData;
                 if cfg.dataSource == "predictions"
                     cfg.recomputePredictions = false;
@@ -437,14 +440,11 @@ classdef OptimizeController < handle
                 "seeds", refinedSeeds, ...
                 "attemptTrajectories", attemptTrajectories));
 
-            % Write-back to db.Pred
+            % Write-back to db.Pred: never replace an encoded/existing db.Pred
+            % (e.g. h5_sidecar or log_uint16) with decoded spectral matrices.
             if isfield(results, "allData") && isstruct(results.allData)
-                obj.session.db.Pred = results.allData;
-                obj.session.dbDirty = true;
-                if ~isempty(obj.fig) && isvalid(obj.fig)
-                    obj.fig.UserData.db = obj.session.db;
-                    obj.fig.UserData.dbDirty = true;
-                end
+                skipGridFlag = isfield(cfg, "skipGridGeneration") && logical(cfg.skipGridGeneration);
+                obj.mergeOptimizePredWriteback(results.allData, skipGridFlag, cfg.dataSource);
             end
 
             obj.sendToHTML("OptimizeComplete", ...
@@ -1640,36 +1640,8 @@ classdef OptimizeController < handle
                 return;
             end
 
-            parsedVar = parseMetricVariantName(metricVariant, IsVariantToken=true);
-            if strlength(parsedVar.variant) > 0 && parsedVar.variantKind ~= "spectral"
-                variantForField = parsedVar.variant;
-            else
-                variantForField = "avg";
-            end
-            avgFieldName = resolveDerivedMetricField(baseMetric, variantForField, obj.session.db.Pred);
-
-            % Fast selective extraction: if scalar metric already exists in db.Pred,
-            % skip decoding heavy [N x L] spectral matrices. Otherwise decode only
-            % the single spectral field needed by ensureDerivedMetricSlice.
-            if isfield(obj.session.db.Pred, avgFieldName)
-                allData = extractBranchAsSoA(obj.session.db, "Pred", DecodeSpectral=false);
-            else
-                specField = baseMetric;
-                if ~isfield(obj.session.db.Pred, specField)
-                    aliasMap = struct("EE_V","EF_vol", "EF_vol","EE_V", ...
-                        "EE_S","EF_surf", "EF_surf","EE_S", ...
-                        "Abs","Absorptance", "Absorptance","Abs", ...
-                        "ECC","ECCheck", "ECCheck","ECC");
-                    if isfield(aliasMap, char(baseMetric)) && isfield(obj.session.db.Pred, aliasMap.(char(baseMetric)))
-                        specField = string(aliasMap.(char(baseMetric)));
-                    end
-                end
-                reqFields = ["period", "radius", "lambda", "RamanShift", "RamanWindow", "LaserWl", "LaserWavelength", specField];
-                allData = extractBranchAsSoA(obj.session.db, "Pred", Fields=reqFields);
-                laserWl = obj.safeNum(d, "laserWavelength", 785);
-                allData = obj.ensureDerivedMetricSlice(allData, baseMetric, metricVariant, laserWl);
-                avgFieldName = resolveDerivedMetricField(baseMetric, variantForField, allData);
-            end
+            [allData, avgFieldName] = obj.extractPredForOptimize(baseMetric, metricVariant, ...
+                obj.safeNum(d, "laserWavelength", 785), false);
 
             if ~isfield(allData, avgFieldName)
                 obj.sendError(sprintf("Metric '%s' (%s) not found in db.Pred.", baseMetric, metricVariant));
@@ -1732,6 +1704,92 @@ classdef OptimizeController < handle
 
             obj.sendToHTML("PreviewComplete", struct("metric", baseMetric, "variant", metricVariant));
             rep.complete("Preview", sprintf("Loaded %d pre-computed points from db.Pred. Heatmap preview ready.", structRowCount(allData)));
+        end
+
+        function [allData, avgFieldName] = extractPredForOptimize(obj, baseMetric, metricVariant, laserWl, needFullSpectral)
+            % EXTRACTPREDFOROPTIMIZE Selectively extract db.Pred without decoding heavy spectral matrices unless required.
+            if nargin < 5, needFullSpectral = false; end
+            parsedVar = parseMetricVariantName(metricVariant, IsVariantToken=true);
+            if strlength(parsedVar.variant) > 0 && parsedVar.variantKind ~= "spectral"
+                variantForField = parsedVar.variant;
+            else
+                variantForField = "avg";
+            end
+            avgFieldName = resolveDerivedMetricField(baseMetric, variantForField, obj.session.db.Pred);
+
+            if needFullSpectral
+                allData = extractBranchAsSoA(obj.session.db, "Pred");
+                allData = obj.ensureDerivedMetricSlice(allData, baseMetric, metricVariant, laserWl);
+                avgFieldName = resolveDerivedMetricField(baseMetric, variantForField, allData);
+                return;
+            end
+
+            if isfield(obj.session.db.Pred, avgFieldName)
+                allData = extractBranchAsSoA(obj.session.db, "Pred", DecodeSpectral=false);
+                return;
+            end
+
+            specField = baseMetric;
+            if ~isfield(obj.session.db.Pred, specField)
+                aliasMap = struct("EE_V","EF_vol", "EF_vol","EE_V", ...
+                    "EE_S","EF_surf", "EF_surf","EE_S", ...
+                    "Abs","Absorptance", "Absorptance","Abs", ...
+                    "ECC","ECCheck", "ECCheck","ECC");
+                if isfield(aliasMap, char(baseMetric)) && isfield(obj.session.db.Pred, aliasMap.(char(baseMetric)))
+                    specField = string(aliasMap.(char(baseMetric)));
+                end
+            end
+            reqFields = ["period", "radius", "lambda", "RamanShift", "RamanWindow", "LaserWl", "LaserWavelength", specField];
+            allData = extractBranchAsSoA(obj.session.db, "Pred", Fields=reqFields);
+            allData = obj.ensureDerivedMetricSlice(allData, baseMetric, metricVariant, laserWl);
+            avgFieldName = resolveDerivedMetricField(baseMetric, variantForField, allData);
+        end
+
+        function mergeOptimizePredWriteback(obj, newAllData, skipGridWithSeeds, dataSource)
+            % MERGEOPTIMIZEPREDWRITEBACK Safely propagate newly derived scalar fields to db.Pred without overwriting encoded spectral fields.
+            hasExistingPred = isfield(obj.session.db, "Pred") && isstruct(obj.session.db.Pred) ...
+                && structRowCount(obj.session.db.Pred) > 0;
+            if ~hasExistingPred
+                if ~skipGridWithSeeds && dataSource ~= "predictions"
+                    obj.session.db.Pred = newAllData;
+                    obj.session.dbDirty = true;
+                    if ~isempty(obj.fig) && isvalid(obj.fig)
+                        obj.fig.UserData.db = obj.session.db;
+                        obj.fig.UserData.dbDirty = true;
+                    end
+                end
+                return;
+            end
+
+            predBranch = obj.session.db.Pred;
+            nPred = structRowCount(predBranch);
+            nNew = structRowCount(newAllData);
+            if nNew ~= nPred || nNew == 0
+                return;
+            end
+
+            changed = false;
+            fnList = fieldnames(newAllData);
+            for i = 1:numel(fnList)
+                fn = fnList{i};
+                if isfield(predBranch, fn)
+                    continue;
+                end
+                val = newAllData.(fn);
+                if (isnumeric(val) || islogical(val)) && isvector(val) && numel(val) == nPred
+                    predBranch.(fn) = val(:);
+                    changed = true;
+                end
+            end
+
+            if changed
+                obj.session.db.Pred = predBranch;
+                obj.session.dbDirty = true;
+                if ~isempty(obj.fig) && isvalid(obj.fig)
+                    obj.fig.UserData.db = obj.session.db;
+                    obj.fig.UserData.dbDirty = true;
+                end
+            end
         end
 
         function allData = ensureDerivedMetricSlice(obj, allData, baseMetric, metricVariant, laserWl)

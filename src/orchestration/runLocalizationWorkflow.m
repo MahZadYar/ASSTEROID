@@ -111,7 +111,9 @@ function results = runLocalizationWorkflow(cfg, reporter)
     end
 
     %% Step 1: Build predictor
-    if isfield(cfg, "predictor") && ~isempty(cfg.predictor)
+    if discreteOnly && dataSource == "predictions"
+        predictor = struct("mode", "predictions");
+    elseif isfield(cfg, "predictor") && ~isempty(cfg.predictor)
         predictor = cfg.predictor;
         reporter.info("[runLocalizationWorkflow] Reusing existing predictor.");
     else
