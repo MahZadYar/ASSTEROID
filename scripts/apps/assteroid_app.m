@@ -3202,11 +3202,11 @@ function runTrainingPipeline(src, d, fig, visPanel)
             trainAx.XColor = [160, 178, 214]/255;      % Slate text (#a0b2d6)
             trainAx.YColor = [160, 178, 214]/255;
             title(trainAx, "Surrogate DNN Training Loss & Validation vs. Iteration (Log-Log Scale)", ...
-                "Color", [248, 248, 248]/255, "FontSize", 9, "FontWeight", "bold");
+                "Color", [248, 248, 248]/255, "FontSize", 12, "FontWeight", "bold");
             xlabel(trainAx, "Iteration (log scale)", ...
-                "Color", [248, 248, 248]/255, "FontSize", 8, "FontWeight", "bold");
+                "Color", [248, 248, 248]/255, "FontSize", 11, "FontWeight", "bold");
             ylabel(trainAx, "Loss (log scale)", ...
-                "Color", [248, 248, 248]/255, "FontSize", 8, "FontWeight", "bold");
+                "Color", [248, 248, 248]/255, "FontSize", 11, "FontWeight", "bold");
 
             hTrainLoss = animatedline(trainAx, ...
                 "Color", [72, 178, 172]/255, ...       % ASSTEROID Teal (#48b2ac)
@@ -3335,7 +3335,7 @@ function runTrainingPipeline(src, d, fig, visPanel)
                     if isfinite(curLr)
                         subText = subText + sprintf(" | LR: %.1e", curLr);
                     end
-                    subtitle(trainAx, subText, "Color", [167, 187, 249]/255, "FontName", "Fira Sans", "FontSize", 7);
+                    subtitle(trainAx, subText, "Color", [167, 187, 249]/255, "FontName", "Fira Sans", "FontSize", 9.5);
                     drawnow limitrate;
                 catch
                 end
@@ -3366,15 +3366,15 @@ function runTrainingPipeline(src, d, fig, visPanel)
             if getTrainingStopRequested(fig) || isProcessStopRequested(fig)
                 title(trainAx, sprintf("Training Stopped Early at Iteration %d (Loss: %.4e) — Model Saved", ...
                     round(lastIterLogged), lastLossLogged), ...
-                    "Color", [235, 179, 79]/255, "FontName", "Fira Sans", "FontSize", 9, "FontWeight", "bold");
+                    "Color", [235, 179, 79]/255, "FontName", "Fira Sans", "FontSize", 12, "FontWeight", "bold");
                 subtitle(trainAx, "Model saved to disk and database. Click 'Evaluate DB Model' to inspect Three-Tier generalization.", ...
-                    "Color", [167, 187, 249]/255, "FontName", "Fira Sans", "FontSize", 7);
+                    "Color", [167, 187, 249]/255, "FontName", "Fira Sans", "FontSize", 9.5);
             else
                 title(trainAx, sprintf("Training Complete — Final Loss: %.4e (%d Iterations)", ...
                     lastLossLogged, round(lastIterLogged)), ...
-                    "Color", [72, 178, 172]/255, "FontName", "Fira Sans", "FontSize", 9, "FontWeight", "bold");
+                    "Color", [72, 178, 172]/255, "FontName", "Fira Sans", "FontSize", 12, "FontWeight", "bold");
                 subtitle(trainAx, "Model saved to disk and database. Click 'Evaluate DB Model' to compute and display full Three-Tier Generalization metrics", ...
-                    "Color", [167, 187, 249]/255, "FontName", "Fira Sans", "FontSize", 7);
+                    "Color", [167, 187, 249]/255, "FontName", "Fira Sans", "FontSize", 9.5);
             end
             drawnow;
         catch

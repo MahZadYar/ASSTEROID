@@ -183,7 +183,7 @@ end
                 text(ax1, xEnd(j), yTextPos, ...
                     sprintf("%.2f%%", yEnd(j)), ...
                     "HorizontalAlignment", "center", "VerticalAlignment", "bottom", ...
-                    "FontName", "Fira Sans", "FontSize", 7, "FontWeight", "bold", "Color", colText);
+                    "FontName", "Fira Sans", "FontSize", 9, "FontWeight", "bold", "Color", colText);
             end
         end
     end
@@ -200,7 +200,7 @@ end
     % Ideal reference line at R^2 = 1.0 (OKHSL D70 Gold)
     yline(ax2, 1.0, "--", "Ideal (" + pubAssteroidMath("R^2 = 1.0") + ")", "Color", [201, 148, 44]/255, ...
         "LineWidth", 1.2, "LabelHorizontalAlignment", "left", "LabelVerticalAlignment", "middle", ...
-        "FontName", "Fira Sans", "FontSize", 7, "FontWeight", "bold");
+        "FontName", "Fira Sans", "FontSize", 9, "FontWeight", "bold");
 
     ylabel(ax2, "Coefficient of Determination (" + pubAssteroidMath("R^2", Weight="bold") + ")", "FontWeight", "bold");
     title(ax2, "Predictive Fidelity: " + pubAssteroidMath("R^2", Weight="bold") + " Score [Higher is Better]", "FontWeight", "bold");
@@ -235,7 +235,7 @@ end
                 text(ax2, xEnd(j), yPos, ...
                     sprintf("%.3f", yEnd(j)), ...
                     "HorizontalAlignment", "center", "VerticalAlignment", vAlign, ...
-                    "FontName", "Fira Sans", "FontSize", 7, "FontWeight", "bold", "Color", txtCol);
+                    "FontName", "Fira Sans", "FontSize", 9, "FontWeight", "bold", "Color", txtCol);
             end
         end
     end
