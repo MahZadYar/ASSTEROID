@@ -605,6 +605,7 @@ function collectConfig() {
         metricsShiftMax: linked ? sMax : num("metricsShiftMax"),
         metric: val("metric"),
         metricVariant: val("metricVariant"),
+        logScale: chk("logColorScale"),
         numStartPoints: num("numStartPoints"),
         multiStartUseParallel: chk("multiStartUseParallel"),
         multiStartDisplay: val("multiStartDisplay"),
@@ -755,6 +756,12 @@ function resetOptimizationState() {
         tbody.innerHTML = '';
     }
     appendLog("Workflow state reset. Ready for new optimization.");
+}
+
+function onLogScaleChange() {
+    window.htmlComponent.sendEventToMATLAB("UpdateColorScale", {
+        logScale: chk("logColorScale")
+    });
 }
 
 function previewMetric() {
@@ -1810,6 +1817,10 @@ function toggleAllDbOptima(masterCb) {
                                 </div>
                             </div>
                             <p class="hint">Laser λ uses the single-wavelength value at the excitation wavelength; Spectral Average integrates uniformly over the Stokes window; Analyte-Weighted Average weights the spectrum by the analyte Raman cross-section profile.</p>
+                            <div class="toggle-row" style="margin-top:6px;">
+                                <input type="checkbox" id="logColorScale" onchange="onLogScaleChange()">
+                                <label for="logColorScale">Log colour scale (log₁₀)</label>
+                            </div>
                         </div>
                     </div>
 

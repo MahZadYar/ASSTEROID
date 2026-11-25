@@ -170,6 +170,50 @@ reusedBm = ctl.storedBasinMap("Absorptance", "laser", 0.05, [400 1400], [50 700]
 assert(~isempty(reusedBm), "storedBasinMap must return persistent basinMap across different metrics.");
 fprintf("  ✓ LoadBasinsFromDb successfully restored basins and allowed cross-metric reuse.\n");
 
+%% 9c. Test fast scalar PreviewMetric on encoded db.Pred + live UpdateColorScale
+[pG, rG] = meshgrid(500:50:800, 100:25:200);
+nPts = numel(pG);
+lamVec = linspace(785, 950, 20);
+rawBranch = struct( ...
+    "period", pG(:), ...
+    "radius", rG(:), ...
+    "lambda", repmat(lamVec, nPts, 1), ...
+    "EE_V", 10 .^ (1 + rand(nPts, 20) * 3), ...
+    "EE_V_laser", 10 .^ (1 + (pG(:)-500)/300 * 3));
+session.db.Pred = SpectralStorage.encodeBranch(rawBranch, Mode="log_uint16");
+
+% Verify DecodeSpectral=false skips encoded spectral matrix while keeping scalar
+soaFast = extractBranchAsSoA(session.db, "Pred", DecodeSpectral=false);
+assert(isfield(soaFast, "EE_V_laser"), "Scalar EE_V_laser must be extracted.");
+assert(~isfield(soaFast, "EE_V"), "Encoded spectral EE_V must be skipped when DecodeSpectral=false.");
+
+% Preview with axes and verify LogScale + live UpdateColorScale
+figTest = uifigure("Visible", "off");
+cFig = onCleanup(@() delete(figTest));
+axTest = uiaxes(figTest);
+ctlVis = OptimizeController(session, figTest, [], axTest);
+
+ctlVis.handleEvent("PreviewMetric", struct( ...
+    "dataSource", "predictions", ...
+    "metric", "EE_V", ...
+    "metricVariant", "laser", ...
+    "logScale", false));
+hSurf = findobj(axTest, "Tag", "OptimizeHeatmapSurface");
+assert(~isempty(hSurf), "PreviewMetric must create OptimizeHeatmapSurface.");
+cLin = hSurf(1).CData;
+assert(max(cLin(:)) > 100, "Linear CData should retain unlogged scale (>100).");
+
+% Live toggle to log10
+ctlVis.handleEvent("UpdateColorScale", struct("logScale", true));
+cLog = hSurf(1).CData;
+assert(max(cLog(:)) < 5 && max(cLog(:)) > 0, "Log CData should be log10-scaled (<5).");
+
+% Live toggle back to linear
+ctlVis.handleEvent("UpdateColorScale", struct("logScale", false));
+cLin2 = hSurf(1).CData;
+assert(max(abs(cLin2(:) - cLin(:)), [], "omitnan") < 1e-12, "Toggling back to linear must restore exact values.");
+fprintf("  ✓ Fast scalar PreviewMetric (DecodeSpectral=false) & live UpdateColorScale (log10/linear) verified.\n");
+
 %% 10. Clean up
 try
     rmdir(testDir, "s");

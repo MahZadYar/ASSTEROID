@@ -1,4 +1,4 @@
-function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSeeds, refinedOptima, attemptTrajectories, showMultiStartPaths, basinMap)
+function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSeeds, refinedOptima, attemptTrajectories, showMultiStartPaths, basinMap, options)
 %plotOptimizeHeatmap Plot metric heatmap with seeds, optima, and trajectories.
 %   Renders a pcolor heatmap for the specified metric from localization results,
 %   overlaying original seed positions (X), refined optima (filled circles with
@@ -18,6 +18,9 @@ function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSee
 %       basinMap             - (optional) Struct from detect_watershed_basins. Each
 %                              displayed seed's basin is filled with the seed
 %                              colour (25 % opacity, dashed outline).
+%
+%   Name-Value Arguments:
+%       LogScale             - Logical, render log10(Z) colormap (default: false).
 
     arguments
         results struct
@@ -29,6 +32,7 @@ function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSee
         attemptTrajectories = []
         showMultiStartPaths (1,1) logical = false
         basinMap = []
+        options.LogScale (1,1) logical = false
     end
 
     if ~isfield(results, "allData") || isempty(results.allData)
@@ -53,22 +57,23 @@ function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSee
 
     avgData = allData.(avgFieldName);
 
-    % Reshape to 2D grid
+    % Reshape to 2D grid (vectorized)
     P = double(allData.period(:));
     R = double(allData.radius(:));
-    pUniq = unique(P);
-    rUniq = unique(R);
+    validPR = isfinite(P) & isfinite(R);
+    vIdx = find(validPR);
+    vIdx = vIdx(vIdx <= numel(avgData));
+    if isempty(vIdx)
+        text(ax, 0.5, 0.5, "No valid data for metric: " + avgFieldName, HorizontalAlignment="center");
+        return;
+    end
+    [pUniq, ~, pIdx] = uniquetol(P(vIdx), 1e-6, DataScale=1);
+    [rUniq, ~, rIdx] = uniquetol(R(vIdx), 1e-6, DataScale=1);
 
     [pGrid, rGrid] = meshgrid(pUniq, rUniq);
     Z = NaN(size(pGrid));
-
-    for i = 1:numel(P)
-        pi = find(abs(pUniq - P(i)) < 1e-6, 1);
-        ri = find(abs(rUniq - R(i)) < 1e-6, 1);
-        if ~isempty(pi) && ~isempty(ri) && i <= numel(avgData)
-            Z(ri, pi) = double(avgData(i));
-        end
-    end
+    linIdx = sub2ind(size(Z), rIdx, pIdx);
+    Z(linIdx) = double(avgData(vIdx));
 
     if ~isnumeric(Z) || all(isnan(Z(:))) || isempty(Z)
         text(ax, 0.5, 0.5, "No valid data for metric: " + avgFieldName, HorizontalAlignment="center");
@@ -84,26 +89,43 @@ function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSee
         return;
     end
 
+    ZPlot = Z;
+    if options.LogScale
+        ZPlot(ZPlot <= 0) = NaN;
+        ZPlot = log10(ZPlot);
+    end
+
     % Plot heatmap
     cla(ax);
-    pcolor(ax, pGrid, rGrid, Z);
+    hSurf = pcolor(ax, pGrid, rGrid, ZPlot);
+    hSurf.Tag = "OptimizeHeatmapSurface";
     shading(ax, "interp");
     cmap = loadColormap("AssteroidColormap.txt", 256);
     colormap(ax, cmap);
-    colorbar(ax);
+    cb = colorbar(ax);
     xlabel(ax, "Period (nm)");
     ylabel(ax, "Radius (nm)");
     if parsedVar.variantKind == "laser"
-        title(ax, baseMetric + " (at laser " + pubAssteroidMath("\lambda", Weight="bold") + ")");
+        baseTitle = baseMetric + " (at laser " + pubAssteroidMath("\lambda", Weight="bold") + ")";
     elseif parsedVar.variantKind == "analyte"
         if strlength(parsedVar.analyteKey) > 0
-            title(ax, baseMetric + " (" + parsedVar.analyteKey + " analyte)");
+            baseTitle = baseMetric + " (" + parsedVar.analyteKey + " analyte)";
         else
-            title(ax, baseMetric + " (analyte-weighted)");
+            baseTitle = baseMetric + " (analyte-weighted)";
         end
     else
-        title(ax, baseMetric + " (broadband avg)");
+        baseTitle = baseMetric + " (broadband avg)";
     end
+    if options.LogScale
+        title(ax, baseTitle + " [log10]");
+    else
+        title(ax, baseTitle);
+    end
+    hSurf.UserData = struct( ...
+        "Z_linear", Z, ...
+        "logScale", options.LogScale, ...
+        "baseTitle", baseTitle, ...
+        "cb", cb);
     axis(ax, "tight");
     hold(ax, "on");
 

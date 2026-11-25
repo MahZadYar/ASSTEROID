@@ -71,6 +71,8 @@ classdef OptimizeController < handle
                         obj.saveDatabaseRequest();
                     case "MetricChanged"
                         obj.updateMetricState(eventData);
+                    case "UpdateColorScale"
+                        obj.updateColorScale(eventData);
                     case "GetPredictionBounds"
                         obj.sendPredictionBounds();
                     case {"StopProcess", "StopOptimize"}
@@ -113,15 +115,14 @@ classdef OptimizeController < handle
             rMin = obj.safeNum(d, "radiusMin", 50);
             rMax = obj.safeNum(d, "radiusMax", 700);
 
-            if (dataSource == "predictions" || (isfield(obj.session.db, "Pred") && structRowCount(obj.session.db.Pred) > 0))
-                predSoA = extractBranchAsSoA(obj.session.db, "Pred");
-                if isstruct(predSoA) && isfield(predSoA, "period") && isfield(predSoA, "radius") && ~isempty(predSoA.period)
-                    pDataMin = min(predSoA.period); pDataMax = max(predSoA.period);
-                    rDataMin = min(predSoA.radius); rDataMax = max(predSoA.radius);
-                    if dataSource == "predictions"
-                        pMin = pDataMin; pMax = pDataMax;
-                        rMin = rDataMin; rMax = rDataMax;
-                    end
+            if isfield(obj.session.db, "Pred") && isstruct(obj.session.db.Pred) && ...
+               isfield(obj.session.db.Pred, "period") && isfield(obj.session.db.Pred, "radius") && ...
+               ~isempty(obj.session.db.Pred.period)
+                pDataMin = min(obj.session.db.Pred.period); pDataMax = max(obj.session.db.Pred.period);
+                rDataMin = min(obj.session.db.Pred.radius); rDataMax = max(obj.session.db.Pred.radius);
+                if dataSource == "predictions"
+                    pMin = pDataMin; pMax = pDataMax;
+                    rMin = rDataMin; rMax = rDataMax;
                 end
             end
             [sMin, sMax] = obj.resolveShiftLimits(d, obj.safeStr(d, "dataSource", "model"), laserWl);
@@ -181,11 +182,12 @@ classdef OptimizeController < handle
             obj.updateOptimizeState("basinMap", []);
 
             % Render preview to axes
+            logScale = obj.resolveLogScale(d);
             ax = obj.getAxes();
             if ~isempty(ax) && isvalid(ax)
                 try
                     delete(allchild(ax));
-                    plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, [], [], [], false);
+                    plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, [], [], [], false, [], LogScale=logScale);
                 catch ME_plot
                     fprintf("[OptimizeController] Visualization warning: %s\n", ME_plot.message);
                 end
@@ -216,15 +218,14 @@ classdef OptimizeController < handle
             rMin = obj.safeNum(d, "radiusMin", 50);
             rMax = obj.safeNum(d, "radiusMax", 700);
 
-            if (obj.safeStr(d, "dataSource", "model") == "predictions" || (isfield(obj.session.db, "Pred") && structRowCount(obj.session.db.Pred) > 0))
-                predSoA = extractBranchAsSoA(obj.session.db, "Pred");
-                if isstruct(predSoA) && isfield(predSoA, "period") && isfield(predSoA, "radius") && ~isempty(predSoA.period)
-                    pDataMin = min(predSoA.period); pDataMax = max(predSoA.period);
-                    rDataMin = min(predSoA.radius); rDataMax = max(predSoA.radius);
-                    if obj.safeStr(d, "dataSource", "model") == "predictions"
-                        pMin = pDataMin; pMax = pDataMax;
-                        rMin = rDataMin; rMax = rDataMax;
-                    end
+            if isfield(obj.session.db, "Pred") && isstruct(obj.session.db.Pred) && ...
+               isfield(obj.session.db.Pred, "period") && isfield(obj.session.db.Pred, "radius") && ...
+               ~isempty(obj.session.db.Pred.period)
+                pDataMin = min(obj.session.db.Pred.period); pDataMax = max(obj.session.db.Pred.period);
+                rDataMin = min(obj.session.db.Pred.radius); rDataMax = max(obj.session.db.Pred.radius);
+                if obj.safeStr(d, "dataSource", "model") == "predictions"
+                    pMin = pDataMin; pMax = pDataMax;
+                    rMin = rDataMin; rMax = rDataMax;
                 end
             end
             [sMin, sMax] = obj.resolveShiftLimits(d, obj.safeStr(d, "dataSource", "model"), laserWl);
@@ -386,7 +387,7 @@ classdef OptimizeController < handle
                 if ~isempty(ax) && isvalid(ax)
                     try
                         delete(allchild(ax));
-                        plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, [], candidates, [], false, basinMap);
+                        plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, [], candidates, [], false, basinMap, LogScale=obj.resolveLogScale(d));
                     catch ME_plt
                         fprintf("[OptimizeController] Visualization warning: %s\n", ME_plt.message);
                     end
@@ -411,7 +412,7 @@ classdef OptimizeController < handle
                 try
                     delete(allchild(ax));
                     plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, ...
-                        originalSeeds, refinedSeeds, attemptTrajectories, forceTraceMode, basinMap);
+                        originalSeeds, refinedSeeds, attemptTrajectories, forceTraceMode, basinMap, LogScale=obj.resolveLogScale(d));
                 catch ME_plt2
                     fprintf("[OptimizeController] Visualization warning: %s\n", ME_plt2.message);
                 end
@@ -479,7 +480,7 @@ classdef OptimizeController < handle
                 try
                     delete(allchild(ax));
                     plotOptimizeHeatmap(lastRes, baseMetric, metricVariant, ax, [], seedsNorm, [], false, ...
-                        obj.getOptimizeState("basinMap"));
+                        obj.getOptimizeState("basinMap"), LogScale=obj.resolveLogScale());
                 catch ME
                     fprintf("[OptimizeController] Update plot warning: %s\n", ME.message);
                 end
@@ -604,7 +605,7 @@ classdef OptimizeController < handle
                 if isempty(metricVariant), metricVariant = "avg"; end
                 try
                     delete(allchild(ax));
-                    plotOptimizeHeatmap(resToPlot, baseMetric, metricVariant, ax, [], seedsNorm, [], false, basinMap);
+                    plotOptimizeHeatmap(resToPlot, baseMetric, metricVariant, ax, [], seedsNorm, [], false, basinMap, LogScale=obj.resolveLogScale());
                 catch ME
                     fprintf("[OptimizeController] MergeBasins plot warning: %s\n", ME.message);
                 end
@@ -951,7 +952,7 @@ classdef OptimizeController < handle
             if ~isempty(lastRes) && ~isempty(ax) && isvalid(ax)
                 try
                     delete(allchild(ax));
-                    plotOptimizeHeatmap(lastRes, baseMetric, metricVariant, ax, [], seedsVec, [], false, basinMap);
+                    plotOptimizeHeatmap(lastRes, baseMetric, metricVariant, ax, [], seedsVec, [], false, basinMap, LogScale=obj.resolveLogScale());
                 catch ME_plot
                     fprintf("[OptimizeController] Re-plot loaded basins warning: %s\n", ME_plot.message);
                 end
@@ -1416,6 +1417,45 @@ classdef OptimizeController < handle
             obj.syncMetricState(m, v);
         end
 
+        function updateColorScale(obj, d)
+        % UPDATECOLORSCALE Live-toggle linear vs log10 colormap on the active heatmap.
+            logScale = obj.safeBool(d, "logScale", false);
+            obj.updateOptimizeState("logScale", logScale);
+
+            ax = obj.getAxes();
+            if isempty(ax) || ~isvalid(ax)
+                return;
+            end
+            hSurf = findobj(ax, "Tag", "OptimizeHeatmapSurface");
+            if isempty(hSurf) || ~isvalid(hSurf(1))
+                return;
+            end
+            hSurf = hSurf(1);
+            ud = hSurf.UserData;
+            if ~isstruct(ud) || ~isfield(ud, "Z_linear")
+                return;
+            end
+
+            ZPlot = ud.Z_linear;
+            if logScale
+                ZPlot(ZPlot <= 0) = NaN;
+                ZPlot = log10(ZPlot);
+            end
+            hSurf.CData = ZPlot;
+            clim(ax, "auto");
+
+            if isfield(ud, "baseTitle")
+                if logScale
+                    title(ax, ud.baseTitle + " [log10]");
+                else
+                    title(ax, ud.baseTitle);
+                end
+            end
+            ud.logScale = logScale;
+            hSurf.UserData = ud;
+            drawnow limitrate;
+        end
+
         function updateOptimizeState(obj, key, val)
         % UPDATEOPTIMIZESTATE Store state value in local state and fig.UserData.
             obj.localOptimizeState.(key) = val;
@@ -1538,18 +1578,36 @@ classdef OptimizeController < handle
                 return;
             end
 
-            allData = extractBranchAsSoA(obj.session.db, "Pred");
-
-            laserWl = obj.safeNum(d, "laserWavelength", 785);
-            allData = obj.ensureDerivedMetricSlice(allData, baseMetric, metricVariant, laserWl);
-
             parsedVar = parseMetricVariantName(metricVariant, IsVariantToken=true);
             if strlength(parsedVar.variant) > 0 && parsedVar.variantKind ~= "spectral"
                 variantForField = parsedVar.variant;
             else
                 variantForField = "avg";
             end
-            avgFieldName = resolveDerivedMetricField(baseMetric, variantForField, allData);
+            avgFieldName = resolveDerivedMetricField(baseMetric, variantForField, obj.session.db.Pred);
+
+            % Fast selective extraction: if scalar metric already exists in db.Pred,
+            % skip decoding heavy [N x L] spectral matrices. Otherwise decode only
+            % the single spectral field needed by ensureDerivedMetricSlice.
+            if isfield(obj.session.db.Pred, avgFieldName)
+                allData = extractBranchAsSoA(obj.session.db, "Pred", DecodeSpectral=false);
+            else
+                specField = baseMetric;
+                if ~isfield(obj.session.db.Pred, specField)
+                    aliasMap = struct("EE_V","EF_vol", "EF_vol","EE_V", ...
+                                      "EE_S","EF_surf", "EF_surf","EE_S", ...
+                                      "Abs","Absorptance", "Absorptance","Abs", ...
+                                      "ECC","ECCheck", "ECCheck","ECC");
+                    if isfield(aliasMap, char(baseMetric)) && isfield(obj.session.db.Pred, aliasMap.(char(baseMetric)))
+                        specField = string(aliasMap.(char(baseMetric)));
+                    end
+                end
+                reqFields = ["period", "radius", "lambda", "RamanShift", "RamanWindow", "LaserWl", "LaserWavelength", specField];
+                allData = extractBranchAsSoA(obj.session.db, "Pred", Fields=reqFields);
+                laserWl = obj.safeNum(d, "laserWavelength", 785);
+                allData = obj.ensureDerivedMetricSlice(allData, baseMetric, metricVariant, laserWl);
+                avgFieldName = resolveDerivedMetricField(baseMetric, variantForField, allData);
+            end
 
             if ~isfield(allData, avgFieldName)
                 obj.sendError(sprintf("Metric '%s' (%s) not found in db.Pred.", baseMetric, metricVariant));
@@ -1593,11 +1651,12 @@ classdef OptimizeController < handle
             obj.updateOptimizeState("basinMap", []);
 
             % Render preview to axes
+            logScale = obj.resolveLogScale(d);
             ax = obj.getAxes();
             if ~isempty(ax) && isvalid(ax)
                 try
                     delete(allchild(ax));
-                    plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, [], [], [], false);
+                    plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, [], [], [], false, [], LogScale=logScale);
                 catch ME_plot
                     fprintf("[OptimizeController] Visualization warning: %s\n", ME_plot.message);
                 end
@@ -1826,6 +1885,16 @@ classdef OptimizeController < handle
                 obj.session.saveDatabase();
             end
             obj.sendToHTML("SaveComplete", "Database saved.");
+        end
+
+        function tf = resolveLogScale(obj, d)
+            if nargin >= 2 && isstruct(d) && isfield(d, "logScale") && ~isempty(d.logScale)
+                tf = logical(d.logScale);
+                obj.updateOptimizeState("logScale", tf);
+            else
+                stored = obj.getOptimizeState("logScale");
+                tf = ~isempty(stored) && logical(stored);
+            end
         end
 
         function v = safeNum(~, s, f, d)

@@ -1,4 +1,4 @@
-function allData = extractBranchAsSoA(db, branchName)
+function allData = extractBranchAsSoA(db, branchName, options)
 % extractBranchAsSoA  Extract a database branch as flat SoA struct.
 %
 %   allData = extractBranchAsSoA(db, branchName) extracts the specified
@@ -11,6 +11,14 @@ function allData = extractBranchAsSoA(db, branchName)
 %       db         - unified database struct
 %       branchName - string, e.g., "Sim", "Pred", "Interp"
 %
+%   Name-Value Arguments:
+%       Fields         - Optional string array of specific fields to extract
+%                        (default: all non-metadata fields)
+%       DecodeSpectral - Logical, whether to decode SpectralStorage-encoded
+%                        fields (default: true). Set false to extract only
+%                        scalar/coordinate fields without decoding large
+%                        spectral matrices.
+%
 %   Output:
 %       allData    - flat SoA struct suitable for validateSoAStructure,
 %                    reshapeSoAToVolume, plotting, etc.
@@ -20,6 +28,8 @@ function allData = extractBranchAsSoA(db, branchName)
     arguments
         db (1,1) struct
         branchName (1,1) string
+        options.Fields string = string.empty
+        options.DecodeSpectral (1,1) logical = true
     end
 
     if ~isfield(db, branchName)
@@ -36,14 +46,20 @@ function allData = extractBranchAsSoA(db, branchName)
 
     allData = struct();
     fields = fieldnames(branch);
+    filterFields = ~isempty(options.Fields);
     for i = 1:numel(fields)
         fn = fields{i};
         if ismember(fn, metaFields)
             continue
         end
+        if filterFields && ~any(options.Fields == string(fn))
+            continue
+        end
         val = branch.(fn);
         if SpectralStorage.isEncodedSpectral(val)
-            allData.(fn) = SpectralStorage.decodeField(val);
+            if options.DecodeSpectral || filterFields
+                allData.(fn) = SpectralStorage.decodeField(val);
+            end
         else
             allData.(fn) = val;
         end
