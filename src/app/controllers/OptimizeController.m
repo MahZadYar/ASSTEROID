@@ -248,6 +248,14 @@ classdef OptimizeController < handle
             multiStartDisplayMode = obj.safeStr(d, "multiStartDisplay", "off");
             useBasins = obj.safeBool(d, "useWatershedBasins", true);
             basinSens = max(0, obj.safeNum(d, "basinSensitivity", 0.5)) / 100;   % UI: % of range
+            basinMinArea = max(1, round(obj.safeNum(d, "basinMinArea", 4)));
+            basinConn = obj.safeNum(d, "basinConnectivity", 8);
+            if ~ismember(basinConn, [4, 8]), basinConn = 8; end
+            ratioMin = max(0, obj.safeNum(d, "ratioLimitMin", 0));
+            ratioMax = obj.safeNum(d, "ratioLimitMax", 0.49);
+            if ratioMax <= 0, ratioMax = Inf; end
+            ratioLim = [ratioMin, ratioMax];
+            logScale = obj.resolveLogScale(d);
 
             [analyteFileOpt, analyteSpecOpt, analyteLibOpt] = obj.resolveVariantAnalyteContext(metricVariant, rep, false);
 
@@ -292,8 +300,12 @@ classdef OptimizeController < handle
                 GradientSeedCount = round(obj.safeNum(d, "gradientSeedCount", 0)), ...
                 GradientSeedGridSize = round(obj.safeNum(d, "gradientSeedGridSize", 20)), ...
                 TuningRadius     = tuningRadiusNm * 1e-3, ...
+                RatioLimit       = ratioLim, ...
                 UseWatershedBasins = useBasins, ...
                 BasinSensitivity = basinSens, ...
+                BasinMinArea     = basinMinArea, ...
+                BasinConnectivity = basinConn, ...
+                LogScale         = logScale, ...
                 InBasinStarts    = max(1, round(obj.safeNum(d, "inBasinStarts", 5))), ...
                 BasinValueThreshold = max(0, min(100, obj.safeNum(d, "basinValueThreshold", 50))));
 
@@ -340,9 +352,10 @@ classdef OptimizeController < handle
 
                 if useBasins
                     % Reuse the partition shown at seed initialisation when it
-                    % matches the current metric and sensitivity; otherwise
-                    % runLocalizationWorkflow rebuilds it from cached predictions.
-                    cfg.basinMap = obj.storedBasinMap(baseMetric, metricVariant, basinSens, [pMin pMax], [rMin rMax]);
+                    % matches the current metric, sensitivity, watershed params,
+                    % and scale; otherwise runLocalizationWorkflow rebuilds it.
+                    cfg.basinMap = obj.storedBasinMap(baseMetric, metricVariant, basinSens, ...
+                        [pMin pMax], [rMin rMax], basinMinArea, basinConn, ratioLim, logScale);
                 end
 
                 % Ensure process-based parallel pool is ready (radius-box mode only;
@@ -374,7 +387,9 @@ classdef OptimizeController < handle
                 obj.updateOptimizeState("basinMap", basinMap);
                 obj.updateOptimizeState("basinMapMeta", struct("metric", string(baseMetric), ...
                     "variant", string(metricVariant), "sensitivity", basinSens, ...
-                    "pLimits", [pMin pMax], "rLimits", [rMin rMax]));
+                    "pLimits", [pMin pMax], "rLimits", [rMin rMax], ...
+                    "minArea", basinMinArea, "connectivity", basinConn, ...
+                    "ratioLimit", ratioLim, "logScale", logScale));
             elseif mode == "detect"
                 obj.updateOptimizeState("basinMap", []);
             end
@@ -1481,9 +1496,9 @@ classdef OptimizeController < handle
             end
         end
 
-        function bm = storedBasinMap(obj, baseMetric, metricVariant, sensitivity, pLimits, rLimits)
+        function bm = storedBasinMap(obj, baseMetric, metricVariant, sensitivity, pLimits, rLimits, minArea, connectivity, ratioLimit, logScale)
         % STOREDBASINMAP Basin map from seed initialisation if it matches the
-        % current metric, variant, sensitivity and bounds; [] otherwise.
+        % current metric, variant, sensitivity, watershed params, scale and bounds; [] otherwise.
             bm = struct([]);
             stored = obj.getOptimizeState("basinMap");
             meta = obj.getOptimizeState("basinMapMeta");
@@ -1495,9 +1510,22 @@ classdef OptimizeController < handle
                 bm = stored;
                 return;
             end
+            isMerged = isfield(meta, "isUserMerged") && meta.isUserMerged;
             same = meta.metric == string(baseMetric) && meta.variant == string(metricVariant) ...
-                && (abs(meta.sensitivity - sensitivity) < 1e-12 || (isfield(meta, "isUserMerged") && meta.isUserMerged)) ...
+                && (abs(meta.sensitivity - sensitivity) < 1e-12 || isMerged) ...
                 && isequal(meta.pLimits, pLimits) && isequal(meta.rLimits, rLimits);
+            if same && ~isMerged && nargin >= 7 && isfield(meta, "minArea")
+                same = isequal(meta.minArea, minArea);
+            end
+            if same && ~isMerged && nargin >= 8 && isfield(meta, "connectivity")
+                same = isequal(meta.connectivity, connectivity);
+            end
+            if same && ~isMerged && nargin >= 9 && isfield(meta, "ratioLimit")
+                same = isequal(meta.ratioLimit, ratioLimit);
+            end
+            if same && ~isMerged && nargin >= 10 && isfield(meta, "logScale")
+                same = logical(meta.logScale) == logical(logScale);
+            end
             if same
                 bm = stored;
             end

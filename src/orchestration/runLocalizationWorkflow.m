@@ -406,6 +406,11 @@ function results = runLocalizationWorkflow(cfg, reporter)
         if isfield(cfg, 'basinMinArea') && isfinite(cfg.basinMinArea)
             basinMinArea = double(cfg.basinMinArea);
         end
+        basinConn = 8;
+        if isfield(cfg, 'basinConnectivity') && ismember(cfg.basinConnectivity, [4, 8])
+            basinConn = double(cfg.basinConnectivity);
+        end
+        useLogScale = isfield(cfg, 'logScale') && logical(cfg.logScale);
         basinMap = [];
         if isfield(cfg, 'initialCandidates') && ~isempty(cfg.initialCandidates)
             candidateTable = cfg.initialCandidates;
@@ -450,14 +455,16 @@ function results = runLocalizationWorkflow(cfg, reporter)
                     if ~isempty(basinGrid)
                         basinGrid = localMaskToLimits(basinGrid, pBasin, rBasin, cfg);
                         wsRatio = [ratioLowerVal, ratioUpperVal];
-                        if dataSource == "predictions" || (ratioLowerVal <= 0 && (isinf(ratioUpperVal) || ratioUpperVal >= 1))
+                        if ratioLowerVal <= 0 && (isinf(ratioUpperVal) || ratioUpperVal <= 0 || ratioUpperVal >= 1)
                             wsRatio = [0, Inf];
                         end
                         [~, basinMap] = detect_watershed_basins(basinGrid, pBasin, rBasin, ...
                             Sensitivity=basinSens, RatioLimit=wsRatio, ...
-                            MinArea=basinMinArea);
-                        reporter.info(sprintf("  Rebuilt basin map from grid (%d basins, sensitivity %.2f %%).", ...
-                            numel(basinMap.basinIds), 100 * basinSens));
+                            MinArea=basinMinArea, Connectivity=basinConn, LogScale=useLogScale);
+                        scaleTag = "linear";
+                        if useLogScale, scaleTag = "log10"; end
+                        reporter.info(sprintf("  Rebuilt basin map from grid (%d basins, sensitivity %.2f %%, minArea=%d, conn=%d, scale=%s).", ...
+                            numel(basinMap.basinIds), 100 * basinSens, basinMinArea, basinConn, scaleTag));
                     else
                         reporter.warn("Metric_" + primaryMetric, ...
                             "No grid available for basin map; using radius-box refinement.");
@@ -466,21 +473,24 @@ function results = runLocalizationWorkflow(cfg, reporter)
             end
         elseif useBasins
             wsRatio = [ratioLowerVal, ratioUpperVal];
-            if dataSource == "predictions" || (ratioLowerVal <= 0 && (isinf(ratioUpperVal) || ratioUpperVal >= 1))
+            if ratioLowerVal <= 0 && (isinf(ratioUpperVal) || ratioUpperVal <= 0 || ratioUpperVal >= 1)
                 wsRatio = [0, Inf];
             end
             [candidateTable, basinMap] = detect_watershed_basins( ...
                 localMaskToLimits(avgMetricGrid, pSamplesLocal, rSamplesLocal, cfg), ...
                 pSamplesLocal, rSamplesLocal, ...
                 Sensitivity=basinSens, RatioLimit=wsRatio, ...
-                MinArea=basinMinArea, MaxBasins=cfg.numLocalMaxima);
+                MinArea=basinMinArea, MaxBasins=cfg.numLocalMaxima, ...
+                Connectivity=basinConn, LogScale=useLogScale);
             basePeakMask = [];
             gradMagnitude = [];
             laplacianField = [];
             divergenceField = [];
-            reporter.info(sprintf("  Watershed: %d basins (H = %.4g = %.2f %% of range, %d total in map).", ...
-                height(candidateTable), basinMap.hThreshold, 100 * basinSens, ...
-                numel(unique(basinMap.labels(basinMap.labels > 0)))));
+            scaleTag = "linear";
+            if useLogScale, scaleTag = "log10"; end
+            reporter.info(sprintf("  Watershed (%s): %d basins (H = %.4g = %.2f %% of range, minArea=%d, conn=%d, %d total in map).", ...
+                scaleTag, height(candidateTable), basinMap.hThreshold, 100 * basinSens, ...
+                basinMinArea, basinConn, numel(unique(basinMap.labels(basinMap.labels > 0)))));
         else
             [candidateTable, basePeakMask, gradMagnitude, laplacianField, divergenceField] = ...
                 detect_maxima_candidates(avgMetricGrid, pSamplesLocal, rSamplesLocal, ...
@@ -637,6 +647,9 @@ function [maximaResults, msSolutions, msOutput] = runGlobalMultiStart( ...
     if nargin >= 11 && ~isempty(analyteWeights)
         args = [args, {'AnalyteWeights', analyteWeights}];
     end
+    if isfield(cfg, "logScale") && logical(cfg.logScale)
+        args = [args, {'LogScale', true}];
+    end
 
     [maximaResults, msSolutions, msOutput] = find_local_maxima( ...
         model, ri, lambdaSamples, args{:}, 'Reporter', reporter);
@@ -695,6 +708,9 @@ function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runLocalM
     end
     if nargin >= 17 && ~isempty(analyteWeights)
         extraArgs = [extraArgs, {'AnalyteWeights', analyteWeights}];
+    end
+    if isfield(cfg, "logScale") && logical(cfg.logScale)
+        extraArgs = [extraArgs, {'LogScale', true}];
     end
 
     maxRetryCount = max(1, round(cfg.basinRetryCount));
@@ -1260,6 +1276,10 @@ function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runBasinM
     if ~isempty(analyteWeights)
         extraArgs = [extraArgs, {'AnalyteWeights', analyteWeights}];
     end
+    useLogScale = isfield(cfg, "logScale") && logical(cfg.logScale);
+    if useLogScale
+        extraArgs = [extraArgs, {'LogScale', true}];
+    end
 
     pAx = double(basinMap.pAxis(:)');      % µm
     rAx = double(basinMap.rAxis(:)');
@@ -1320,16 +1340,27 @@ function [maximaResults, msSolutions, msOutput, attemptTrajectories] = runBasinM
             pIn = pMesh(terr);  rIn = rMesh(terr);  vIn = vals(terr);
             pBox = [max(pBounds(1), min(pIn) - 2*dpCell), min(pBounds(2), max(pIn) + 2*dpCell)];
             rBox = [max(rBounds(1), min(rIn) - 2*drCell), min(rBounds(2), max(rIn) + 2*drCell)];
-            vMin = min(vIn);
-            vMax = max(vIn);
-            vRange = vMax - vMin;
+            vWork = vIn;
+            if useLogScale
+                posMask = isfinite(vIn) & vIn > 0;
+                vWork = -Inf(size(vIn));
+                vWork(posMask) = log10(vIn(posMask));
+            end
+            finiteWork = isfinite(vWork);
+            if any(finiteWork)
+                vMin = min(vWork(finiteWork));
+                vMax = max(vWork(finiteWork));
+                vRange = vMax - vMin;
+            else
+                vMin = NaN; vMax = NaN; vRange = 0;
+            end
             threshPct = 50;
             if isfield(cfg, "basinValueThreshold") && isfinite(cfg.basinValueThreshold)
                 threshPct = max(0, min(100, double(cfg.basinValueThreshold)));
             end
             if vRange > 0
                 vCutoff = vMin + (threshPct / 100) * vRange;
-                core = vIn >= vCutoff;
+                core = vWork >= vCutoff;
             else
                 core = true(size(vIn));
             end

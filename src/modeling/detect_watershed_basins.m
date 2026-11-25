@@ -41,6 +41,11 @@ function [candidateTable, basinMap] = detect_watershed_basins(metricGrid, pSampl
 %       MaxBasins    Maximum number of basins returned, highest peaks first
 %                    (default Inf). The label map keeps all basins.
 %       Connectivity 4 or 8 (default 8).
+%       LogScale     Logical. When true, H-maxima markers and watershed
+%                    segmentation are computed on log10(metricGrid) (cells
+%                    with metricGrid <= 0 are excluded from the domain), while
+%                    reported peak, saddle, depth, and basinMap.values remain
+%                    in the original linear metric scale (default false).
 %       AxisToNm     Scale factor from axis unit to nm, used for the stored
 %                    nm axes and outline polygons (default 1e3, µm → nm).
 %
@@ -75,6 +80,7 @@ function [candidateTable, basinMap] = detect_watershed_basins(metricGrid, pSampl
         options.MinArea (1,1) double {mustBePositive} = 4
         options.MaxBasins (1,1) double {mustBePositive} = Inf
         options.Connectivity (1,1) double {mustBeMember(options.Connectivity, [4, 8])} = 8
+        options.LogScale (1,1) logical = false
         options.AxisToNm (1,1) double {mustBePositive} = 1e3
     end
 
@@ -99,12 +105,17 @@ function [candidateTable, basinMap] = detect_watershed_basins(metricGrid, pSampl
         ratioGrid = rMesh ./ pMesh;
         validMask = validMask & ratioGrid >= ratioLo & ratioGrid <= ratioHi;
     end
+    workGrid = metricGrid;
+    if options.LogScale
+        validMask = validMask & (metricGrid > 0);
+        workGrid(validMask) = log10(metricGrid(validMask));
+    end
     if ~any(validMask, "all")
         return;
     end
 
-    vMin = min(metricGrid(validMask));
-    vMax = max(metricGrid(validMask));
+    vMin = min(workGrid(validMask));
+    vMax = max(workGrid(validMask));
     vRange = vMax - vMin;
     if ~(vRange > 0)
         return;   % flat surface: no maxima to separate
@@ -112,7 +123,7 @@ function [candidateTable, basinMap] = detect_watershed_basins(metricGrid, pSampl
 
     % Cells outside the domain are pushed below every valid value so they
     % act as deep valleys (barriers) and can never host a marker.
-    filled = metricGrid;
+    filled = workGrid;
     filled(~validMask) = vMin - vRange;
 
     hThreshold = max(options.Sensitivity * vRange, 10 * eps(vMax));
@@ -272,4 +283,5 @@ function m = localEmptyMap(metricGrid, pSamples, rSamples, options)
     m.sensitivity = options.Sensitivity;
     m.hThreshold = NaN;
     m.connectivity = options.Connectivity;
+    m.logScale = options.LogScale;
 end

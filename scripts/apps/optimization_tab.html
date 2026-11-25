@@ -629,6 +629,10 @@ function collectConfig() {
         refinementRadius: num("refinementRadius"),
         useWatershedBasins: chk("useWatershedBasins"),
         basinSensitivity: num("basinSensitivity"),
+        basinMinArea: num("basinMinArea"),
+        basinConnectivity: num("basinConnectivity"),
+        ratioLimitMin: num("ratioLimitMin"),
+        ratioLimitMax: num("ratioLimitMax"),
         inBasinStarts: num("inBasinStarts"),
         basinValueThreshold: num("basinValueThreshold")
     };
@@ -1819,7 +1823,7 @@ function toggleAllDbOptima(masterCb) {
                             <p class="hint">Laser λ uses the single-wavelength value at the excitation wavelength; Spectral Average integrates uniformly over the Stokes window; Analyte-Weighted Average weights the spectrum by the analyte Raman cross-section profile.</p>
                             <div class="toggle-row" style="margin-top:6px;">
                                 <input type="checkbox" id="logColorScale" onchange="onLogScaleChange()">
-                                <label for="logColorScale">Log colour scale (log₁₀)</label>
+                                <label for="logColorScale" title="Applies log10 transform to heatmap, watershed basin detection, and continuous optimization; reported table and DB values remain in original linear scale.">Log scale (log₁₀ — heatmap, basins &amp; optimizer)</label>
                             </div>
                         </div>
                     </div>
@@ -1851,13 +1855,36 @@ function toggleAllDbOptima(masterCb) {
                                     <input type="checkbox" id="useWatershedBasins" checked onchange="toggleWatershedMode()">
                                 </div>
                             </div>
-                            <div class="field watershed-only">
-                                <label>Basin Sensitivity (% of range)</label>
-                                <input type="number" id="basinSensitivity" value="0.1" step="0.05" min="0">
+                            <div class="field-row watershed-only">
+                                <div class="field">
+                                    <label>Basin Sensitivity (% of range)</label>
+                                    <input type="number" id="basinSensitivity" value="0.1" step="0.05" min="0">
+                                </div>
+                                <div class="field">
+                                    <label>Min Basin Area (cells)</label>
+                                    <input type="number" id="basinMinArea" value="4" step="1" min="1">
+                                </div>
+                            </div>
+                            <div class="field-row watershed-only">
+                                <div class="field">
+                                    <label>Connectivity</label>
+                                    <select id="basinConnectivity">
+                                        <option value="8" selected>8-connected (default)</option>
+                                        <option value="4">4-connected</option>
+                                    </select>
+                                </div>
+                                <div class="field">
+                                    <label title="Allowed packing ratio r/P (set Max = 0 to disable upper limit)">r/P Ratio Limit (min / max)</label>
+                                    <div style="display:flex;gap:4px;">
+                                        <input type="number" id="ratioLimitMin" value="0" step="0.01" min="0" max="1" style="width:50%;" title="Min r/P ratio">
+                                        <input type="number" id="ratioLimitMax" value="0.49" step="0.01" min="0" max="1" style="width:50%;" title="Max r/P ratio (0 = no limit)">
+                                    </div>
+                                </div>
                             </div>
                             <p class="hint">Each local maximum owns a watershed basin. Peaks whose height above the
                                 saddle to a higher neighbour is below the sensitivity are merged into that neighbour;
-                                lower values keep more shoulder peaks. Basins are drawn in the seed colour on the heatmap.</p>
+                                lower values keep more shoulder peaks. When Log scale is enabled, watershed segmentation
+                                and optimization run on log₁₀(metric) while reported and saved values stay in linear scale.</p>
                         </div>
                     </div>
 

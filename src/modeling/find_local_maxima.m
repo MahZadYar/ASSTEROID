@@ -103,6 +103,7 @@ opts.GradientSeedCount = round(opts.GradientSeedCount);
 opts.Display = validatestring(opts.Display, {'off','final','iter','diagnose'}, mfilename, 'Display');
 opts.FminconAlgorithm = validatestring(opts.FminconAlgorithm, {'interior-point','sqp','active-set','sqp-legacy'}, mfilename, 'FminconAlgorithm');
 opts.CaptureAllLocalRuns = logical(opts.CaptureAllLocalRuns);
+useLogScale = logical(opts.LogScale);
 
 %% Override settings when ShowIterationPaths is enabled
 % Iteration path logging does not work with parallel execution.
@@ -306,7 +307,7 @@ end
 %% Build objective and constraint functions
 objectiveFcn = @(x) localMetricAverageObjective(x, model, metricIdx, ...
     featureSuffix, opts.MiniBatchSize, ratioLower, ratioUpper, predictor, lambdaVec, ...
-    canUseAnalyticalGradients, gradientModel, analyteWeights);
+    canUseAnalyticalGradients, gradientModel, analyteWeights, useLogScale);
 nonlconFcn = @(x)localRatioConstraints(x, ratioLower, ratioUpper);
 
 p0 = mean(pBounds);
@@ -336,7 +337,7 @@ if canUseAnalyticalGradients
             canUseAnalyticalGradients = false;
             objectiveFcn = @(x) localMetricAverageObjective(x, model, metricIdx, ...
                 featureSuffix, opts.MiniBatchSize, ratioLower, ratioUpper, predictor, lambdaVec, ...
-                false, gradientModel, analyteWeights);
+                false, gradientModel, analyteWeights, useLogScale);
             if opts.ShowIterationPaths
                 localReporterInfo(reporter, '[find_local_maxima] ✗ gradientModel.net is NOT a dlnetwork — falling back to finite-diff.');
             end
@@ -355,7 +356,7 @@ if canUseAnalyticalGradients
                 canUseAnalyticalGradients = false;
                 objectiveFcn = @(x) localMetricAverageObjective(x, model, metricIdx, ...
                     featureSuffix, opts.MiniBatchSize, ratioLower, ratioUpper, predictor, lambdaVec, ...
-                    false, gradientModel, analyteWeights);
+                    false, gradientModel, analyteWeights, useLogScale);
                 if opts.ShowIterationPaths
                     localReporterInfo(reporter, '[find_local_maxima] ⚠ Gradient is zero! Falling back to finite-differences (step=0.005).');
                 end
@@ -365,7 +366,7 @@ if canUseAnalyticalGradients
         canUseAnalyticalGradients = false;
         objectiveFcn = @(x) localMetricAverageObjective(x, model, metricIdx, ...
             featureSuffix, opts.MiniBatchSize, ratioLower, ratioUpper, predictor, lambdaVec, ...
-            false, gradientModel, analyteWeights);
+            false, gradientModel, analyteWeights, useLogScale);
         if opts.ShowIterationPaths
             localReporterInfo(reporter, sprintf('[find_local_maxima] ✗ Analytical gradient test ERROR: %s. Using finite-diff fallback.', testErr.message));
         end
@@ -505,6 +506,9 @@ if ~logical(opts.UseParallel)
 
         try
             [x_local, fval_local, exitflag_local, output_local] = fmincon(localProblem);
+            if useLogScale && isfinite(fval_local)
+                fval_local = -(10 ^ (-fval_local));
+            end
             msOutput.numSuccess = msOutput.numSuccess + 1;
             solutions = [solutions; struct('X', x_local, 'Fval', fval_local, 'Exitflag', exitflag_local, 'Output', output_local, 'X0', {{randomMatrix(iStart,:)'}})]; %#ok<AGROW>
         catch
@@ -536,6 +540,9 @@ else
         localProblem.x0 = x0_i;
         try
             [x_i, fval_i, flag_i, out_i] = fmincon(localProblem);
+            if useLogScale && isfinite(fval_i)
+                fval_i = -(10 ^ (-fval_i));
+            end
             parResults{iStart} = struct('X', x_i, 'Fval', fval_i, ...
                 'Exitflag', flag_i, 'Output', out_i, 'X0', {{x0_i}});
         catch
@@ -563,6 +570,16 @@ end
 iterPaths = {};
 if ~isempty(getIterPaths)
     iterPaths = getIterPaths();
+    if useLogScale
+        for iPath = 1:numel(iterPaths)
+            if isstruct(iterPaths{iPath}) && isfield(iterPaths{iPath}, 'fval')
+                fv = iterPaths{iPath}.fval;
+                ok = isfinite(fv);
+                fv(ok) = -(10 .^ (-fv(ok)));
+                iterPaths{iPath}.fval = fv;
+            end
+        end
+    end
 end
 
 % If OutputFcn didn't capture paths (likely due to zero iterations), 
@@ -666,6 +683,7 @@ parser.addParameter('CaptureAllLocalRuns', false, @(b)islogical(b) || isnumeric(
 parser.addParameter('ShowIterationPaths', false, @(b)islogical(b) || isnumeric(b));
 parser.addParameter('Reporter', [], @(r) isempty(r) || isobject(r) || isstruct(r));
 parser.addParameter('AnalyteWeights', [], @(w) isempty(w) || (isnumeric(w) && isvector(w)));
+parser.addParameter('LogScale', false, @(b)islogical(b) || isnumeric(b));
 parser.parse(varargin{:});
 opts = parser.Results;
 end
@@ -851,7 +869,10 @@ if kept > 0
 end
 end
 
-function [f, grad] = localMetricAverageObjective(x, model, metricIdx, featureSuffix, miniBatchSize, ratioLower, ratioUpper, predictor, lambdaVec, useAnalyticalGradients, gradientModel, analyteWeights)
+function [f, grad] = localMetricAverageObjective(x, model, metricIdx, featureSuffix, miniBatchSize, ratioLower, ratioUpper, predictor, lambdaVec, useAnalyticalGradients, gradientModel, analyteWeights, useLogScale)
+if nargin < 13
+    useLogScale = false;
+end
 pVal = x(1);
 rVal = x(2);
 if rVal < ratioLower * pVal
@@ -894,16 +915,28 @@ try
         avgVal = localEvaluateMetricAverage(pVal, rVal, model, metricIdx, featureSuffix, miniBatchSize);
     end
 
-    if ~isfinite(avgVal)
+    if ~isfinite(avgVal) || (useLogScale && avgVal <= 0)
         f = inf;
+        if nargout > 1
+            grad = zeros(2, 1);
+        end
+    elseif useLogScale
+        f = -log10(avgVal);
+        if nargout > 1
+            if ~isempty(avgGrad) && all(isfinite(avgGrad))
+                grad = -avgGrad(:) / (avgVal * log(10));
+            else
+                grad = zeros(2, 1);
+            end
+        end
     else
         f = -avgVal;
-    end
-    if nargout > 1
-        if ~isempty(avgGrad) && all(isfinite(avgGrad))
-            grad = -avgGrad(:);
-        else
-            grad = zeros(2, 1);
+        if nargout > 1
+            if ~isempty(avgGrad) && all(isfinite(avgGrad))
+                grad = -avgGrad(:);
+            else
+                grad = zeros(2, 1);
+            end
         end
     end
 catch evalErr
@@ -1066,7 +1099,7 @@ function avgVal = localEvaluateViaPredictor(pVal, rVal, predictor, metricIdx, la
     pQuery = pVal;
     rQuery = rVal;
     lamQuery = lambdaVec;
-    if isfield(predictor, 'mode') && strcmpi(string(predictor.mode), "data")
+    if isfield(predictor, 'mode') && ismember(lower(string(predictor.mode)), ["data", "interpolation"])
         % createDataPredictor operates in nm while find_local_maxima runs in µm
         if pQuery < 50 && rQuery < 50
             pQuery = pQuery * 1e3;

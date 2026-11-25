@@ -55,4 +55,24 @@ fprintf("  V Ratio window respected (%d basins).\n", height(T3));
 assert(height(T4) == 0 && all(bmap4.labels(:) == 0), "Flat surface must yield no basins.");
 fprintf("  V Flat surface yields no basins.\n");
 
+%% 8. LogScale=true resolves multi-order-of-magnitude peaks while reporting linear values
+Flog = g(1.10, 0.30, 1e5, 0.06) ...      % dominant peak (10^5)
+     + g(0.60, 0.15, 200, 0.06) ...      % secondary peak (200 — 0.2% of linear range)
+     + 1;                                % positive floor
+Tlin = detect_watershed_basins(Flog, pUm, rUm, Sensitivity = 0.01, LogScale = false);
+[Tlog, bmapLog] = detect_watershed_basins(Flog, pUm, rUm, Sensitivity = 0.01, LogScale = true);
+assert(height(Tlin) == 1, "Linear H=1%% should merge the 200 peak into the 1e5 peak.");
+assert(height(Tlog) == 2, "LogScale=true H=1%% must resolve both the 1e5 and 200 peaks.");
+assert(Tlog.GridValue(1) > 9e4 && Tlog.GridValue(2) > 150 && Tlog.GridValue(2) < 300, ...
+    "Reported GridValue must remain in original linear scale.");
+assert(all(Tlog.Depth > 0) && max(bmapLog.values(:)) > 9e4, ...
+    "Depth and basinMap.values must remain in linear scale.");
+assert(bmapLog.logScale, "basinMap.logScale flag must be true.");
+fprintf("  V LogScale=true resolved %d basins while preserving linear reported values.\n", height(Tlog));
+
+%% 9. Connectivity=4 and MinArea filtering
+Tconn4 = detect_watershed_basins(F, pUm, rUm, Sensitivity = 0.01, Connectivity = 4, MinArea = 20);
+assert(height(Tconn4) >= 1 && all(Tconn4.BasinArea >= 20), "MinArea filter must be respected.");
+fprintf("  V Connectivity=4 and MinArea=20 respected (%d basins).\n", height(Tconn4));
+
 fprintf("=== test_watershed_basins PASSED ===\n");
