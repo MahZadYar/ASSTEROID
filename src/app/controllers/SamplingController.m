@@ -384,13 +384,14 @@ classdef SamplingController < handle
 
             pts = nanRes.uniquePoints;
             hScat = scatter3(ax_, pts(:, 1), pts(:, 2), repmat(zVal, size(pts, 1), 1), ...
-                60, [1 0.5 0], "^", "filled", ...
+                60, [201, 148, 44]/255, "^", "filled", ...
                 "MarkerEdgeColor", [1 1 1], ...
                 "LineWidth", 1.2, ...
                 "DisplayName", sprintf("Failed/NaN Points (%d)", nanRes.count), ...
                 "Tag", "NAN_HIGHLIGHT_POINTS");
             uistack(hScat, "top");
-            legend(ax_, "show", "TextColor", [0.8 0.85 0.9], "Location", "northeast");
+            legend(ax_, "show", "TextColor", [248, 248, 248]/255, "Location", "northeast");
+            applyAssteroidPlotStyle(ax_, Theme="dark", ApplyColors=false);
         end
 
         function resetSampling(obj)
@@ -403,7 +404,8 @@ classdef SamplingController < handle
             ax_ = obj.getAxes();
             if ~isempty(ax_) && isvalid(ax_)
                 cla(ax_);
-                title(ax_, "Sampling Density & Generated Points", "Color", [0.9 0.92 0.95]);
+                title(ax_, "Sampling Density & Generated Points", "Color", [107, 209, 203]/255);
+                applyAssteroidPlotStyle(ax_, Theme="dark", ApplyColors=false);
             end
             obj.sendToHTML("StatusUpdate", "Reset complete");
         end
@@ -435,9 +437,9 @@ classdef SamplingController < handle
                 if ~isempty(obj.fig) && isvalid(obj.fig)
                     cmap = getappdata(obj.fig, "CustomColormap");
                 end
-                if isempty(cmap), cmap = parula(256); end
+                if isempty(cmap), cmap = loadColormap("AssteroidColormap.txt", 256); end
                 colormap(ax_, cmap);
-                cb = colorbar(ax_); cb.Color = [0.7 0.75 0.8];
+                cb = colorbar(ax_); cb.Color = [167, 187, 249]/255;
                 clim(ax_, [0 1]);
             else
                 view(ax_, 2);
@@ -458,16 +460,17 @@ classdef SamplingController < handle
             end
             hold(ax_, "off");
             xlim(ax_, pR); ylim(ax_, rR);
-            xlabel(ax_, "Period (nm)", "Color", [0.9 0.92 0.95], "FontWeight", "bold");
-            ylabel(ax_, "Radius (nm)", "Color", [0.9 0.92 0.95], "FontWeight", "bold");
+            xlabel(ax_, "Period (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
+            ylabel(ax_, "Radius (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
             if ~isempty(result) && result.count > 0
                 ttl = sprintf("Generated %d points (%.2f%% acceptance)", result.count, result.acceptanceRate * 100);
             else
                 ttl = "Sampling Density Preview";
             end
-            title(ax_, ttl, "Color", [0.9 0.92 0.95], "FontSize", 12);
-            legend(ax_, "Location", "northeast", "TextColor", [0.9 0.92 0.95], ...
-                "Color", [0.2 0.25 0.3], "EdgeColor", [0.4 0.45 0.5]);
+            title(ax_, ttl, "Color", [107, 209, 203]/255);
+            legend(ax_, "Location", "northeast", "TextColor", [248, 248, 248]/255, ...
+                "Color", [3, 0, 51]/255, "EdgeColor", [72, 72, 72]/255);
+            applyAssteroidPlotStyle(ax_, Theme="dark", ApplyColors=false);
             drawnow;
         end
 

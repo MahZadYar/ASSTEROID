@@ -47,7 +47,7 @@ function info = plotScatteredMap2D(ax, p, r, v, options)
         r (:,1) double
         v (:,1) double
         options.Method (1,1) string {mustBeMember(options.Method, ["triangulated", "voronoi", "nearest", "natural", "linear", "grid"])} = "triangulated"
-        options.Colormap double = parula(256)
+        options.Colormap double = loadColormap("AssteroidColormap.txt", 256)
         options.LogScale (1,1) logical = false
         options.Title (1,1) string = ""
         options.ColorbarLabel (1,1) string = ""
@@ -183,14 +183,14 @@ function info = plotScatteredMap2D(ax, p, r, v, options)
     end
 
     colormap(ax, options.Colormap);
-    cb = colorbar(ax, "Color", [0.9 0.92 0.95]);
+    cb = colorbar(ax, "Color", [167, 187, 249]/255);
     cbLabel = options.ColorbarLabel;
     if options.LogScale && strlength(cbLabel) > 0
         cbLabel = "log_{10}(" + cbLabel + ")";
     end
     if strlength(cbLabel) > 0
         cb.Label.String = cbLabel;
-        cb.Label.Color = [0.9 0.92 0.95];
+        cb.Label.Color = [248, 248, 248]/255;
         cb.Label.Interpreter = "tex";
     end
     if diff(info.valueRange) > 0
@@ -208,18 +208,19 @@ function info = plotScatteredMap2D(ax, p, r, v, options)
             "DisplayName", "Simulation samples");
     end
     if ~isempty(options.OptimaP)
-        scatter(ax, options.OptimaP, options.OptimaR, 90, [1 0.85 0.2], "p", "filled", ...
+        scatter(ax, options.OptimaP, options.OptimaR, 90, [235, 179, 79]/255, "p", "filled", ...
             "MarkerEdgeColor", [0 0 0], "LineWidth", 0.8, "DisplayName", "Saved optima");
     end
     hold(ax, "off");
 
-    xlabel(ax, "Period (nm)", "Color", [0.9 0.92 0.95], "FontWeight", "bold");
-    ylabel(ax, "Radius (nm)", "Color", [0.9 0.92 0.95], "FontWeight", "bold");
+    xlabel(ax, "Period (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
+    ylabel(ax, "Radius (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
     if strlength(options.Title) > 0
-        title(ax, options.Title, "Color", [0.9 0.92 0.95], "FontSize", 13, "Interpreter", "none");
+        title(ax, options.Title, "Color", [248, 248, 248]/255, "Interpreter", "none");
     end
     axis(ax, "tight");
     ax.Layer = "top";
+    applyAssteroidPlotStyle(ax, Theme="dark", ApplyColors=false);
 end
 
 %% ========================================================================
@@ -337,10 +338,11 @@ end
 
 function localStyleAxes(ax)
     ax.Color = [0.06 0.10 0.16];
-    ax.XColor = [0.7 0.75 0.8];
-    ax.YColor = [0.7 0.75 0.8];
-    ax.GridColor = [0.3 0.35 0.4];
-    ax.GridAlpha = 0.5;
+    ax.XColor = [167, 187, 249]/255;
+    ax.YColor = [167, 187, 249]/255;
+    ax.GridColor = [56, 74, 224]/255;
+    ax.GridAlpha = 0.28;
     ax.Box = "on";
     ax.XGrid = "on"; ax.YGrid = "on";
+    applyAssteroidPlotStyle(ax, Theme="dark", ApplyColors=false);
 end

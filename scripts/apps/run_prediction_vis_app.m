@@ -80,76 +80,76 @@ function run_prediction_vis_app()
     tabGroup = uitabgroup(visGrid);
 
     %% Tab 1: Metric at Laser Wavelength
-    tab1 = uitab(tabGroup, "Title", "Metric @ Laser λ", "BackgroundColor", [0.15 0.15 0.18]);
+    tab1 = uitab(tabGroup, "Title", "Metric @ Laser λ", "BackgroundColor", [3, 0, 51]/255);
     tab1Grid = uigridlayout(tab1, [1 1]);
     tab1Grid.Padding = [10 10 10 10];
-    tab1Grid.BackgroundColor = [0.15 0.15 0.18];
+    tab1Grid.BackgroundColor = [3, 0, 51]/255;
 
     ax1 = uiaxes(tab1Grid);
     ax1.Title.String = "Metric @ Laser Wavelength";
-    ax1.Title.Color = "w";
-    ax1.Title.FontSize = 14;
+    ax1.Title.Color = [248, 248, 248]/255;
     ax1.XLabel.String = "Period (nm)";
     ax1.YLabel.String = "Radius (nm)";
-    ax1.XColor = "w";
-    ax1.YColor = "w";
-    ax1.Color = [0.15 0.15 0.18];
-    ax1.GridColor = [0.4 0.4 0.4];
+    ax1.XColor = [167, 187, 249]/255;
+    ax1.YColor = [167, 187, 249]/255;
+    ax1.Color = [4, 2, 58]/255;
+    ax1.GridColor = [56, 74, 224]/255;
     ax1.Tag = "axLaser";
+    applyAssteroidPlotStyle(ax1, Theme="dark", ApplyColors=false);
 
     %% Tab 2: Spectrally Averaged Metric
-    tab2 = uitab(tabGroup, "Title", "Spectral Average", "BackgroundColor", [0.15 0.15 0.18]);
+    tab2 = uitab(tabGroup, "Title", "Spectral Average", "BackgroundColor", [3, 0, 51]/255);
     tab2Grid = uigridlayout(tab2, [1 1]);
     tab2Grid.Padding = [10 10 10 10];
-    tab2Grid.BackgroundColor = [0.15 0.15 0.18];
+    tab2Grid.BackgroundColor = [3, 0, 51]/255;
 
     ax2 = uiaxes(tab2Grid);
     ax2.Title.String = "Spectrally Averaged Metric";
-    ax2.Title.Color = "w";
-    ax2.Title.FontSize = 14;
+    ax2.Title.Color = [248, 248, 248]/255;
     ax2.XLabel.String = "Period (nm)";
     ax2.YLabel.String = "Radius (nm)";
-    ax2.XColor = "w";
-    ax2.YColor = "w";
-    ax2.Color = [0.15 0.15 0.18];
-    ax2.GridColor = [0.4 0.4 0.4];
+    ax2.XColor = [167, 187, 249]/255;
+    ax2.YColor = [167, 187, 249]/255;
+    ax2.Color = [4, 2, 58]/255;
+    ax2.GridColor = [56, 74, 224]/255;
     ax2.Tag = "axAvg";
+    applyAssteroidPlotStyle(ax2, Theme="dark", ApplyColors=false);
 
     %% Tab 3: Spectral Profile
-    tab3 = uitab(tabGroup, "Title", "Spectral Profile", "BackgroundColor", [0.15 0.15 0.18]);
+    tab3 = uitab(tabGroup, "Title", "Spectral Profile", "BackgroundColor", [3, 0, 51]/255);
     tab3Grid = uigridlayout(tab3, [1 1]);
     tab3Grid.Padding = [10 10 10 10];
-    tab3Grid.BackgroundColor = [0.15 0.15 0.18];
+    tab3Grid.BackgroundColor = [3, 0, 51]/255;
 
     ax3 = uiaxes(tab3Grid);
     ax3.Title.String = "Spectral Profile at Selected Point";
-    ax3.Title.Color = "w";
-    ax3.Title.FontSize = 14;
+    ax3.Title.Color = [248, 248, 248]/255;
     ax3.XLabel.String = "Wavelength (nm)";
     ax3.YLabel.String = "Metric Value";
-    ax3.XColor = "w";
-    ax3.YColor = "w";
-    ax3.Color = [0.15 0.15 0.18];
-    ax3.GridColor = [0.4 0.4 0.4];
+    ax3.XColor = [167, 187, 249]/255;
+    ax3.YColor = [167, 187, 249]/255;
+    ax3.Color = [4, 2, 58]/255;
+    ax3.GridColor = [56, 74, 224]/255;
     ax3.Tag = "axSpectrum";
+    applyAssteroidPlotStyle(ax3, Theme="dark", ApplyColors=false);
 
     %% Tab 4: Wavelength Slice
-    tab4 = uitab(tabGroup, "Title", "λ Slice", "BackgroundColor", [0.15 0.15 0.18]);
+    tab4 = uitab(tabGroup, "Title", "λ Slice", "BackgroundColor", [3, 0, 51]/255);
     tab4Grid = uigridlayout(tab4, [1 1]);
     tab4Grid.Padding = [10 10 10 10];
-    tab4Grid.BackgroundColor = [0.15 0.15 0.18];
+    tab4Grid.BackgroundColor = [3, 0, 51]/255;
 
     ax4 = uiaxes(tab4Grid);
     ax4.Title.String = "Metric at Selected Wavelength";
-    ax4.Title.Color = "w";
-    ax4.Title.FontSize = 14;
+    ax4.Title.Color = [248, 248, 248]/255;
     ax4.XLabel.String = "Period (nm)";
     ax4.YLabel.String = "Radius (nm)";
-    ax4.XColor = "w";
-    ax4.YColor = "w";
-    ax4.Color = [0.15 0.15 0.18];
-    ax4.GridColor = [0.4 0.4 0.4];
+    ax4.XColor = [167, 187, 249]/255;
+    ax4.YColor = [167, 187, 249]/255;
+    ax4.Color = [4, 2, 58]/255;
+    ax4.GridColor = [56, 74, 224]/255;
     ax4.Tag = "axSlice";
+    applyAssteroidPlotStyle(ax4, Theme="dark", ApplyColors=false);
 
     %% Tab 5: 3D Volume Visualization
     tab5 = uitab(tabGroup, "Title", "3D Volume", "BackgroundColor", [0 0 0]);
@@ -219,8 +219,8 @@ function state = initializeState()
     state.analyteSpectrum = struct();
 
     % Visualization options
-    state.colormapName = "AuroraAustralis";
-    state.colormapInverted = true;
+    state.colormapName = "AssteroidColormap";
+    state.colormapInverted = false;
     state.logScale = false;
     state.showGrid = true;
     state.interpolation = "interp";
@@ -616,7 +616,7 @@ function updateVisualization(src, eventData, fig)
 
     % Load colormap
     try
-        cmap = loadColormap("AuroraAustralis.txt", 256);
+        cmap = loadColormap("AssteroidColormap.txt", 256);
         if state.colormapInverted
             cmap = flipud(cmap);
         end
@@ -639,13 +639,15 @@ function updateVisualization(src, eventData, fig)
     pcolor(ax1, pGrid, rGrid, laserData);
     shading(ax1, state.interpolation);
     colormap(ax1, cmap);
-    colorbar(ax1, "Color", "w");
-    ax1.Title.String = sprintf("%s @ λ = %.0f nm", strrep(state.primaryMetric, "_", "\_"), state.lambdaLaser);
+    colorbar(ax1, "Color", [167, 187, 249]/255);
+    ax1.Title.String = sprintf("%s @ λ = %.0f nm", state.primaryMetric, state.lambdaLaser);
+    ax1.Title.Interpreter = "none";
     ax1.XLabel.String = "Period (nm)";
     ax1.YLabel.String = "Radius (nm)";
     if state.showGrid
         grid(ax1, "on");
     end
+    applyAssteroidPlotStyle(ax1, Theme="dark", ApplyColors=false);
 
     % 2. Spectrally averaged metric
     ax2 = axes.avg;
@@ -660,13 +662,15 @@ function updateVisualization(src, eventData, fig)
         pcolor(ax2, pGrid, rGrid, avgData);
         shading(ax2, state.interpolation);
         colormap(ax2, cmap);
-        colorbar(ax2, "Color", "w");
-        ax2.Title.String = sprintf("Average %s", strrep(state.primaryMetric, "_", "\_"));
+        colorbar(ax2, "Color", [167, 187, 249]/255);
+        ax2.Title.String = sprintf("Average %s", state.primaryMetric);
+        ax2.Title.Interpreter = "none";
         ax2.XLabel.String = "Period (nm)";
         ax2.YLabel.String = "Radius (nm)";
         if state.showGrid
             grid(ax2, "on");
         end
+        applyAssteroidPlotStyle(ax2, Theme="dark", ApplyColors=false);
     end
 
     % 3. Spectral profile at selected point
@@ -719,7 +723,7 @@ function updateSlice(~, eventData, fig)
     end
 
     try
-        cmap = loadColormap("AuroraAustralis.txt", 256);
+        cmap = loadColormap("AssteroidColormap.txt", 256);
         if state.colormapInverted
             cmap = flipud(cmap);
         end
@@ -732,15 +736,16 @@ function updateSlice(~, eventData, fig)
     pcolor(ax4, pGrid, rGrid, sliceData);
     shading(ax4, state.interpolation);
     colormap(ax4, cmap);
-    colorbar(ax4, "Color", "w");
-    ax4.Title.String = sprintf("%s at Δν = %.0f cm⁻¹ (λ = %.1f nm)", strrep(state.primaryMetric, "_", "\_"), actualStokes, actualWavelength);
-    ax4.Title.Color = "w";
-    ax4.Title.FontSize = 14;
+    colorbar(ax4, "Color", [167, 187, 249]/255);
+    ax4.Title.String = sprintf("%s at Δν = %.0f cm⁻¹ (λ = %.1f nm)", state.primaryMetric, actualStokes, actualWavelength);
+    ax4.Title.Interpreter = "none";
+    ax4.Title.Color = [248, 248, 248]/255;
     ax4.XLabel.String = "Period (nm)";
     ax4.YLabel.String = "Radius (nm)";
     if state.showGrid
         grid(ax4, "on");
     end
+    applyAssteroidPlotStyle(ax4, Theme="dark", ApplyColors=false);
 end
 
 function updateSpectrum(src, eventData, fig)
@@ -776,20 +781,22 @@ function updateSpectrum(src, eventData, fig)
 
     ax3 = fig.UserData.axes.spectrum;
     cla(ax3);
-    plot(ax3, lambdas, spectrum, "LineWidth", 2, "Color", [0.3 0.7 1]);
+    plot(ax3, lambdas, spectrum, "LineWidth", 2, "Color", [128, 154, 236]/255); % OKHSL A70
     ax3.Title.String = sprintf("Spectral Profile: p = %.0f nm, r = %.0f nm", actualP, actualR);
-    ax3.Title.Color = "w";
-    ax3.Title.FontSize = 14;
+    ax3.Title.Color = [248, 248, 248]/255;
     ax3.XLabel.String = "Wavelength (nm)";
-    ax3.YLabel.String = strrep(state.primaryMetric, "_", "\_");
+    ax3.YLabel.String = state.primaryMetric;
+    ax3.YLabel.Interpreter = "none";
     if state.showGrid
         grid(ax3, "on");
     end
 
-    % Mark laser wavelength
+    % Mark laser wavelength (OKHSL D70 Gold)
     hold(ax3, "on");
-    xline(ax3, state.lambdaLaser, "--r", "LineWidth", 1.5, "Label", sprintf("λ₀ = %.0f nm", state.lambdaLaser));
+    xline(ax3, state.lambdaLaser, "--", "Color", [201, 148, 44]/255, "LineWidth", 1.5, ...
+        "Label", sprintf("λ_{0} = %.0f nm", state.lambdaLaser));
     hold(ax3, "off");
+    applyAssteroidPlotStyle(ax3, Theme="dark", ApplyColors=false);
 
     if ~isempty(src)
         sendEventToHTMLSource(src, "SpectrumUpdated", struct( ...
@@ -830,7 +837,7 @@ function update3DVolume(~, ~, fig)
 
     % Load colormap
     try
-        cmap = loadColormap("AuroraAustralis.txt", 4095);
+        cmap = loadColormap("AssteroidColormap.txt", 4095);
         if state.colormapInverted
             cmap = flipud(cmap);
         end

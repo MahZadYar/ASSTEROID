@@ -128,9 +128,9 @@ Visual styling across all 7 HTML views and MATLAB figure axes is governed by a u
 | **Row D (Luminous Gold)** | Optima Maxima, Resonant Hotspots, Warnings | **`D70` (`#c9942c`) / `D80` (`#ebb34f`)** | `D15` (`#110a00`) to `D98` (`#fff8eb`) |
 | **Row G (Neutrals)** | Contrast Hierarchy & Typography | `G10` (`#030303`) to `G98` (`#f8f8f8`) | `G10`–`G40` surfaces; `G50`–`G98` text |
 
-### Continuous Colormap Alignment
+### Continuous Colormap & Typography Alignment
 
-The continuous colormap used in 2D/3D surface plots ([`src/vis/AuroraAustralis.txt`](../src/vis/AuroraAustralis.txt)) directly interpolates the 12 key stops of the `Pallette.svg` spectral gradient, bridging qualitative UI tokens and physical field representations.
+The continuous colormap used in 2D/3D surface plots ([`src/vis/AssteroidColormap.txt`](../src/vis/AssteroidColormap.txt)) directly interpolates the 13 monotonic OKHSL key stops (`A10` → `D98`) of `Pallette.svg`, bridging qualitative UI tokens and physical field representations. All MATLAB plots enforce **`Fira Sans`** (prose/labels) and **`Fira Math`** (mathematical expressions) within a uniform **`6–9 pt`** typographic hierarchy (`7 pt` regular tick numbers, `7 pt` bold annotations, `8 pt` regular legends, `8 pt` bold axis/colorbar labels, `9 pt` bold titles) via [`src/vis/applyAssteroidPlotStyle.m`](../src/vis/applyAssteroidPlotStyle.m) and [`src/vis/pubAssteroidMath.m`](../src/vis/pubAssteroidMath.m).
 
 ### Shared CSS & JavaScript Resources
 

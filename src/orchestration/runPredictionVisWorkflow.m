@@ -36,7 +36,7 @@ end
         cd(cfg.workDir);
     end
 
-    cmap = flipud(loadColormap("AuroraAustralis.txt", 4095));
+    cmap = loadColormap("AssteroidColormap.txt", 4095);
 
     %% 1. Load model & RI
     reporter.start("LoadModel");
@@ -133,6 +133,7 @@ end
         colormap(cmap); colorbar;
         xlabel("p (nm)"); ylabel("r (nm)");
         title(sprintf("%s at λ = %.1f nm", metricLabel, cfg.lambdaLaser));
+        applyAssteroidPlotStyle(figLaser, Theme="light", WrapAutoTicks=true);
         if cfg.exportGraphics
             saveas(figLaser, fullfile(cfg.workDir, ...
                 sprintf("prediction_%s_laser.png", metricField)));
@@ -151,6 +152,7 @@ end
             xlabel("p (nm)"); ylabel("r (nm)");
             title(sprintf("Average %s across %.1f<λ<%.1f nm", ...
                 metricLabel, lambdaGrid_nm(2), lambdaGrid_nm(end)));
+            applyAssteroidPlotStyle(figAvg, Theme="light", WrapAutoTicks=true);
             if cfg.exportGraphics
                 saveas(figAvg, fullfile(cfg.workDir, ...
                     sprintf("prediction_%s_avg.png", metricField)));

@@ -153,6 +153,8 @@ end
     ylabel(ax2, "Learning Rate (log scale)", "Color", inkCol, "FontWeight", "bold");
     title(ax2, "(b) Learning Rate Schedule", "Color", inkCol, "FontWeight", "bold");
 
+    applyAssteroidPlotStyle(fig, ApplyColors=false, WrapAutoTicks=true);
+
     if nargout > 0
         figOut = fig;
     end

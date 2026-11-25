@@ -170,12 +170,12 @@ function info = plotSpectraLines(ax, traces, options)
 
     if options.XAxis == "lambda"
         xline(ax, lamL, "--", sprintf("λ_{laser} = %.0f nm", lamL), ...
-            "Color", [0.85 0.85 0.85], "LabelOrientation", "horizontal", ...
+            "Color", [190, 190, 190]/255, "LabelOrientation", "horizontal", ...
             "LabelVerticalAlignment", "bottom", "HandleVisibility", "off", ...
-            "FontSize", 9);
-        xLabel = "Wavelength λ (nm)";
+            "FontName", "Fira Sans", "FontSize", 7, "FontWeight", "bold");
+        xLabel = "Wavelength " + pubAssteroidMath("\lambda", Weight="bold") + " (nm)";
     else
-        xLabel = "Raman shift (cm^{-1})";
+        xLabel = "Raman shift (" + pubAssteroidMath("cm^{-1}", Weight="bold") + ")";
     end
     hold(ax, "off");
 
@@ -189,36 +189,38 @@ function info = plotSpectraLines(ax, traces, options)
     else
         yLabel = "Metric value";
     end
-    xlabel(ax, xLabel, "Color", [0.9 0.92 0.95], "FontWeight", "bold");
-    ylabel(ax, yLabel, "Color", [0.9 0.92 0.95], "FontWeight", "bold");
+    xlabel(ax, xLabel, "Color", [248, 248, 248]/255, "FontWeight", "bold");
+    ylabel(ax, yLabel, "Color", [248, 248, 248]/255, "FontWeight", "bold");
     if strlength(options.Title) > 0
-        title(ax, options.Title, "Color", [0.9 0.92 0.95], "FontSize", 13, "Interpreter", "none");
+        title(ax, options.Title, "Color", [248, 248, 248]/255, "Interpreter", "none");
     end
 
     if nDrawn == 0
         text(ax, 0.5, 0.5, "No finite data to plot.", "Units", "normalized", ...
-            "HorizontalAlignment", "center", "Color", "w");
+            "HorizontalAlignment", "center", "Color", [248, 248, 248]/255);
     else
         lg = legend(ax, "Location", "best", "Interpreter", "none");
-        lg.TextColor = [0.9 0.92 0.95];
-        lg.Color = [0.08 0.12 0.18];
-        lg.EdgeColor = [0.3 0.35 0.4];
+        lg.TextColor = [248, 248, 248]/255;
+        lg.Color = [3, 0, 51]/255;
+        lg.EdgeColor = [72, 72, 72]/255;
         axis(ax, "tight");
     end
 
+    applyAssteroidPlotStyle(ax, Theme="dark", ApplyColors=false);
     info = struct("nTraces", nDrawn, "xLabel", xLabel, "yLabel", yLabel);
 end
 
 %% ========================================================================
 function localStyleAxes(ax)
     ax.Color = [0.06 0.10 0.16];
-    ax.XColor = [0.7 0.75 0.8];
-    ax.YColor = [0.7 0.75 0.8];
-    ax.GridColor = [0.3 0.35 0.4];
-    ax.GridAlpha = 0.5;
-    ax.MinorGridColor = [0.25 0.3 0.35];
+    ax.XColor = [167, 187, 249]/255;
+    ax.YColor = [167, 187, 249]/255;
+    ax.GridColor = [56, 74, 224]/255;
+    ax.GridAlpha = 0.28;
+    ax.MinorGridColor = [56, 74, 224]/255;
     ax.Box = "on";
     ax.XGrid = "on"; ax.YGrid = "on";
+    applyAssteroidPlotStyle(ax, Theme="dark", ApplyColors=false);
 end
 
 function key = localExtractMetricKey(tr)

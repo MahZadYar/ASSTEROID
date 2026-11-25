@@ -29,4 +29,5 @@ function styleDarkAxes(ax, xLabel, yLabel, titleStr)
     if titleStr ~= ""
         title(ax, titleStr, "Color", [107, 209, 203]/255, "FontWeight", "bold"); % OKHSL C80 highlight
     end
+    applyAssteroidPlotStyle(ax, Theme="dark", ApplyColors=false);
 end

@@ -50,7 +50,7 @@ end
     if isfield(allData, "period") && isfield(allData, "radius")
         p = allData.period(:);
         r = allData.radius(:);
-        scatter(ax1, p, r, 20, "filled", "MarkerFaceAlpha", 0.6);
+        scatter(ax1, p, r, 20, [36, 30, 195]/255, "filled", "MarkerFaceAlpha", 0.6);
         xlabel(ax1, "Period (nm)");
         ylabel(ax1, "Radius (nm)");
         title(ax1, "Geometry Coverage");
@@ -65,7 +65,7 @@ end
         else
             nLambda = sum(isfinite(allData.lambda), 2);
         end
-        histogram(ax2, nLambda, "FaceColor", [0.2 0.6 0.9]);
+        histogram(ax2, nLambda, "FaceColor", [127, 0, 224]/255);
         xlabel(ax2, "# Wavelength Points");
         ylabel(ax2, "Count");
         title(ax2, "Spectral Resolution");
@@ -77,7 +77,7 @@ end
     labels = {"Total", "New", "Replaced", "Skipped"};
     vals   = [summary.totalEntries, summary.newEntries, ...
               summary.replacedDuplicates, summary.skippedExisting];
-    barh(ax3, categorical(labels), vals, "FaceColor", [0.3 0.7 0.4]);
+    barh(ax3, categorical(labels), vals, "FaceColor", [39, 146, 141]/255);
     xlabel(ax3, "Entries");
     title(ax3, "Import Statistics");
     grid(ax3, "on");
@@ -89,7 +89,7 @@ end
         ev = allData.(evField)(:);
         ev = ev(~isnan(ev) & ev > 0);
         if ~isempty(ev)
-            histogram(ax4, log10(ev), 30, "FaceColor", [0.9 0.4 0.2]);
+            histogram(ax4, log10(ev), 30, "FaceColor", [201, 148, 44]/255);
             xlabel(ax4, "log_{10}(EE_{V,broad})");
             ylabel(ax4, "Count");
             title(ax4, "EE_V Broadband Distribution");
@@ -98,6 +98,11 @@ end
     end
 
     %% 5. EE_V_broad heatmap (period × radius)
+    try
+        okhslCmap = loadColormap("AssteroidColormap.txt", 256);
+    catch
+        okhslCmap = parula(256);
+    end
     ax5 = nexttile(t);
     if isfield(allData, evField) && isfield(allData, "period") && isfield(allData, "radius")
         p = allData.period(:);
@@ -106,6 +111,7 @@ end
         validMask = ~isnan(ev) & ev > 0;
         if nnz(validMask) > 2
             scatter(ax5, p(validMask), r(validMask), 36, log10(ev(validMask)), "filled");
+            colormap(ax5, okhslCmap);
             colorbar(ax5);
             xlabel(ax5, "Period (nm)");
             ylabel(ax5, "Radius (nm)");
@@ -127,6 +133,7 @@ end
         validMask = ~isnan(ab);
         if nnz(validMask) > 2
             scatter(ax6, p(validMask), r(validMask), 36, ab(validMask), "filled");
+            colormap(ax6, okhslCmap);
             colorbar(ax6);
             xlabel(ax6, "Period (nm)");
             ylabel(ax6, "Radius (nm)");
@@ -134,4 +141,5 @@ end
             grid(ax6, "on");
         end
     end
+    applyAssteroidPlotStyle(t, ApplyColors=false, WrapAutoTicks=true);
 end

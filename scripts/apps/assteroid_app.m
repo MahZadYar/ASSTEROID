@@ -175,6 +175,7 @@ function figOut = assteroid_app(workFolder)
     xlabel(ax2, "Period (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
     ylabel(ax2, "Radius (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
     title(ax2, "Sampling Density & Generated Points", "Color", [107, 209, 203]/255, "FontWeight", "bold");
+    applyAssteroidPlotStyle(ax2, Theme="dark", ApplyColors=false);
 
     samplingController = SamplingController(session, fig, h2, ax2);
     fig.UserData.handles.samplingController = samplingController;
@@ -238,6 +239,7 @@ function figOut = assteroid_app(workFolder)
     xlabel(ax5opt, "Period (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
     ylabel(ax5opt, "Radius (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
     title(ax5opt, "Optimization Landscape", "Color", [107, 209, 203]/255, "FontWeight", "bold");
+    applyAssteroidPlotStyle(ax5opt, Theme="dark", ApplyColors=false);
 
     optController = OptimizeController(session, fig, h5, ax5opt);
     fig.UserData.handles.optimizeController = optController;
@@ -2904,9 +2906,9 @@ function updateSamplingViz(fig, cfg, samples, density, result)
         surf(ax,PG,RG,D,"EdgeColor","none","FaceAlpha",0.9);
         view(ax,2);
         cmap = getappdata(fig,"CustomColormap");
-        if isempty(cmap), cmap = parula(256); end
+        if isempty(cmap), cmap = loadColormap("AssteroidColormap.txt", 256); end
         colormap(ax,cmap);
-        cb = colorbar(ax); cb.Color = [160, 178, 214]/255;
+        cb = colorbar(ax); cb.Color = [167, 187, 249]/255;
         clim(ax, [0 1]);
     else
         view(ax,2);
@@ -2927,16 +2929,17 @@ function updateSamplingViz(fig, cfg, samples, density, result)
     end
     hold(ax,"off");
     xlim(ax,pR); ylim(ax,rR);
-    xlabel(ax,"Period (nm)","Color",[0.9 0.92 0.95],"FontWeight","bold");
-    ylabel(ax,"Radius (nm)","Color",[0.9 0.92 0.95],"FontWeight","bold");
+    xlabel(ax,"Period (nm)","Color",[248, 248, 248]/255,"FontWeight","bold");
+    ylabel(ax,"Radius (nm)","Color",[248, 248, 248]/255,"FontWeight","bold");
     if ~isempty(result) && result.count > 0
         ttl = sprintf("Generated %d points (%.2f%% acceptance)",result.count,result.acceptanceRate*100);
     else
         ttl = "Sampling Density Preview";
     end
-    title(ax,ttl,"Color",[0.9 0.92 0.95],"FontSize",12);
-    legend(ax,"Location","northeast","TextColor",[0.9 0.92 0.95], ...
-        "Color",[0.2 0.25 0.3],"EdgeColor",[0.4 0.45 0.5]);
+    title(ax,ttl,"Color",[107, 209, 203]/255);
+    legend(ax,"Location","northeast","TextColor",[248, 248, 248]/255, ...
+        "Color",[3, 0, 51]/255,"EdgeColor",[72, 72, 72]/255);
+    applyAssteroidPlotStyle(ax, Theme="dark", ApplyColors=false);
     drawnow;
 end
 
@@ -3199,11 +3202,11 @@ function runTrainingPipeline(src, d, fig, visPanel)
             trainAx.XColor = [160, 178, 214]/255;      % Slate text (#a0b2d6)
             trainAx.YColor = [160, 178, 214]/255;
             title(trainAx, "Surrogate DNN Training Loss & Validation vs. Iteration (Log-Log Scale)", ...
-                "Color", [248, 250, 252]/255, "FontSize", 11, "FontWeight", "bold");
+                "Color", [248, 248, 248]/255, "FontSize", 9, "FontWeight", "bold");
             xlabel(trainAx, "Iteration (log scale)", ...
-                "Color", [160, 178, 214]/255, "FontSize", 10, "FontWeight", "bold");
+                "Color", [248, 248, 248]/255, "FontSize", 8, "FontWeight", "bold");
             ylabel(trainAx, "Loss (log scale)", ...
-                "Color", [160, 178, 214]/255, "FontSize", 10, "FontWeight", "bold");
+                "Color", [248, 248, 248]/255, "FontSize", 8, "FontWeight", "bold");
 
             hTrainLoss = animatedline(trainAx, ...
                 "Color", [72, 178, 172]/255, ...       % ASSTEROID Teal (#48b2ac)
@@ -3222,6 +3225,7 @@ function runTrainingPipeline(src, d, fig, visPanel)
                 "Color", [19, 26, 51]/255, ...         % ASSTEROID tertiary bg (#131a33)
                 "EdgeColor", [35, 50, 86]/255, ...     % ASSTEROID border (#233256)
                 "Location", "northeast");
+            applyAssteroidPlotStyle(trainAx, Theme="dark", ApplyColors=false);
             drawnow;
         catch ME_ax
             fprintf("[Training] Error initializing live training axes: %s\n", ME_ax.message);
@@ -3331,7 +3335,7 @@ function runTrainingPipeline(src, d, fig, visPanel)
                     if isfinite(curLr)
                         subText = subText + sprintf(" | LR: %.1e", curLr);
                     end
-                    subtitle(trainAx, subText, "Color", [160, 178, 214]/255, "FontSize", 9);
+                    subtitle(trainAx, subText, "Color", [167, 187, 249]/255, "FontName", "Fira Sans", "FontSize", 7);
                     drawnow limitrate;
                 catch
                 end
@@ -3362,15 +3366,15 @@ function runTrainingPipeline(src, d, fig, visPanel)
             if getTrainingStopRequested(fig) || isProcessStopRequested(fig)
                 title(trainAx, sprintf("Training Stopped Early at Iteration %d (Loss: %.4e) — Model Saved", ...
                     round(lastIterLogged), lastLossLogged), ...
-                    "Color", [230, 74, 111]/255, "FontSize", 11, "FontWeight", "bold");
+                    "Color", [235, 179, 79]/255, "FontName", "Fira Sans", "FontSize", 9, "FontWeight", "bold");
                 subtitle(trainAx, "Model saved to disk and database. Click 'Evaluate DB Model' to inspect Three-Tier generalization.", ...
-                    "Color", [160, 178, 214]/255, "FontSize", 9);
+                    "Color", [167, 187, 249]/255, "FontName", "Fira Sans", "FontSize", 7);
             else
                 title(trainAx, sprintf("Training Complete — Final Loss: %.4e (%d Iterations)", ...
                     lastLossLogged, round(lastIterLogged)), ...
-                    "Color", [72, 178, 172]/255, "FontSize", 11, "FontWeight", "bold");
+                    "Color", [72, 178, 172]/255, "FontName", "Fira Sans", "FontSize", 9, "FontWeight", "bold");
                 subtitle(trainAx, "Model saved to disk and database. Click 'Evaluate DB Model' to compute and display full Three-Tier Generalization metrics", ...
-                    "Color", [160, 178, 214]/255, "FontSize", 9);
+                    "Color", [167, 187, 249]/255, "FontName", "Fira Sans", "FontSize", 7);
             end
             drawnow;
         catch
@@ -5947,7 +5951,7 @@ function [msg, warns] = renderVisualize2D(d, fig, reporter)
     spatialRes = safeNum(d, "spatialResolution", NaN);
     rasterSize = round(safeNum(d, "rasterSize", 300));
     if rasterSize <= 0, rasterSize = 300; end
-    cmap = loadColormapSafe(256, ~safeBool(d, "invertColormap", false));
+    cmap = loadColormapSafe(256, safeBool(d, "invertColormap", false));
 
     sp = []; sr = [];
     showSim = safeBool(d, "showSimPoints", false);
@@ -6119,9 +6123,9 @@ function [msg, warns] = renderVisualize3D(d, fig, reporter)
         end
     end
 
-    cmap = [];   % renderer default: flipped AuroraAustralis
+    cmap = [];   % renderer default: AssteroidColormap (dark-to-bright)
     if safeBool(d, "invertColormap", false)
-        cmap = loadColormapSafe(256, false);
+        cmap = loadColormapSafe(256, true);
     end
     alphaCurve = lower(safeStr(d, "alphaCurve", "power"));
     alphaGamma = safeNum(d, "alphaGamma", 1.5);
@@ -6152,7 +6156,7 @@ function t = emptyVisualizeTraces()
 end
 
 function cmap = loadColormapSafe(n, doFlip)
-    try, cmap = loadColormap("AuroraAustralis.txt", n);
+    try, cmap = loadColormap("AssteroidColormap.txt", n);
     catch, cmap = parula(n); end
     if doFlip, cmap = flipud(cmap); end
 end
@@ -6179,12 +6183,12 @@ end
 
 function loadCustomColormap(fig)
     cmFile = fullfile(fileparts(mfilename("fullpath")), "..", "..", ...
-        "src", "vis", "AuroraAustralis.txt");
+        "src", "vis", "AssteroidColormap.txt");
     if ~isfile(cmFile)
-        cmFile = "AuroraAustralis.txt";
+        cmFile = "AssteroidColormap.txt";
     end
     try
-        cmap = flipud(loadColormap(cmFile, 256));
+        cmap = loadColormap(cmFile, 256);
     catch
         cmap = parula(256);
     end

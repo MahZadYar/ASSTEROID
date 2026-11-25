@@ -21,7 +21,7 @@ function hVol = renderAnnotatedVolume(viewer, volData, pVec, rVec, lambdaVec, op
 %       lambdaVec - [1 x Nl] wavelength samples (nm, ascending).
 %
 %   Name-Value Arguments:
-%       Colormap      - [M x 3] colormap (default: AuroraAustralis, inverted).
+%       Colormap      - [M x 3] colormap (default: AssteroidColormap, A10 -> D98).
 %       LogScale      - log10-transform values before normalisation (false).
 %       MetricLabel   - Metric name shown in the range annotation ("").
 %       OverlayMask   - [Nr x Np x Nl] logical mask rendered as a label
@@ -218,13 +218,13 @@ function localClearViewer(viewer)
 end
 
 function cmap = localDefaultColormap(n)
-%localDefaultColormap  AuroraAustralis (inverted) with turbo fallback.
+%localDefaultColormap  ASSTEROID OKHSL colormap with parula fallback.
     cmap = [];
     try
-        cmap = flipud(loadColormap("AuroraAustralis.txt", n));
+        cmap = loadColormap("AssteroidColormap.txt", n);
     catch
     end
     if isempty(cmap) || size(cmap, 2) ~= 3
-        cmap = turbo(n);
+        cmap = parula(n);
     end
 end

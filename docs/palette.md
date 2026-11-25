@@ -221,6 +221,8 @@ figure;
 imagesc(x_grid, y_grid, log10(localEF));
 colormap(cmap256);
 cb = colorbar;
-ylabel(cb, 'log_{10}(EF(\mathbf{r}))', 'FontSize', 11);
-styleDarkAxes(gca, 'X (\mu m)', 'Y (\mu m)', 'Near-Field Spatial Distribution');
+ylabel(cb, pubAssteroidMath('log_{10}(EF(\mathbf{r}))', Weight='bold'), 'Interpreter', 'tex');
+styleDarkAxes(gca, 'X (' + pubAssteroidMath('\mu m', Weight='bold') + ')', ...
+    'Y (' + pubAssteroidMath('\mu m', Weight='bold') + ')', 'Near-Field Spatial Distribution');
+applyAssteroidPlotStyle(gcf);
 ```

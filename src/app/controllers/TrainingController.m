@@ -315,11 +315,11 @@ classdef TrainingController < handle
                     trainAx.XColor = [160, 178, 214]/255;      % Slate text (#a0b2d6)
                     trainAx.YColor = [160, 178, 214]/255;
                     title(trainAx, "Surrogate DNN Training Loss & Validation vs. Iteration (Log-Log Scale)", ...
-                        "Color", [248, 248, 248]/255, "FontSize", 11, "FontWeight", "bold");
+                        "Color", [248, 248, 248]/255, "FontSize", 9, "FontWeight", "bold");
                     xlabel(trainAx, "Iteration (log scale)", ...
-                        "Color", [160, 178, 214]/255, "FontSize", 10, "FontWeight", "bold");
+                        "Color", [248, 248, 248]/255, "FontSize", 8, "FontWeight", "bold");
                     ylabel(trainAx, "Loss (log scale)", ...
-                        "Color", [160, 178, 214]/255, "FontSize", 10, "FontWeight", "bold");
+                        "Color", [248, 248, 248]/255, "FontSize", 8, "FontWeight", "bold");
 
                     hTrainLoss = animatedline(trainAx, ...
                         "Color", [72, 178, 172]/255, ...       % ASSTEROID Teal (#48b2ac)
@@ -338,6 +338,7 @@ classdef TrainingController < handle
                         "Color", [19, 26, 51]/255, ...         % ASSTEROID tertiary bg (#131a33)
                         "EdgeColor", [35, 50, 86]/255, ...     % ASSTEROID border (#233256)
                         "Location", "northeast");
+                    applyAssteroidPlotStyle(trainAx, Theme="dark", ApplyColors=false);
                     drawnow;
                 catch ME_ax
                     fprintf("[TrainingController] Error initializing live training axes: %s\n", ME_ax.message);
@@ -482,7 +483,7 @@ classdef TrainingController < handle
                         if isfinite(lrVal)
                             subText = subText + sprintf(" | LR: %.1e", lrVal);
                         end
-                        subtitle(trainAx, subText, "Color", [160, 178, 214]/255, "FontSize", 9);
+                        subtitle(trainAx, subText, "Color", [167, 187, 249]/255, "FontName", "Fira Sans", "FontSize", 7);
                         drawnow limitrate;
                     catch
                     end
@@ -617,15 +618,15 @@ classdef TrainingController < handle
                     if stopped
                         title(trainAx, sprintf("Training Stopped Early at Iteration %d (Loss: %.4e) — Model Saved", ...
                             round(lastIter), lastLoss), ...
-                            "Color", [230, 74, 111]/255, "FontSize", 11, "FontWeight", "bold");
+                            "Color", [235, 179, 79]/255, "FontName", "Fira Sans", "FontSize", 9, "FontWeight", "bold");
                         subtitle(trainAx, "Model saved to disk and database. Click 'Evaluate DB Model' to inspect Three-Tier generalization.", ...
-                            "Color", [160, 178, 214]/255, "FontSize", 9);
+                            "Color", [167, 187, 249]/255, "FontName", "Fira Sans", "FontSize", 7);
                     else
                         title(trainAx, sprintf("Training Complete — Final Loss: %.4e (%d Iterations)", ...
                             lastLoss, round(lastIter)), ...
-                            "Color", [72, 178, 172]/255, "FontSize", 11, "FontWeight", "bold");
+                            "Color", [72, 178, 172]/255, "FontName", "Fira Sans", "FontSize", 9, "FontWeight", "bold");
                         subtitle(trainAx, "Model saved to disk and database. Click 'Evaluate DB Model' to compute and display full Three-Tier Generalization metrics", ...
-                            "Color", [160, 178, 214]/255, "FontSize", 9);
+                            "Color", [167, 187, 249]/255, "FontName", "Fira Sans", "FontSize", 7);
                     end
                 catch
                 end
@@ -740,7 +741,7 @@ classdef TrainingController < handle
                             if isfinite(m.lr)
                                 subText = subText + sprintf(" | LR: %.1e", m.lr);
                             end
-                            subtitle(ax, subText, "Color", [160, 178, 214]/255, "FontSize", 9);
+                            subtitle(ax, subText, "Color", [167, 187, 249]/255, "FontName", "Fira Sans", "FontSize", 7);
                         end
                         if isfinite(m.iteration), obj.trainState.lastIter = m.iteration; end
                         if isfinite(m.lastLoss),  obj.trainState.lastLoss = m.lastLoss;  end

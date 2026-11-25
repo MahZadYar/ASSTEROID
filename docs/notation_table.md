@@ -119,7 +119,8 @@ All ASSTEROID plotting scripts, GUI axes, and publication figures use the unifie
 | **C60** | Teal | `#27928d` | `[39, 146, 141]/255` | 60% | Verified targets, optimization constraints |
 | **D70** | Gold | `#c9942c` | `[201, 148, 44]/255` | 70% | Pareto front, global maxima ($\mathrm{EF}_{\max}^L$) |
 
-### Sequential Heatmap Colormap (Field Maps & Error Landscapes)
+### Sequential Heatmap Colormap & Global Typography
 - **Matrix File**: `src/vis/AssteroidColormap.txt` (13 monotonic nodes, interpolated via `loadColormap(path, 256)`).
 - **Ramp Progression**: `A10` (0%, `#000117`) $\to$ `A15` (8%) $\to$ `A20` (16%) $\to$ `B30` (24%) $\to$ `B40` (32%) $\to$ `B50` (41%) $\to$ `BC55` (50%, `#725ec1`) $\to$ `C60` (59%) $\to$ `C70` (68%) $\to$ `C80` (76%) $\to$ `D90` (84%) $\to$ `D95` (92%) $\to$ `D98` (100%, `#fff8eb`).
+- **Typography Standard (`6–9 pt`)**: All plots use `Fira Sans` for labels/prose and `Fira Math` (`Fira Math Light` / `Fira Math SemiBold`) for mathematical expressions via `src/vis/applyAssteroidPlotStyle.m` and `src/vis/pubAssteroidMath.m` (`7 pt` regular tick numbers, `7 pt` bold callouts/notes, `8 pt` regular legends, `8 pt` bold axis/colorbar labels, `9 pt` bold titles).
 

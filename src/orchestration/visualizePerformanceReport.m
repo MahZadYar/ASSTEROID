@@ -130,7 +130,7 @@ end
     
     titleStr = sprintf("Surrogate Generalization Audit (N_{test} = %d geometries, N_{roi} = %d samples)", ...
         numTest, numRoi);
-    tTitle = title(t, titleStr, "FontWeight", "bold", "FontSize", 13);
+    tTitle = title(t, titleStr, "FontWeight", "bold");
     if isprop(tTitle, "Color"), tTitle.Color = colText; end
 
     seriesLabels = ["Tier 1: Holdout Split", "Tier 2: IDW Unbiased", "Tier 3: Optima RoI"];
@@ -183,7 +183,7 @@ end
                 text(ax1, xEnd(j), yTextPos, ...
                     sprintf("%.2f%%", yEnd(j)), ...
                     "HorizontalAlignment", "center", "VerticalAlignment", "bottom", ...
-                    "FontSize", 8, "FontWeight", "bold", "Color", colText);
+                    "FontName", "Fira Sans", "FontSize", 7, "FontWeight", "bold", "Color", colText);
             end
         end
     end
@@ -197,12 +197,13 @@ end
         b2(i).FaceColor = tierColors{i}; b2(i).EdgeColor = "none";
     end
 
-    % Ideal reference line at R^2 = 1.0
-    yline(ax2, 1.0, "--", "Ideal (R^2 = 1.0)", "Color", [1.0, 0.4, 0.4], ...
-        "LineWidth", 1.2, "LabelHorizontalAlignment", "left", "LabelVerticalAlignment", "middle");
+    % Ideal reference line at R^2 = 1.0 (OKHSL D70 Gold)
+    yline(ax2, 1.0, "--", "Ideal (" + pubAssteroidMath("R^2 = 1.0") + ")", "Color", [201, 148, 44]/255, ...
+        "LineWidth", 1.2, "LabelHorizontalAlignment", "left", "LabelVerticalAlignment", "middle", ...
+        "FontName", "Fira Sans", "FontSize", 7, "FontWeight", "bold");
 
-    ylabel(ax2, "Coefficient of Determination (R^2)", "FontWeight", "bold");
-    title(ax2, "Predictive Fidelity: R^2 Score [Higher is Better]", "FontWeight", "bold");
+    ylabel(ax2, "Coefficient of Determination (" + pubAssteroidMath("R^2", Weight="bold") + ")", "FontWeight", "bold");
+    title(ax2, "Predictive Fidelity: " + pubAssteroidMath("R^2", Weight="bold") + " Score [Higher is Better]", "FontWeight", "bold");
     grid(ax2, "on");
     leg2 = legend(ax2, seriesLabels, "Location", "southwest");
 
@@ -234,11 +235,12 @@ end
                 text(ax2, xEnd(j), yPos, ...
                     sprintf("%.3f", yEnd(j)), ...
                     "HorizontalAlignment", "center", "VerticalAlignment", vAlign, ...
-                    "FontSize", 8, "FontWeight", "bold", "Color", txtCol);
+                    "FontName", "Fira Sans", "FontSize", 7, "FontWeight", "bold", "Color", txtCol);
             end
         end
     end
     applyAxisTheme(ax2, isDark, colAxBg, colText, colGrid, leg2);
+    applyAssteroidPlotStyle(t, ApplyColors=false, WrapAutoTicks=true);
 end
 
 function applyAxisTheme(ax, isDark, colAxBg, colText, colGrid, leg)

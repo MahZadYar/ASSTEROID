@@ -319,7 +319,8 @@ classdef VisualizeController < handle
 
                 % Update title
                 titleStr = sprintf("%s @ %g cm⁻¹ (λ = %.1f nm) — db.%s", metric, shift, lamT, branch);
-                title(ax, titleStr, "Color", [0.9 0.92 0.95], "FontSize", 13, "Interpreter", "none");
+                title(ax, titleStr, "Color", [248, 248, 248]/255, "Interpreter", "none");
+                applyAssteroidPlotStyle(ax, Theme="dark", ApplyColors=false);
 
                 drawnow limitrate;
             catch ME
@@ -561,7 +562,7 @@ classdef VisualizeController < handle
             spatialRes = obj.safeNum(d, "spatialResolution", NaN);
             rasterSize = round(obj.safeNum(d, "rasterSize", 300));
             if rasterSize <= 0, rasterSize = 300; end
-            cmap = obj.loadColormapSafe(256, ~obj.safeBool(d, "invertColormap", false));
+            cmap = obj.loadColormapSafe(256, obj.safeBool(d, "invertColormap", false));
 
             sp = []; sr = [];
             showSim = obj.safeBool(d, "showSimPoints", false);
@@ -688,7 +689,7 @@ classdef VisualizeController < handle
 
             cmap = [];
             if obj.safeBool(d, "invertColormap", false)
-                cmap = obj.loadColormapSafe(256, false);
+                cmap = obj.loadColormapSafe(256, true);
             end
             alphaCurve = lower(obj.safeStr(d, "alphaCurve", "power"));
             alphaGamma = obj.safeNum(d, "alphaGamma", 1.5);
@@ -960,7 +961,7 @@ classdef VisualizeController < handle
 
         function cmap = loadColormapSafe(~, n, doFlip)
             try
-                cmap = loadColormap("AuroraAustralis.txt", n);
+                cmap = loadColormap("AssteroidColormap.txt", n);
             catch
                 cmap = parula(n);
             end

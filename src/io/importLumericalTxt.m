@@ -89,17 +89,22 @@ function sweepData = importLumericalTxt(filename, plotResults)
     if plotResults && ~isempty(fieldnames(sweepData))
         fields = fieldnames(sweepData);
         if numel(fields) >= 3
-            figure("Name", "Lumerical Sweep Transmission Map");
+            fig = figure("Name", "Lumerical Sweep Transmission Map");
             y = sweepData.(fields{1}) * 1e9;
             x = sweepData.(fields{2}) * 1e9;
             z = -sweepData.(fields{3});
             surf(x, y, z, "EdgeColor", "none");
             view(2);
             shading interp;
+            try
+                colormap(loadColormap("AssteroidColormap.txt", 256));
+            catch
+            end
             colorbar;
-            xlabel("\lambda (nm)");
-            ylabel("r (nm)");
+            xlabel(pubAssteroidMath("\lambda", Weight="bold") + " (nm)");
+            ylabel(pubAssteroidMath("r", Weight="bold") + " (nm)");
             title("Transmission Map");
+            applyAssteroidPlotStyle(fig, Theme="light");
         end
     end
 end

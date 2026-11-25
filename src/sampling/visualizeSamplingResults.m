@@ -43,10 +43,10 @@ arguments
     options.GridResolution (1,1) double {mustBePositive} = 500
     options.ShowOriginal (1,1) logical = true
     options.ShowGenerated (1,1) logical = true
-    options.Colormap = "parula"
+    options.Colormap = "AssteroidColormap"
     options.ColormapFile (1,1) string = ""
-    options.OriginalColor = "r"
-    options.GeneratedColor = "g"
+    options.OriginalColor = [235, 179, 79] / 255
+    options.GeneratedColor = [72, 178, 172] / 255
     options.PointSize (1,1) double {mustBePositive} = 10
     options.Title (1,1) string = ""
     options.SaveFigure (1,1) logical = false
@@ -109,6 +109,8 @@ else
         result.count, 100 * result.acceptanceRate));
 end
 
+applyAssteroidPlotStyle(fig, Theme="light", WrapAutoTicks=true);
+
 % Save figure if requested
 if options.SaveFigure
     saveas(fig, options.OutputFile);
@@ -138,12 +140,21 @@ if isnumeric(cmapOption) && size(cmapOption, 2) == 3
     return;
 end
 
+% Canonical ASSTEROID OKHSL colormap
+if (isstring(cmapOption) || ischar(cmapOption)) && strcmpi(string(cmapOption), "AssteroidColormap")
+    try
+        cmap = loadColormap("AssteroidColormap.txt", 256);
+        return;
+    catch
+    end
+end
+
 % Try standard colormap name
 try
     cmapFunc = str2func(cmapOption);
     cmap = cmapFunc(256);
 catch
-    cmap = parula(256);
+    cmap = loadColormap("AssteroidColormap.txt", 256);
 end
 end
 

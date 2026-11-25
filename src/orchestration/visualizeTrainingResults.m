@@ -86,8 +86,13 @@ end
 
     %% Loss bars
     ax1 = nexttile(t);
+    okhslBarCols = { [36, 30, 195]/255, [127, 0, 224]/255, [39, 146, 141]/255, [201, 148, 44]/255 };
     if lossFinite
         b1 = bar(ax1, categorical(names, names), lossData);
+        for bi = 1:numel(b1)
+            b1(bi).FaceColor = okhslBarCols{mod(bi-1, numel(okhslBarCols)) + 1};
+            b1(bi).EdgeColor = "none";
+        end
         ylabel(ax1, "MSE (normalized)");
         title(ax1, "Loss per Target");
         leg1 = legend(ax1, seriesNames, "Location", "northwest");
@@ -95,15 +100,15 @@ end
 
         if isDark
             ax1.Color = [0.06 0.10 0.16];
-            ax1.XColor = [0.7 0.75 0.8];
-            ax1.YColor = [0.7 0.75 0.8];
-            ax1.GridColor = [0.3 0.35 0.4];
-            ax1.GridAlpha = 0.5;
+            ax1.XColor = [167, 187, 249]/255;
+            ax1.YColor = [167, 187, 249]/255;
+            ax1.GridColor = [56, 74, 224]/255;
+            ax1.GridAlpha = 0.28;
             ax1.Box = "on";
-            if isprop(ax1.Title, "Color"), ax1.Title.Color = [0.9 0.92 0.95]; end
-            if isprop(ax1.YLabel, "Color"), ax1.YLabel.Color = [0.9 0.92 0.95]; end
+            if isprop(ax1.Title, "Color"), ax1.Title.Color = [248, 248, 248]/255; end
+            if isprop(ax1.YLabel, "Color"), ax1.YLabel.Color = [248, 248, 248]/255; end
             if ~isempty(leg1) && isvalid(leg1)
-                set(leg1, "TextColor", [0.85 0.88 0.92], "Color", [0.10 0.14 0.20], "EdgeColor", [0.25 0.30 0.38]);
+                set(leg1, "TextColor", [248, 248, 248]/255, "Color", [3, 0, 51]/255, "EdgeColor", [72, 72, 72]/255);
             end
         end
 
@@ -123,13 +128,17 @@ end
     else
         axis(ax1, "off");
         tObj1 = text(ax1, 0.5, 0.5, "No finite loss values", "HorizontalAlignment", "center");
-        if isDark, tObj1.Color = [0.7 0.75 0.8]; end
+        if isDark, tObj1.Color = [167, 187, 249]/255; end
     end
 
     %% RMSE bars
     ax2 = nexttile(t);
     if rmseFinite
         b2 = bar(ax2, categorical(names, names), rmseData);
+        for bi = 1:numel(b2)
+            b2(bi).FaceColor = okhslBarCols{mod(bi-1, numel(okhslBarCols)) + 1};
+            b2(bi).EdgeColor = "none";
+        end
         ylabel(ax2, "RMSE (raw units)");
         title(ax2, "RMSE per Target");
         leg2 = legend(ax2, seriesNames, "Location", "northwest");
@@ -137,15 +146,15 @@ end
 
         if isDark
             ax2.Color = [0.06 0.10 0.16];
-            ax2.XColor = [0.7 0.75 0.8];
-            ax2.YColor = [0.7 0.75 0.8];
-            ax2.GridColor = [0.3 0.35 0.4];
-            ax2.GridAlpha = 0.5;
+            ax2.XColor = [167, 187, 249]/255;
+            ax2.YColor = [167, 187, 249]/255;
+            ax2.GridColor = [56, 74, 224]/255;
+            ax2.GridAlpha = 0.28;
             ax2.Box = "on";
-            if isprop(ax2.Title, "Color"), ax2.Title.Color = [0.9 0.92 0.95]; end
-            if isprop(ax2.YLabel, "Color"), ax2.YLabel.Color = [0.9 0.92 0.95]; end
+            if isprop(ax2.Title, "Color"), ax2.Title.Color = [248, 248, 248]/255; end
+            if isprop(ax2.YLabel, "Color"), ax2.YLabel.Color = [248, 248, 248]/255; end
             if ~isempty(leg2) && isvalid(leg2)
-                set(leg2, "TextColor", [0.85 0.88 0.92], "Color", [0.10 0.14 0.20], "EdgeColor", [0.25 0.30 0.38]);
+                set(leg2, "TextColor", [248, 248, 248]/255, "Color", [3, 0, 51]/255, "EdgeColor", [72, 72, 72]/255);
             end
         end
 
@@ -166,7 +175,12 @@ end
     else
         axis(ax2, "off");
         tObj2 = text(ax2, 0.5, 0.5, "No finite RMSE values", "HorizontalAlignment", "center");
-        if isDark, tObj2.Color = [0.7 0.75 0.8]; end
+        if isDark, tObj2.Color = [167, 187, 249]/255; end
+    end
+    if isDark
+        applyAssteroidPlotStyle(t, Theme="dark", ApplyColors=false);
+    else
+        applyAssteroidPlotStyle(t, Theme="light", ApplyColors=false);
     end
 end
 

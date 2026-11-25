@@ -1,12 +1,12 @@
 function cmap = loadColormap(filePath, nColors)
 %LOADCOLORMAP Load an RGB colormap from a text file and interpolate.
-%   cmap = loadColormap()              uses AuroraAustralis.txt (bundled)
+%   cmap = loadColormap()              uses AssteroidColormap.txt (bundled OKHSL ramp)
 %   cmap = loadColormap(filePath)      uses the specified file
 %   cmap = loadColormap(__, nColors)   interpolates to nColors (default 256)
 
-    if nargin < 1 || isempty(filePath)
+    if nargin < 1 || isempty(filePath) || (isstring(filePath) && strlength(filePath) == 0)
         thisDir = fileparts(mfilename("fullpath"));
-        filePath = fullfile(thisDir, "AuroraAustralis.txt");
+        filePath = fullfile(thisDir, "AssteroidColormap.txt");
     end
     if nargin < 2 || isempty(nColors)
         nColors = 256;

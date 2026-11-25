@@ -160,22 +160,23 @@ try
 
     % Optional debug plot
     if showPlot
-        figure('Name','Analyte Spectrum Processing','Color','w');
-        % Left axis: raw and baseline
+        fig = figure('Name','Analyte Spectrum Processing','Color','w');
+        % Left axis: raw and baseline (OKHSL A40 Blue & D70 Gold)
         yyaxis left
-        hRaw = plot(shift, raw, 'Color', [0.2 0.2 0.8], 'LineWidth', 1.2); hold on;
-        hBase = plot(shift, base, 'Color', [0.85 0.33 0.1], 'LineWidth', 1.2);
+        hRaw = plot(shift, raw, 'Color', [36, 30, 195]/255, 'LineWidth', 1.2); hold on;
+        hBase = plot(shift, base, 'Color', [201, 148, 44]/255, 'LineWidth', 1.2);
         ylabel('Intensity (arb.)');
-        % Right axis: processed (normalized)
+        % Right axis: processed normalized (OKHSL C60 Teal)
         yyaxis right
-        hProc = plot(shift, proc, 'Color', [0.1 0.6 0.1], 'LineWidth', 1.4);
+        hProc = plot(shift, proc, 'Color', [39, 146, 141]/255, 'LineWidth', 1.4);
         ylabel('Processed (normalized)');
         % Common decorations
         grid on; box on;
-        xlabel('Raman Shift (cm^{-1})');
+        xlabel("Raman Shift (" + pubAssteroidMath("cm^{-1}", Weight="bold") + ")");
         title('Analyte Spectrum: Raw/Baseline (left) vs Processed (right)');
         % Legend with explicit handles (across both axes)
         legend([hRaw, hBase, hProc], {'Raw','Estimated baseline','Processed'}, 'Location','best');
+        applyAssteroidPlotStyle(fig, Theme="light");
     end
     
 catch ME

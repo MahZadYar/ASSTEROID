@@ -88,13 +88,13 @@ function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSee
     cla(ax);
     pcolor(ax, pGrid, rGrid, Z);
     shading(ax, "interp");
-    cmap = flipud(loadColormap("AuroraAustralis.txt", 256));
+    cmap = loadColormap("AssteroidColormap.txt", 256);
     colormap(ax, cmap);
     colorbar(ax);
     xlabel(ax, "Period (nm)");
     ylabel(ax, "Radius (nm)");
     if parsedVar.variantKind == "laser"
-        title(ax, baseMetric + " (at laser \lambda)");
+        title(ax, baseMetric + " (at laser " + pubAssteroidMath("\lambda", Weight="bold") + ")");
     elseif parsedVar.variantKind == "analyte"
         if strlength(parsedVar.analyteKey) > 0
             title(ax, baseMetric + " (" + parsedVar.analyteKey + " analyte)");
@@ -107,7 +107,7 @@ function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSee
     axis(ax, "tight");
     hold(ax, "on");
 
-    % Determine seed count for color assignment
+    % Determine seed count for color assignment using OKHSL qualitative cycle
     seedCount = 0;
     if ~isempty(originalSeeds), seedCount = max(seedCount, numel(originalSeeds)); end
     if ~isempty(refinedOptima), seedCount = max(seedCount, numel(refinedOptima)); end
@@ -115,12 +115,20 @@ function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSee
         seedCount = max(seedCount, max(arrayfun(@(t) t.SeedIndex, attemptTrajectories)));
     end
     seedCount = max(1, seedCount);
-    try
-        palette = orderedcolors("gem12");
-        seedColors = palette(mod(0:seedCount-1, size(palette, 1)) + 1, :);
-    catch
-        seedColors = lines(seedCount);
-    end
+    okhslCycle = [ ...
+        72, 178, 172; ...  % C70 Teal
+       201, 148,  44; ...  % D70 Gold
+       153,  78, 243; ...  % B60 Purple
+        93, 120, 218; ...  % A60 Blue
+       107, 209, 203; ...  % C80 Bright Teal
+       235, 179,  79; ...  % D80 Bright Gold
+       173, 135, 237; ...  % B70 Light Purple
+       128, 154, 236; ...  % A70 Light Blue
+        39, 146, 141; ...  % C60 Anchor Teal
+       167, 118,   0; ...  % D60 Deep Gold
+       127,   0, 224; ...  % B50 Anchor Purple
+        56,  74, 224] / 255; % A50 Blue
+    seedColors = okhslCycle(mod(0:seedCount-1, size(okhslCycle, 1)) + 1, :);
 
     % Basin territories (drawn first so markers and labels stay on top)
     if ~isempty(basinMap) && isstruct(basinMap) && isfield(basinMap, "labels")
@@ -188,7 +196,7 @@ function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSee
                 try
                     t = text(ax, s.P, s.R, txtLines, ...
                         Interpreter="tex", ...
-                        Color="white", FontSize=9, ...
+                        Color="white", FontName="Fira Sans", FontSize=7, ...
                         BackgroundColor="none", EdgeColor="none", ...
                         HorizontalAlignment="center", VerticalAlignment="bottom", ...
                         Margin=3);
@@ -240,6 +248,7 @@ function plotOptimizeHeatmap(results, baseMetric, metricVariant, ax, originalSee
     end
 
     hold(ax, "off");
+    applyAssteroidPlotStyle(ax, ApplyColors=false);
 end
 
 function renderBasinTerritories(ax, basinMap, seeds, seedColors)

@@ -58,17 +58,18 @@ function run_adaptive_sampling_app()
     ax = uiaxes(vizPanel, ...
         "Units", "normalized", ...
         "Position", [0.05 0.05 0.9 0.9], ...
-        "Color", [0.12 0.15 0.21], ...
-        "XColor", [0.7 0.75 0.8], ...
-        "YColor", [0.7 0.75 0.8], ...
-        "GridColor", [0.3 0.35 0.4], ...
-        "GridAlpha", 0.5, ...
+        "Color", [4, 2, 58]/255, ...
+        "XColor", [167, 187, 249]/255, ...
+        "YColor", [167, 187, 249]/255, ...
+        "GridColor", [56, 74, 224]/255, ...
+        "GridAlpha", 0.28, ...
         "Box", "on");
     ax.XGrid = "on";
     ax.YGrid = "on";
-    xlabel(ax, "Period (nm)", "Color", [0.9 0.92 0.95], "FontWeight", "bold");
-    ylabel(ax, "Radius (nm)", "Color", [0.9 0.92 0.95], "FontWeight", "bold");
-    title(ax, "Sampling Density & Generated Points", "Color", [0.9 0.92 0.95]);
+    xlabel(ax, "Period (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
+    ylabel(ax, "Radius (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
+    title(ax, "Sampling Density & Generated Points", "Color", [107, 209, 203]/255);
+    applyAssteroidPlotStyle(ax, Theme="dark", ApplyColors=false);
 
     % Store handles
     handles = struct( ...
@@ -635,7 +636,8 @@ function highlightNanPoints_app(src, fig, eventData)
             "DisplayName", sprintf("Failed/NaN Points (%d)", nanRes.count), ...
             "Tag", "NAN_HIGHLIGHT_POINTS");
         uistack(hScat, "top");
-        legend(ax, "show", "TextColor", [0.8 0.85 0.9], "Location", "northeast");
+        legend(ax, "show", "TextColor", [248, 248, 248]/255, "Location", "northeast");
+        applyAssteroidPlotStyle(ax, Theme="dark", ApplyColors=false);
     catch ME
         fprintf("[Sampling] Highlight NaN points error: %s\n", ME.message);
     end
@@ -742,9 +744,9 @@ function updateVisualization(fig, cfg, samples, density, result)
 
         % Add colorbar
         cb = colorbar(ax);
-        cb.Color = [0.7 0.75 0.8];
+        cb.Color = [167, 187, 249]/255;
         cb.Label.String = "Sampling Density";
-        cb.Label.Color = [0.9 0.92 0.95];
+        cb.Label.Color = [248, 248, 248]/255;
         clim(ax, [0 1]);
     else
         % Uniform sampling - show simple 2D view
@@ -776,8 +778,8 @@ function updateVisualization(fig, cfg, samples, density, result)
     % Set axis limits and labels
     xlim(ax, pRange);
     ylim(ax, rRange);
-    xlabel(ax, "Period (nm)", "Color", [0.9 0.92 0.95], "FontWeight", "bold");
-    ylabel(ax, "Radius (nm)", "Color", [0.9 0.92 0.95], "FontWeight", "bold");
+    xlabel(ax, "Period (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
+    ylabel(ax, "Radius (nm)", "Color", [248, 248, 248]/255, "FontWeight", "bold");
 
     % Build title
     if ~isempty(result) && result.count > 0
@@ -786,11 +788,12 @@ function updateVisualization(fig, cfg, samples, density, result)
     else
         titleStr = "Sampling Density Preview";
     end
-    title(ax, titleStr, "Color", [0.9 0.92 0.95], "FontSize", 12);
+    title(ax, titleStr, "Color", [107, 209, 203]/255);
 
-    legend(ax, "Location", "northeast", "TextColor", [0.9 0.92 0.95], ...
-        "Color", [0.2 0.25 0.3], "EdgeColor", [0.4 0.45 0.5]);
+    legend(ax, "Location", "northeast", "TextColor", [248, 248, 248]/255, ...
+        "Color", [3, 0, 51]/255, "EdgeColor", [72, 72, 72]/255);
 
+    applyAssteroidPlotStyle(ax, Theme="dark", ApplyColors=false);
     drawnow;
 end
 
@@ -915,25 +918,16 @@ end
 
 %% Load Custom Colormap
 function loadCustomColormap(fig)
-    colormapFile = fullfile(fileparts(mfilename("fullpath")), "AuroraAustralis.txt");
-    if isfile(colormapFile)
-        try
-            % Load via utility to ensure proper interpolation/clamping
-            cmap = loadColormap(colormapFile, 256);
-            % Flip so lower values map to darker end
-            cmap = flipud(cmap);
-            setappdata(fig, "CustomColormap", cmap);
-        catch
-            setappdata(fig, "CustomColormap", parula(256));
-        end
-    else
+    try
+        cmap = loadColormap("AssteroidColormap.txt", 256);
+        setappdata(fig, "CustomColormap", cmap);
+    catch
         setappdata(fig, "CustomColormap", parula(256));
     end
 end
 
 %% Apply Colormap
 function applyColormap(fig, ax)
-    handles = getappdata(fig, "Handles");
     appState = fig.UserData;
 
     if isfield(appState.config, "colormap")
@@ -945,14 +939,18 @@ function applyColormap(fig, ax)
     if cmapName == "custom"
         cmap = getappdata(fig, "CustomColormap");
         if isempty(cmap)
-            cmap = parula(256);
+            try
+                cmap = loadColormap("AssteroidColormap.txt", 256);
+            catch
+                cmap = parula(256);
+            end
         end
     else
         try
             cmapFunc = str2func(cmapName);
             cmap = cmapFunc(256);
         catch
-            cmap = parula(256);
+            cmap = loadColormap("AssteroidColormap.txt", 256);
         end
     end
 
