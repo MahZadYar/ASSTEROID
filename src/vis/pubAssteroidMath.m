@@ -1,10 +1,11 @@
 function s = pubAssteroidMath(expr, options)
 %PUBASSTEROIDMATH Wrap a math expression in Fira Math for MATLAB TeX rendering.
 %
-%   s = pubAssteroidMath(expr) formats expr using Fira Math Light (regular)
-%   or Fira Math SemiBold (Weight="bold") while mapping common Greek/math
-%   TeX macros to native Unicode glyphs so Fira Math renders without Computer
-%   Modern serif fallbacks.
+%   s = pubAssteroidMath(expr) formats expr using {\rm\fontname{Fira Math}...}
+%   for regular contexts (matching Fira Sans Regular) or
+%   {\bf\fontname{Fira Math}...} (Weight="bold", matching Fira Sans Bold)
+%   while mapping common Greek/math TeX macros to native Unicode glyphs so
+%   Fira Math renders without Computer Modern or Times New Roman fallbacks.
 
     arguments
         expr {mustBeTextScalar}
@@ -14,9 +15,9 @@ function s = pubAssteroidMath(expr, options)
     txt = char(string(expr));
 
     if options.Weight == "bold"
-        mathFont = "Fira Math SemiBold";
+        weightCmd = "\bf";
     else
-        mathFont = "Fira Math Light";
+        weightCmd = "\rm";
     end
 
     % Map common TeX macros to native Unicode glyphs present in Fira Math
@@ -54,7 +55,7 @@ function s = pubAssteroidMath(expr, options)
     end
 
     % Map \it...\rm segments inside math expressions into italic modifier
-    txt = strrep(txt, '\it', ['\fontname{' char(mathFont) '}\it']);
+    txt = strrep(txt, '\it', '\fontname{Fira Math}\it');
 
-    s = "{\fontname{" + mathFont + "}" + string(txt) + "}";
+    s = "{" + weightCmd + "\fontname{Fira Math}" + string(txt) + "}";
 end

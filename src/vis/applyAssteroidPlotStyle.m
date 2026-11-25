@@ -39,8 +39,8 @@ end
 function style = localBuildStyleSpec()
     style = struct();
     style.fontText = "Fira Sans";
-    style.fontMath = "Fira Math Light";
-    style.fontMathBold = "Fira Math SemiBold";
+    style.fontMath = "Fira Math";
+    style.fontMathBold = "Fira Math";
     style.fontSize = struct( ...
         "min",       6, ...
         "max",       9, ...
