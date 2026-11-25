@@ -139,9 +139,14 @@ assert(loadedCsv.MetricValue(1) == 145.2, "MetricValue mismatch in CSV.");
 fprintf("  ✓ ExportResults (CSV) successfully saved only the optima table and values.\n");
 
 %% 9b. Test SaveBasinsToDb and LoadBasinsFromDb
+threeSeeds = [
+    struct("Tag", "A", "P", 450.0, "R", 150.0, "Value", 150.0, "BasinId", 1), ...
+    struct("Tag", "B", "P", 650.0, "R", 150.0, "Value", 120.0, "BasinId", 2), ...
+    struct("Tag", "C", "P", 850.0, "R", 150.0, "Value", 80.0,  "BasinId", 3)
+];
 ctl.updateOptimizeState("basinMap", dummyBasinMap3);
-ctl.updateOptimizeState("currentSeeds", allThreeSeeds);
-ctl.handleEvent("SaveBasinsToDb", struct("seeds", allThreeSeeds));
+ctl.updateOptimizeState("currentSeeds", threeSeeds);
+ctl.handleEvent("SaveBasinsToDb", struct("seeds", threeSeeds));
 assert(isfield(session.db, "Basins"), "session.db.Basins must exist.");
 assert(numel(session.db.Basins.basinId) == 3, "Expected 3 basins saved in db.Basins.");
 assert(session.db.Basins.tag(1) == "A", "First saved basin tag mismatch.");
@@ -168,7 +173,21 @@ meta = ctl.getOptimizeState("basinMapMeta");
 assert(isfield(meta, "isFromDbBasins") && meta.isFromDbBasins, "basinMapMeta must have isFromDbBasins = true.");
 reusedBm = ctl.storedBasinMap("Absorptance", "laser", 0.05, [400 1400], [50 700]);
 assert(~isempty(reusedBm), "storedBasinMap must return persistent basinMap across different metrics.");
-fprintf("  ✓ LoadBasinsFromDb successfully restored basins and allowed cross-metric reuse.\n");
+
+% Verify SaveBasinsToDb preserves user-sorted table order (e.g. sorted by Tag)
+reorderedSeeds = threeSeeds([3, 1, 2]);
+ctl.handleEvent("SaveBasinsToDb", struct("seeds", reorderedSeeds));
+assert(isequal(string(session.db.Basins.tag(:)), [reorderedSeeds.Tag]'), ...
+    "SaveBasinsToDb must save basins in the current table order.");
+assert(isequal(double(session.db.Basins.basinId(:)), [reorderedSeeds.BasinId]'), ...
+    "Saved basinId order must match table order.");
+assert(isequal(double([session.db.Basins.polygons.BasinId]), [reorderedSeeds.BasinId]), ...
+    "Saved polygon order must match table order.");
+ctl.handleEvent("LoadBasinsFromDb", struct());
+reloadedSeeds = ctl.getOptimizeState("currentSeeds");
+assert(isequal(string({reloadedSeeds.Tag}), string({reorderedSeeds.Tag})), ...
+    "LoadBasinsFromDb must restore basins in saved table order.");
+fprintf("  ✓ LoadBasinsFromDb successfully restored basins and preserved sorted table order.\n");
 
 %% 9c. Test fast scalar PreviewMetric on encoded db.Pred + live UpdateColorScale
 [pG, rG] = meshgrid(500:50:800, 100:25:200);

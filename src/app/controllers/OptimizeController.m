@@ -719,8 +719,25 @@ classdef OptimizeController < handle
                 end
             end
 
-            bIds = double(basinMap.basinIds(:));
-            nB = numel(bIds);
+            origIds = double(basinMap.basinIds(:));
+            if ~isempty(seeds)
+                % Preserve the exact current table order sent from the UI
+                nB = numel(seeds);
+                bIds = zeros(nB, 1);
+                for sIdx = 1:nB
+                    if isfield(seeds(sIdx), "BasinId") && isfinite(double(seeds(sIdx).BasinId)) && double(seeds(sIdx).BasinId) > 0
+                        bIds(sIdx) = double(seeds(sIdx).BasinId);
+                    elseif isfield(seeds(sIdx), "P") && isfield(seeds(sIdx), "R")
+                        bIds(sIdx) = assignSeedsToBasins(basinMap, seeds(sIdx).P, seeds(sIdx).R);
+                    end
+                    if bIds(sIdx) == 0 && sIdx <= numel(origIds)
+                        bIds(sIdx) = origIds(sIdx);
+                    end
+                end
+            else
+                bIds = origIds;
+                nB = numel(bIds);
+            end
 
             baseMetric = obj.safeStr(d, "metric", "");
             if strlength(baseMetric) == 0
@@ -803,10 +820,27 @@ classdef OptimizeController < handle
                 end
             end
 
-            % Ensure polygons struct matches expected schema
+            % Ensure polygons struct matches expected schema and saved row order
             polygons = struct('BasinId', {}, 'P_nm', {}, 'R_nm', {});
             if isfield(basinMap, "polygons") && ~isempty(basinMap.polygons)
-                polygons = basinMap.polygons;
+                origPolys = basinMap.polygons;
+                if isfield(origPolys, "BasinId")
+                    polyIds = double([origPolys.BasinId]);
+                    orderedPolys = repmat(origPolys(1), 0, 1);
+                    for i = 1:nB
+                        pMatch = find(polyIds == double(bIdCol(i)), 1);
+                        if ~isempty(pMatch)
+                            orderedPolys(end+1, 1) = origPolys(pMatch); %#ok<AGROW>
+                        end
+                    end
+                    if ~isempty(orderedPolys)
+                        polygons = orderedPolys;
+                    else
+                        polygons = origPolys;
+                    end
+                else
+                    polygons = origPolys;
+                end
             end
 
             basinsStruct = struct( ...
