@@ -1822,7 +1822,7 @@ function toggleAllDbOptima(masterCb) {
                             </div>
                             <p class="hint">Laser λ uses the single-wavelength value at the excitation wavelength; Spectral Average integrates uniformly over the Stokes window; Analyte-Weighted Average weights the spectrum by the analyte Raman cross-section profile.</p>
                             <div class="toggle-row" style="margin-top:6px;">
-                                <input type="checkbox" id="logColorScale" onchange="onLogScaleChange()">
+                                <input type="checkbox" id="logColorScale" checked onchange="onLogScaleChange()">
                                 <label for="logColorScale" title="Applies log10 transform to heatmap, watershed basin detection, and continuous optimization; reported table and DB values remain in original linear scale.">Log scale (log₁₀ — heatmap, basins &amp; optimizer)</label>
                             </div>
                         </div>
@@ -1848,7 +1848,7 @@ function toggleAllDbOptima(masterCb) {
                             <div class="field-row">
                                 <div class="field">
                                     <label>Number of Seeds (max basins)</label>
-                                    <input type="number" id="candidateTopN" value="15" step="1" min="1">
+                                    <input type="number" id="candidateTopN" value="20" step="1" min="1">
                                 </div>
                                 <div class="field">
                                     <label>Watershed Basins</label>
@@ -1858,7 +1858,7 @@ function toggleAllDbOptima(masterCb) {
                             <div class="field-row watershed-only">
                                 <div class="field">
                                     <label>Basin Sensitivity (% of range)</label>
-                                    <input type="number" id="basinSensitivity" value="0.1" step="0.05" min="0">
+                                    <input type="number" id="basinSensitivity" value="0.95" step="0.05" min="0">
                                 </div>
                                 <div class="field">
                                     <label>Min Basin Area (cells)</label>

@@ -398,7 +398,7 @@ function results = runLocalizationWorkflow(cfg, reporter)
 
         % Detect candidate maxima (or use initial set)
         useBasins = isfield(cfg, 'useWatershedBasins') && logical(cfg.useWatershedBasins);
-        basinSens = 0.005;
+        basinSens = 0.0095;
         if isfield(cfg, 'basinSensitivity') && isfinite(cfg.basinSensitivity)
             basinSens = double(cfg.basinSensitivity);
         end
