@@ -242,7 +242,7 @@ function keys = getKnownAnalyteKeyList(extraKeys)
     try
         regKeys = knownAnalyteKeysRegistry("list");
     catch
-        regKeys = ["CH4", "C2H4", "H2S", "NH3", "C2H2", "H2O"];
+        regKeys = ["CH4", "C2H4", "H2S", "NH3", "C2H2", "H2O", "SF6", "SO2", "CO2"];
     end
     keys = unique([regKeys, strtrim(string(extraKeys(:)'))], "stable");
     keys = keys(strlength(keys) > 0);

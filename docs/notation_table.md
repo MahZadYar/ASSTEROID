@@ -24,7 +24,7 @@ This table maps the canonical mathematical notation used in the manuscript (`Del
     - **Single-wavelength / laser-line benchmarks (`_laser`)**: `Abs_laser` ($\mathrm{Abs}^L$), `EF_max_laser` ($\mathrm{EF}_{\max}^L$), `EE_S_laser` ($\mathrm{EE}_S^L$), `EE_V_laser` ($\mathrm{EE}_V^L$)
     - **Broadband spectral figures of merit (`_broad`)**: `EE_S_broad` ($\mathrm{EE}_S^{\text{broad}}$), `EE_V_broad` ($\mathrm{EE}_V^{\text{broad}}$), `Abs_broad`, `EF_max_broad`
     - **Active-analyte spectral figures of merit (`_analyte`)**: `EE_S_analyte` ($\mathrm{EE}_S^{\text{analyte}}$), `EE_V_analyte` ($\mathrm{EE}_V^{\text{analyte}}$), `Abs_analyte`, `EF_max_analyte`
-    - **Keyed multi-analyte spectral figures of merit (`_<KEY>`)**: e.g., `EE_V_CH4`, `EE_V_C2H4`, `EE_V_H2S`, `EE_V_NH3`, `EE_V_C2H2`, `EE_V_H2O`, or sanitized custom `<KEY>` (`sanitizeAnalyteKey.m` / `knownAnalyteKeysRegistry.m`) from `db.Global.AnalyteLibrary` and selected workspace set `db.Global.SelectedAnalytes` (variant token `"<KEY>"`).
+    - **Keyed multi-analyte spectral figures of merit (`_<KEY>`)**: e.g., `EE_V_CH4`, `EE_V_C2H4`, `EE_V_H2S`, `EE_V_NH3`, `EE_V_C2H2`, `EE_V_H2O`, `EE_V_SF6`, `EE_V_SO2`, `EE_V_CO2`, or sanitized custom `<KEY>` (`sanitizeAnalyteKey.m` / `knownAnalyteKeysRegistry.m`) from `db.Global.AnalyteLibrary` and selected workspace set `db.Global.SelectedAnalytes` (variant token `"<KEY>"`).
 
 ---
 

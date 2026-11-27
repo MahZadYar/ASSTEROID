@@ -26,8 +26,8 @@ cDir = onCleanup(@() localCleanupDir(origPwd, testDir)); %#ok<NASGU>
 
 %% 1. Catalog, key sanitization, and metric variant parser
 cat = getBuiltInAnalyteCatalog();
-assert(numel(cat) == 6, "Expected 6 built-in analytes in catalog.");
-assert(all(ismember(["CH4", "C2H4", "H2S", "NH3", "C2H2", "H2O"], [cat.key])), ...
+assert(numel(cat) == 9, "Expected 9 built-in analytes in catalog.");
+assert(all(ismember(["CH4", "C2H4", "H2S", "NH3", "C2H2", "H2O", "SF6", "SO2", "CO2"], [cat.key])), ...
     "Built-in analyte keys mismatch.");
 
 assert(sanitizeAnalyteKey("C:/tmp/My-Gas (785nm).dat") == "My_Gas_785nm", ...
@@ -90,7 +90,7 @@ selLib = resolveAnalyteLibrary(sess, Keys="selected");
 assert(isequal(string([selLib.key]), ["CH4", "H2S", "CO_probe"]), ...
     "resolveAnalyteLibrary(Keys='selected') must honor db.Global.SelectedAnalytes.");
 status = sess.getStatusStruct();
-assert(numel(status.analyteLibrary) == 7, "Expected 6 built-ins + 1 custom analyte in status.");
+assert(numel(status.analyteLibrary) == 10, "Expected 9 built-ins + 1 custom analyte in status.");
 assert(isequal(string(status.selectedAnalytes), ["CH4", "H2S", "CO_probe"]), ...
     "Status struct must report SetSelectedAnalytes.");
 fprintf("  ✓ Built-in + custom analyte library resolution and working selection verified.\n");
@@ -227,7 +227,7 @@ pvRes = optCtl.getOptimizeState("previewResults");
 assert(isstruct(pvRes) && isfield(pvRes, "allData"), "PreviewMetric must store previewResults.allData.");
 sliced = pvRes.allData;
 assert(isfield(sliced, "EE_V_H2S"), "ensureDerivedMetricSlice must add EE_V_H2S.");
-assert(max(abs(sliced.EE_V_H2S - sliced.EE_V_broad)) > 100, ...
+assert(max(abs(sliced.EE_V_H2S - PredSoA.EE_V_broad)) > 100, ...
     "EE_V_H2S must be computed via H2S spectrum, not copied from EE_V_broad.");
 
 % Verify runLocalizationWorkflow optimizes H2S vs H2O using dataPredictor

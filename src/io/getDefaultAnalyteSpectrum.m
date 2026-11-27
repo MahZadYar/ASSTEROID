@@ -12,6 +12,9 @@ function analyteSpec = getDefaultAnalyteSpectrum(preset)
 %       "NH3"  (or "ammonia")               -> DefaultAnalyteSpectrum_NH3.dat
 %       "C2H2" (or "acetylene", "ethyne")   -> DefaultAnalyteSpectrum_C2H2.dat
 %       "H2O"  (or "water", "steam")        -> DefaultAnalyteSpectrum_H2O.dat
+%       "SF6"  (or "sulfur hexafluoride")   -> DefaultAnalyteSpectrum_SF6.dat
+%       "SO2"  (or "sulfur dioxide")        -> DefaultAnalyteSpectrum_SO2.dat
+%       "CO2"  (or "carbon dioxide")        -> DefaultAnalyteSpectrum_CO2.dat
 %
 %   Output:
 %       analyteSpec – struct with fields:
@@ -23,10 +26,10 @@ function analyteSpec = getDefaultAnalyteSpectrum(preset)
 %
 %   Behavior:
 %     Loads the baseline-free gas-phase 12CH4 (MeCaSDa), 12C2H4 (ECaSDa),
-%     or H2S / NH3 / C2H2 / H2O (NIST WebBook + CCCBDB MP2=FULL/aug-cc-pVTZ)
-%     reference Raman spectrum (T = 296 K) across 100-4200 cm^-1 (785 nm
-%     photon-yield scaled, convolved with a 20 cm^-1 FWHM Gaussian slit
-%     profile) and normalizes to unit area.
+%     32SF6 (SHeCaSDa), or SO2 / CO2 / H2S / NH3 / C2H2 / H2O
+%     (NIST WebBook + CCCBDB MP2=FULL/aug-cc-pVTZ) reference Raman spectrum
+%     (T = 296 K) across 100-4200 cm^-1 (785 nm photon-yield scaled, convolved
+%     with a 20 cm^-1 FWHM Gaussian slit profile) and normalizes to unit area.
 %     This provides a realistic high-shift gas-phase analyte spectrum, NOT a
 %     flat spectrum.
 %

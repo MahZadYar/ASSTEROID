@@ -16,7 +16,7 @@ function keys = knownAnalyteKeysRegistry(action, newKeys)
         customKeys = strings(1, 0);
     end
 
-    builtIns = ["CH4", "C2H4", "H2S", "NH3", "C2H2", "H2O"];
+    builtIns = ["CH4", "C2H4", "H2S", "NH3", "C2H2", "H2O", "SF6", "SO2", "CO2"];
 
     switch action
         case "clear"

@@ -6,7 +6,7 @@ function key = sanitizeAnalyteKey(rawInput)
 %   as "EE_V_CH4", "EE_V_H2S", or "EE_V_CO_probe").
 %
 %   Built-in presets and paths map to their canonical key ("CH4", "C2H4",
-%   "H2S", "NH3", "C2H2", "H2O"); custom paths use their cleaned filename stem.
+%   "H2S", "NH3", "C2H2", "H2O", "SF6", "SO2", "CO2"); custom paths use their cleaned filename stem.
 %
 %   See also: getBuiltInAnalyteCatalog, parseMetricVariantName, resolveAnalyteLibrary
 

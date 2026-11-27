@@ -8,12 +8,15 @@ function [datPath, canonicalKey, displayLabel, isBuiltIn] = resolveDefaultAnalyt
 %   into its canonical file path inside src/io.
 %
 %   Built-in presets (100-4200 cm^-1, 785 nm scaled, 20 cm^-1 Gaussian FWHM):
-%     "CH4"  - 12CH4  (Methane,          MeCaSDa/CaSDa24 296 K, peak 2917 cm^-1)
-%     "C2H4" - 12C2H4 (Ethylene,         ECaSDa 296 K, peak 3021 cm^-1)
-%     "H2S"  - H2S    (Hydrogen Sulfide, NIST/CCCBDB 296 K, peak 2617 cm^-1)
-%     "NH3"  - NH3    (Ammonia,          NIST/CCCBDB 296 K, peak 3337 cm^-1)
-%     "C2H2" - C2H2   (Acetylene,        NIST/CCCBDB 296 K, peaks 1974, 3374 cm^-1)
-%     "H2O"  - H2O    (Water,            NIST/CCCBDB 296 K, peak 3657 cm^-1)
+%     "CH4"  - 12CH4  (Methane,             MeCaSDa/CaSDa24 296 K, peak 2917 cm^-1)
+%     "C2H4" - 12C2H4 (Ethylene,            ECaSDa 296 K, peak 3021 cm^-1)
+%     "H2S"  - H2S    (Hydrogen Sulfide,    NIST/CCCBDB 296 K, peak 2617 cm^-1)
+%     "NH3"  - NH3    (Ammonia,             NIST/CCCBDB 296 K, peak 3337 cm^-1)
+%     "C2H2" - C2H2   (Acetylene,           NIST/CCCBDB 296 K, peaks 1974, 3374 cm^-1)
+%     "H2O"  - H2O    (Water,               NIST/CCCBDB 296 K, peak 3657 cm^-1)
+%     "SF6"  - 32SF6  (Sulfur Hexafluoride, SHeCaSDa 296 K, peak 774 cm^-1)
+%     "SO2"  - SO2    (Sulfur Dioxide,      NIST/CCCBDB 296 K, peak 1151 cm^-1)
+%     "CO2"  - CO2    (Carbon Dioxide,      NIST/CCCBDB Fermi dyad 296 K, peaks 1285, 1388 cm^-1)
 %
 %   Name-Value Arguments:
 %     Strict (1,1) logical = true - Error when input is not a known built-in

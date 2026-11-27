@@ -3,7 +3,7 @@
 **Adaptive Sampling, Surrogate Training, Exploration and Refinement for Optimal Inverse Design**
 
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2026a%20%7C%20R2026b-blue.svg)](https://www.mathworks.com/products/matlab.html)
-[![Version](https://img.shields.io/badge/Version-7.0.3-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
+[![Version](https://img.shields.io/badge/Version-7.1.0-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.1021%2Facsnano.XXXXXXX-orange.svg)](#citation)
 [![Zenodo](https://img.shields.io/badge/Data-10.5281%2Fzenodo.XXXXXXX-blue.svg)](#dataset--trained-models)
@@ -180,7 +180,7 @@ flowchart TD
 ## Data Model & Metric Reference
 
 ### Canonical Metrics
-ASSTEROID operates across the eight canonical optical figures of merit—four single-wavelength ($\lambda_L = 785\text{ nm}$) benchmarks ($\mathrm{Abs}^L, \mathrm{EF}_{\max}^L, \mathrm{EE}_S^L, \mathrm{EE}_V^L$) and four two-frequency unit-cell Enhancement Efficacy metrics ($\mathrm{EE}_S^{\text{broad}}, \mathrm{EE}_V^{\text{broad}}, \mathrm{EE}_S^{\text{analyte}}, \mathrm{EE}_V^{\text{analyte}}$)—plus simultaneous clean-keyed per-analyte variants (`*_<KEY>`, e.g., `EE_V_CH4`, `EE_V_H2S`) across the built-in 6-gas Raman fingerprint library (`CH4`, `C2H4`, `H2S`, `NH3`, `C2H2`, `H2O`) and user-registered custom spectra (with selectable workspace working analytes via `db.Global.SelectedAnalytes`, plus backward-compatible `*_analyte_<KEY>` reading):
+ASSTEROID operates across the eight canonical optical figures of merit—four single-wavelength ($\lambda_L = 785\text{ nm}$) benchmarks ($\mathrm{Abs}^L, \mathrm{EF}_{\max}^L, \mathrm{EE}_S^L, \mathrm{EE}_V^L$) and four two-frequency unit-cell Enhancement Efficacy metrics ($\mathrm{EE}_S^{\text{broad}}, \mathrm{EE}_V^{\text{broad}}, \mathrm{EE}_S^{\text{analyte}}, \mathrm{EE}_V^{\text{analyte}}$)—plus simultaneous clean-keyed per-analyte variants (`*_<KEY>`, e.g., `EE_V_SF6`, `EE_V_CO2`, `EE_V_CH4`, `EE_V_H2S`) across the built-in 9-gas Raman fingerprint library (`CH4`, `C2H4`, `H2S`, `NH3`, `C2H2`, `H2O`, `SF6`, `SO2`, `CO2`) and user-registered custom spectra (with selectable workspace working analytes via `db.Global.SelectedAnalytes`, plus backward-compatible `*_analyte_<KEY>` reading):
 
 | Metric Symbol | Canonical Field (Legacy Alias) | Description | Physical Focus |
 |:---|:---|:---|:---|
@@ -321,6 +321,10 @@ Comprehensive architectural specifications, mathematical formalisms, and user ma
 
 ---
 
+## What's New in Version 7.1
+
+* 🔬 **Low-Shift Gas-Phase Analyte Expansion (`SF6`, `SO2`, `CO2` — 9 Built-In Analytes)**: Expanded the built-in unit-area-normalized Raman spectrum catalog (`getBuiltInAnalyteCatalog`, `getDefaultAnalyteSpectrum`, `knownAnalyteKeysRegistry`) from 6 to 9 gases across $[100, 4200]\,\text{cm}^{-1}$ ($\lambda_L = 785\,\text{nm}$, $296\,\text{K}$, $20\,\text{cm}^{-1}$ FWHM) by adding three sub-$1500\,\text{cm}^{-1}$ standards: **`32SF6`** (SHeCaSDa polarizability sticks, $129{,}814$ transitions, $\nu_1 = 774\,\text{cm}^{-1}$), **`SO2`** (NIST/CCCBDB MP2=FULL/aug-cc-pVTZ, $\nu_1 = 1151\,\text{cm}^{-1}$), and **`CO2`** (NIST/CCCBDB Fermi dyad $\nu_- / \nu_+ = 1285 / 1388\,\text{cm}^{-1}$), along with updated Stage 0/1/4/5/6 presets and multi-analyte pipeline tests.
+
 ## What's New in Version 7.0.3
 
 * 🖥️ **Readable Desktop UI Plot Sizing (`Context="ui"`)**: Updated [`applyAssteroidPlotStyle.m`](src/vis/applyAssteroidPlotStyle.m), live training views ([`TrainingController.m`](src/app/controllers/TrainingController.m), [`assteroid_app.m`](scripts/apps/assteroid_app.m)), and diagnostic plots to default to desktop-readable `Fira Sans` / `Fira Math` UI sizes (`10 pt` regular ticks/legends, `9 pt` bold callouts, `9.5 pt` subtitles, `11 pt` bold axis/colorbar labels, `12 pt` bold titles), while retaining `Context="print"` for compact `6–9 pt` publication exports.
@@ -335,7 +339,7 @@ Comprehensive architectural specifications, mathematical formalisms, and user ma
 
 ## What's New in Version 7.0
 
-* 🧪 **Simultaneous Multi-Analyte Suite & Clean `<KEY>` Naming (`*_<KEY>`)**: Keyed analyte metrics drop the redundant `_analyte_` infix and store directly as clean identifiers such as `EE_V_CH4`, `EE_V_C2H4`, `EE_V_H2S`, `EE_V_NH3`, `EE_V_C2H2`, `EE_V_H2O`, and sanitized custom keys (e.g., `EE_V_CO_probe`) across Stages 0, 1, 4, 5, and 6 ([`knownAnalyteKeysRegistry`](src/utils/knownAnalyteKeysRegistry.m), [`parseMetricVariantName`](src/utils/parseMetricVariantName.m), [`resolveDerivedMetricField`](src/utils/resolveDerivedMetricField.m)), while retaining full backward-compatible reading of legacy `*_analyte_<KEY>` and generic single-analyte `*_analyte`.
+* 🧪 **Simultaneous Multi-Analyte Suite & Clean `<KEY>` Naming (`*_<KEY>`)**: Keyed analyte metrics drop the redundant `_analyte_` infix and store directly as clean identifiers such as `EE_V_CH4`, `EE_V_C2H4`, `EE_V_H2S`, `EE_V_NH3`, `EE_V_C2H2`, `EE_V_H2O`, `EE_V_SF6`, `EE_V_SO2`, `EE_V_CO2`, and sanitized custom keys (e.g., `EE_V_CO_probe`) across Stages 0, 1, 4, 5, and 6 ([`knownAnalyteKeysRegistry`](src/utils/knownAnalyteKeysRegistry.m), [`parseMetricVariantName`](src/utils/parseMetricVariantName.m), [`resolveDerivedMetricField`](src/utils/resolveDerivedMetricField.m)), while retaining full backward-compatible reading of legacy `*_analyte_<KEY>` and generic single-analyte `*_analyte`.
 * ✅ **Workspace Working Analytes Selection (`db.Global.SelectedAnalytes`)**: Stage 0 adds an interactive **Working Analytes** chip matrix (`SetSelectedAnalytes` with *All* / *Built-in* / *Clear* controls and ★ active-fallback selection), synchronized automatically into Stage 1 (`RecalculateDerived` / import), Stage 4 (dense prediction pills), Stage 5 (optimization target selector), and Stage 6 (grouped 2D scalar fields ordered with working analytes first).
 * 🎨 **Unified OKHSL v7.0 Platform Theme & Polish**: Full visual overhaul across all seven HTML5 tabs, global console, and MATLAB plot canvases built strictly on the canonical `Pallette.svg` OKHSL hierarchy — `A10`–`A40` cobalt fills/backgrounds, `B50`/`B60` electric-violet primary buttons & interactive rims, `C60`–`C80` SERS-teal highlights & completion indicators, `D70`/`D80` luminous gold warnings/optima callouts, and semantic red error/abort controls — anchored by unified `.stage-header` banners (`v7.0` pill) and a Stage 0 `ASSTEROID v7.0` release launch card.
 
@@ -384,7 +388,7 @@ Comprehensive test suites are located in [`tests/`](tests/). Run all tests to ve
 ```matlab
 setup_project
 
-% Run complete automated test suite (40 suites, 100% passing):
+% Run complete automated test suite (41 suites, 100% passing):
 summary = run_all_tests();
 disp(summary)
 

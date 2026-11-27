@@ -440,12 +440,15 @@ function fillIfEmpty(id, value) {
 }
 
 var DEFAULT_DB_ANALYTES = [
-    { key: "CH4",  label: "12CH4 (Methane)",        filePath: "default:CH4",  isBuiltIn: true, peakShift_cm: 2917 },
-    { key: "C2H4", label: "12C2H4 (Ethylene)",      filePath: "default:C2H4", isBuiltIn: true, peakShift_cm: 3021 },
-    { key: "H2S",  label: "H2S (Hydrogen Sulfide)", filePath: "default:H2S",  isBuiltIn: true, peakShift_cm: 2617 },
-    { key: "NH3",  label: "NH3 (Ammonia)",          filePath: "default:NH3",  isBuiltIn: true, peakShift_cm: 3337 },
-    { key: "C2H2", label: "C2H2 (Acetylene)",       filePath: "default:C2H2", isBuiltIn: true, peakShift_cm: 1974 },
-    { key: "H2O",  label: "H2O (Water)",            filePath: "default:H2O",  isBuiltIn: true, peakShift_cm: 3657 }
+    { key: "CH4",  label: "12CH4 (Methane)",             filePath: "default:CH4",  isBuiltIn: true, peakShift_cm: 2917 },
+    { key: "C2H4", label: "12C2H4 (Ethylene)",           filePath: "default:C2H4", isBuiltIn: true, peakShift_cm: 3021 },
+    { key: "H2S",  label: "H2S (Hydrogen Sulfide)",      filePath: "default:H2S",  isBuiltIn: true, peakShift_cm: 2617 },
+    { key: "NH3",  label: "NH3 (Ammonia)",               filePath: "default:NH3",  isBuiltIn: true, peakShift_cm: 3337 },
+    { key: "C2H2", label: "C2H2 (Acetylene)",            filePath: "default:C2H2", isBuiltIn: true, peakShift_cm: 1974 },
+    { key: "H2O",  label: "H2O (Water)",                 filePath: "default:H2O",  isBuiltIn: true, peakShift_cm: 3657 },
+    { key: "SF6",  label: "32SF6 (Sulfur Hexafluoride)", filePath: "default:SF6",  isBuiltIn: true, peakShift_cm: 774 },
+    { key: "SO2",  label: "SO2 (Sulfur Dioxide)",        filePath: "default:SO2",  isBuiltIn: true, peakShift_cm: 1151 },
+    { key: "CO2",  label: "CO2 (Carbon Dioxide)",        filePath: "default:CO2",  isBuiltIn: true, peakShift_cm: 1388 }
 ];
 
 function renderWorkingAnalyteList(lib, selectedKeys) {
@@ -851,6 +854,9 @@ function buildTreeNode(node, startOpen) {
                         <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_NH3.dat" onclick="selectDefaultAnalyte('NH3')" title="NH3 NIST/CCCBDB 296 K (dominant peak 3337 cm⁻¹)" style="font-size:10px;padding:3px 7px;">NH&#8323;</button>
                         <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_C2H2.dat" onclick="selectDefaultAnalyte('C2H2')" title="C2H2 NIST/CCCBDB 296 K (peaks 612, 1974, 3374 cm⁻¹)" style="font-size:10px;padding:3px 7px;">C&#8322;H&#8322;</button>
                         <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_H2O.dat" onclick="selectDefaultAnalyte('H2O')" title="H2O NIST/CCCBDB 296 K (dominant peak 3657 cm⁻¹)" style="font-size:10px;padding:3px 7px;">H&#8322;O</button>
+                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_SF6.dat" onclick="selectDefaultAnalyte('SF6')" title="32SF6 SHeCaSDa 296 K (dominant peak 774 cm⁻¹)" style="font-size:10px;padding:3px 7px;">SF&#8326;</button>
+                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_SO2.dat" onclick="selectDefaultAnalyte('SO2')" title="SO2 NIST/CCCBDB 296 K (dominant peak 1151 cm⁻¹)" style="font-size:10px;padding:3px 7px;">SO&#8322;</button>
+                        <button type="button" class="analyte-preset-btn" data-preset-file="DefaultAnalyteSpectrum_CO2.dat" onclick="selectDefaultAnalyte('CO2')" title="CO2 NIST/CCCBDB Fermi dyad 296 K (peaks 1285, 1388 cm⁻¹)" style="font-size:10px;padding:3px 7px;">CO&#8322;</button>
                     </div>
                 </div>
             </div>
@@ -907,7 +913,7 @@ function buildTreeNode(node, startOpen) {
                 <button type="button" class="analyte-mini-btn" style="color:var(--pal-a90);" onclick="dismissV7Hero()" title="Hide welcome banner">&times;</button>
             </div>
             <div class="v7-hero-desc">
-                Multi-Analyte Optical Reciprocity &amp; Physics-Informed Inverse Design Suite — clean per-gas <code>_&lt;KEY&gt;</code> metrics, simultaneous library evaluation across <code>CH4 · C2H4 · H2S · NH3 · C2H2 · H2O</code> + custom spectra, <code>gs_tensor</code> factorized surrogate, and full-wave Tier 4 FEM verification.
+                Multi-Analyte Optical Reciprocity &amp; Physics-Informed Inverse Design Suite — clean per-gas <code>_&lt;KEY&gt;</code> metrics, simultaneous library evaluation across <code>CH4 · C2H4 · H2S · NH3 · C2H2 · H2O · SF6 · SO2 · CO2</code> + custom spectra, <code>gs_tensor</code> factorized surrogate, and full-wave Tier 4 FEM verification.
             </div>
             <div class="v7-feature-chips">
                 <span class="v7-chip">Multi-Analyte <code>EE_V_&lt;KEY&gt;</code></span>
