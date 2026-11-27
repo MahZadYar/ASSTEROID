@@ -3,7 +3,7 @@
 **Adaptive Sampling, Surrogate Training, Exploration and Refinement for Optimal Inverse Design**
 
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2026a%20%7C%20R2026b-blue.svg)](https://www.mathworks.com/products/matlab.html)
-[![Version](https://img.shields.io/badge/Version-7.1.0-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
+[![Version](https://img.shields.io/badge/Version-7.1.1-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.1021%2Facsnano.XXXXXXX-orange.svg)](#citation)
 [![Zenodo](https://img.shields.io/badge/Data-10.5281%2Fzenodo.XXXXXXX-blue.svg)](#dataset--trained-models)
@@ -320,6 +320,10 @@ Comprehensive architectural specifications, mathematical formalisms, and user ma
 * [Surrogate Checkpoint Guide](docs/checkpoint_guide.md): Checkpointing, training interruption handling, and fine-tuning procedures.
 
 ---
+
+## What's New in Version 7.1.1
+
+* 🧩 **Non-Conflicting Branch Merge in Stage 4 Predict (`MergeExisting`, default ON)**: Stage 4 (`visualization_export_tab.html`, `PredictionController`, `storePredictionResults`) now preserves non-conflicting existing columns (including prior `<KEY>` analyte scalars, `EE_V_broad`, and HDF5-sidecarred/compressed spectral arrays) when predicting on a matching `(period, radius)` grid, overwriting only re-selected fields—while safely guarding incompatible wavelength axes, cleaning up unreferenced sidecar `.h5` files, and providing a toggle to replace the entire branch when unchecked.
 
 ## What's New in Version 7.1
 

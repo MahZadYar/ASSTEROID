@@ -72,6 +72,11 @@ function setup(htmlComponent) {
         if (d.fields && d.fields.length) {
             appendLog("Stored fields: " + [].concat(d.fields).join(", "));
         }
+        if (d.mergeMode === "merged") {
+            appendLog("Merged with existing branch (" + (d.preservedCount || 0) + " non-conflicting field(s) preserved).");
+        } else if (d.mergeMode === "replaced_mismatch") {
+            appendLog("Note: Existing branch had a different geometry grid and was replaced.");
+        }
         if (d.spectralStorageMode && d.spectralStorageMode !== "none" && d.spectralDetails) {
             appendLog("Spectral storage (" + d.spectralStorageMode + "): " + d.spectralDetails);
         }
@@ -286,6 +291,7 @@ function collectPredictConfig() {
         svdMaxRank: numOr("svdMaxRank", 32),
         svdMaxError: numOr("svdMaxError", 0.005),
         sidecarSubtype: val("sidecarSubtype") || "single",
+        preserveExisting: chk("preserveExistingPred"),
         selectedFields: selectedFields,
         analyteKeys: analyteKeys
     };
@@ -934,6 +940,13 @@ document.addEventListener("DOMContentLoaded", function() {
                                         </select>
                                     </div>
                                 </div>
+                            </div>
+                            <div style="margin-top:8px;padding:7px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);">
+                                <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;color:var(--text-primary);font-weight:600;">
+                                    <input type="checkbox" id="preserveExistingPred" checked>
+                                    Preserve non-conflicting existing fields (merge into branch)
+                                </label>
+                                <p class="hint" style="margin:3px 0 0 20px;">Keeps prior analyte columns and spectral arrays on matching grids; overwrites only fields re-predicted in this run. Uncheck to replace the branch completely.</p>
                             </div>
                             <div class="btn-row">
                                 <button id="btnPredict" class="btn-primary" onclick="predictInterpolate()">Predict / Interpolate (Populate DB)</button>

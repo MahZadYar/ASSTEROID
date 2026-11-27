@@ -5161,6 +5161,11 @@ function runPredictInterpolate(src, d, fig)
     metricsMin      = safeNum(d, "metricsShiftMin", stokesMin);
     metricsMax      = safeNum(d, "metricsShiftMax", stokesMax);
 
+    preserveExisting = true;
+    if isfield(d, "preserveExisting")
+        preserveExisting = logical(d.preserveExisting);
+    end
+
     selectedFields = string.empty;
     if isfield(d, "selectedFields")
         selectedFields = parseCellOrString(d, "selectedFields");
@@ -5412,7 +5417,8 @@ function runPredictInterpolate(src, d, fig)
         end
 
         [fig.UserData.db, branchPath] = storePredictionResults( ...
-            fig.UserData.db, allDataFiltered, dataSource, predictionTarget);
+            fig.UserData.db, allDataFiltered, dataSource, predictionTarget, ...
+            MergeExisting=preserveExisting);
         markDbDirty(fig);
         broadcastDbStatus(fig);
 

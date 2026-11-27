@@ -101,6 +101,7 @@ classdef PredictionController < handle
             if isfield(d, "linkMetricsToGrid")
                 linkMetrics = logical(d.linkMetricsToGrid);
             end
+            preserveExisting = obj.safeBool(d, "preserveExisting", true);
             metricsMin = obj.safeNum(d, "metricsShiftMin", stokesMin);
             metricsMax = obj.safeNum(d, "metricsShiftMax", stokesMax);
 
@@ -269,8 +270,10 @@ classdef PredictionController < handle
                     dataSource, predictionTarget, spectralStorageMode, svdMaxRank, svdMaxError, sidecarSubtype, rep);
 
                 if isstruct(allDataFiltered) && structRowCount(allDataFiltered) > 0
-                    [obj.session.db, branchPath] = storePredictionResults( ...
-                        obj.session.db, allDataFiltered, dataSource, predictionTarget);
+                    [obj.session.db, branchPath, mergeInfo] = storePredictionResults( ...
+                        obj.session.db, allDataFiltered, dataSource, predictionTarget, ...
+                        MergeExisting=preserveExisting);
+                    storedBranch = obj.getStoredBranch(branchPath);
                     obj.session.markDirty();
                     if ~isempty(obj.fig) && isvalid(obj.fig)
                         obj.fig.UserData.db = obj.session.db;
@@ -279,7 +282,7 @@ classdef PredictionController < handle
                             obj.fig.UserData.visExport = struct();
                         end
                         obj.fig.UserData.visExport.predictionsLoaded = true;
-                        obj.fig.UserData.visExport.allData = allDataFiltered;
+                        obj.fig.UserData.visExport.allData = storedBranch;
                         obj.fig.UserData.visExport.ri = ri;
                         obj.fig.UserData.visExport.model = model;
                         obj.fig.UserData.visExport.modelLoaded = true;
@@ -291,7 +294,18 @@ classdef PredictionController < handle
                         end
                     end
 
-                    nPoints = structRowCount(allDataFiltered);
+                    if mergeInfo.merged
+                        rep.info(sprintf("Merged into %s: preserved %d non-conflicting field(s), wrote %d field(s).", ...
+                            branchPath, numel(mergeInfo.preservedFields), numel(includedFields)));
+                        if ~isempty(mergeInfo.droppedIncompatible)
+                            rep.warning(sprintf("Dropped %d spectral field(s) with incompatible wavelength axis: %s", ...
+                                numel(mergeInfo.droppedIncompatible), strjoin(mergeInfo.droppedIncompatible, ", ")));
+                        end
+                    elseif mergeInfo.mode == "replaced_mismatch"
+                        rep.warning(mergeInfo.reason);
+                    end
+
+                    nPoints = structRowCount(storedBranch);
                     rep.complete("PredictInterpolate", ...
                         sprintf("Predictions complete: %d points written to %s.", nPoints, branchPath));
                     obj.sendToHTML("PredictComplete", struct( ...
@@ -299,6 +313,8 @@ classdef PredictionController < handle
                         "entries", nPoints, ...
                         "count", nPoints, ...
                         "fields", {cellstr(includedFields)}, ...
+                        "mergeMode", char(mergeInfo.mode), ...
+                        "preservedCount", numel(mergeInfo.preservedFields), ...
                         "spectralStorageMode", char(encStats.mode), ...
                         "spectralDetails", char(encStats.details), ...
                         "sidecarFile", char(encStats.sidecarFile), ...
@@ -397,8 +413,10 @@ classdef PredictionController < handle
                     dataSource, predictionTarget, spectralStorageMode, svdMaxRank, svdMaxError, sidecarSubtype, rep);
 
                 if isstruct(interpDataFiltered) && structRowCount(interpDataFiltered) > 0
-                    [obj.session.db, branchPath] = storePredictionResults( ...
-                        obj.session.db, interpDataFiltered, dataSource, predictionTarget);
+                    [obj.session.db, branchPath, mergeInfo] = storePredictionResults( ...
+                        obj.session.db, interpDataFiltered, dataSource, predictionTarget, ...
+                        MergeExisting=preserveExisting);
+                    storedBranch = obj.getStoredBranch(branchPath);
                     obj.session.markDirty();
                     if ~isempty(obj.fig) && isvalid(obj.fig)
                         obj.fig.UserData.db = obj.session.db;
@@ -407,7 +425,7 @@ classdef PredictionController < handle
                             obj.fig.UserData.visExport = struct();
                         end
                         obj.fig.UserData.visExport.interpLoaded = true;
-                        obj.fig.UserData.visExport.allData = interpDataFiltered;
+                        obj.fig.UserData.visExport.allData = storedBranch;
                         if isfield(obj.fig.UserData, "app") && isfield(obj.fig.UserData.app, "markDbDirty")
                             obj.fig.UserData.app.markDbDirty();
                         end
@@ -416,7 +434,18 @@ classdef PredictionController < handle
                         end
                     end
 
-                    nPoints = structRowCount(interpDataFiltered);
+                    if mergeInfo.merged
+                        rep.info(sprintf("Merged into %s: preserved %d non-conflicting field(s), wrote %d field(s).", ...
+                            branchPath, numel(mergeInfo.preservedFields), numel(includedFields)));
+                        if ~isempty(mergeInfo.droppedIncompatible)
+                            rep.warning(sprintf("Dropped %d spectral field(s) with incompatible wavelength axis: %s", ...
+                                numel(mergeInfo.droppedIncompatible), strjoin(mergeInfo.droppedIncompatible, ", ")));
+                        end
+                    elseif mergeInfo.mode == "replaced_mismatch"
+                        rep.warning(mergeInfo.reason);
+                    end
+
+                    nPoints = structRowCount(storedBranch);
                     rep.complete("PredictInterpolate", ...
                         sprintf("Interpolation complete: %d points written to %s.", nPoints, branchPath));
                     obj.sendToHTML("PredictComplete", struct( ...
@@ -424,6 +453,8 @@ classdef PredictionController < handle
                         "entries", nPoints, ...
                         "count", nPoints, ...
                         "fields", {cellstr(includedFields)}, ...
+                        "mergeMode", char(mergeInfo.mode), ...
+                        "preservedCount", numel(mergeInfo.preservedFields), ...
                         "spectralStorageMode", char(encStats.mode), ...
                         "spectralDetails", char(encStats.details), ...
                         "sidecarFile", char(encStats.sidecarFile), ...
@@ -677,6 +708,27 @@ classdef PredictionController < handle
                 end
             else
                 obj.sendToHTML("Progress", struct("status", "Stopped", "message", msg));
+            end
+        end
+
+        function branch = getStoredBranch(obj, branchPath)
+            branch = struct();
+            if ~isstruct(obj.session.db)
+                return;
+            end
+            parts = split(string(branchPath), ".");
+            cur = obj.session.db;
+            for i = 1:numel(parts)
+                p = char(parts(i));
+                if p == "db", continue; end
+                if isstruct(cur) && isfield(cur, p)
+                    cur = cur.(p);
+                else
+                    return;
+                end
+            end
+            if isstruct(cur)
+                branch = cur;
             end
         end
     end
