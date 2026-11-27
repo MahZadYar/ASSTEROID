@@ -171,7 +171,12 @@ classdef PredictionController < handle
                 [ok, model, ri] = obj.ensureModelAndRi(rep);
                 if ~ok, return; end
 
-                analyteSpec = obj.loadAnalyteSpectrum(analyteFile, rep);
+                needsLegacyAnalyte = isempty(selectedFields) || any(endsWith(selectedFields, "_analyte"));
+                if needsLegacyAnalyte
+                    analyteSpec = obj.loadAnalyteSpectrum(analyteFile, rep);
+                else
+                    analyteSpec = struct();
+                end
                 modelMetrics = discoverModelTargetMetrics(obj.session.db, model);
                 if isempty(modelMetrics)
                     modelMetrics = ["Abs", "EE_V", "EE_S"];
@@ -360,7 +365,12 @@ classdef PredictionController < handle
                     return;
                 end
 
-                analyteSpec = obj.loadAnalyteSpectrum(analyteFile, rep);
+                needsLegacyAnalyte = isempty(selectedFields) || any(endsWith(selectedFields, "_analyte"));
+                if needsLegacyAnalyte
+                    analyteSpec = obj.loadAnalyteSpectrum(analyteFile, rep);
+                else
+                    analyteSpec = struct();
+                end
                 baseTargets = deriveBaseTargetsFromSelection(selectedFields, simData);
 
                 rep.start("PredictInterpolate");

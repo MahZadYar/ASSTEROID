@@ -258,7 +258,7 @@ function collectPredictConfig() {
         var f = cb.dataset.field;
         if (f && f.endsWith("_analyte")) {
             var baseName = f.slice(0, -"_analyte".length);
-            if (includeLegacyAnalyte || analyteKeys.length === 0) {
+            if (includeLegacyAnalyte) {
                 selectedFields.push(f);
             }
             analyteKeys.forEach(function(key) {
@@ -884,7 +884,7 @@ document.addEventListener("DOMContentLoaded", function() {
                                         <th style="text-align:center;padding:4px 6px;color:var(--text-secondary);">Spectral</th>
                                         <th style="text-align:center;padding:4px 6px;color:var(--text-secondary);">Laser (_laser)</th>
                                         <th style="text-align:center;padding:4px 6px;color:var(--text-secondary);">Broad (_broad)</th>
-                                        <th style="text-align:center;padding:4px 6px;color:var(--text-secondary);">Analyte (_analyte)</th>
+                                        <th style="text-align:center;padding:4px 6px;color:var(--text-secondary);">Analyte</th>
                                     </tr>
                                 </thead>
                                 <tbody id="predictMetricsBody">
@@ -898,8 +898,8 @@ document.addEventListener("DOMContentLoaded", function() {
                                     <span style="font-size:11px;font-weight:700;color:var(--pal-c80);">Working Analytes (<code>_&lt;KEY&gt;</code>)</span>
                                     <div style="display:flex;align-items:center;gap:8px;">
                                         <label style="display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--text-secondary);cursor:pointer;">
-                                            <input type="checkbox" id="predIncludeLegacyAnalyte" checked>
-                                            Active DB (<code>_analyte</code>)
+                                            <input type="checkbox" id="predIncludeLegacyAnalyte">
+                                            Legacy (<code>_analyte</code>)
                                         </label>
                                         <button type="button" onclick="toggleAllPredictAnalytes('working')" style="background:none;border:none;color:var(--pal-c80);cursor:pointer;font-size:10px;font-weight:600;padding:0;">Working</button>
                                         <button type="button" onclick="toggleAllPredictAnalytes(true)" style="background:none;border:none;color:var(--pal-c80);cursor:pointer;font-size:10px;font-weight:600;padding:0;">All</button>
