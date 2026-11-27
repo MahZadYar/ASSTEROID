@@ -3,7 +3,7 @@
 **Adaptive Sampling, Surrogate Training, Exploration and Refinement for Optimal Inverse Design**
 
 [![MATLAB](https://img.shields.io/badge/MATLAB-R2026a%20%7C%20R2026b-blue.svg)](https://www.mathworks.com/products/matlab.html)
-[![Version](https://img.shields.io/badge/Version-7.1.1-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
+[![Version](https://img.shields.io/badge/Version-7.1.2-7f00e0.svg)](https://github.com/MahZadYar/ASSTEROID/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![DOI](https://img.shields.io/badge/DOI-10.1021%2Facsnano.XXXXXXX-orange.svg)](#citation)
 [![Zenodo](https://img.shields.io/badge/Data-10.5281%2Fzenodo.XXXXXXX-blue.svg)](#dataset--trained-models)
@@ -320,6 +320,10 @@ Comprehensive architectural specifications, mathematical formalisms, and user ma
 * [Surrogate Checkpoint Guide](docs/checkpoint_guide.md): Checkpointing, training interruption handling, and fine-tuning procedures.
 
 ---
+
+## What's New in Version 7.1.2
+
+* ⚡ **OOM-Free Per-Batch Scalar Reduction & `StoreSpectra=false` Mode**: Moved `_laser`, `_broad`, `_analyte`, and `_<KEY>` spectral integrations inside the geometry batch loop of [`predict_dense_spectrum`](src/modeling/predict_dense_spectrum.m), eliminating the multi-gigabyte post-batch `stokesMat` / `trapz` allocation spike, and added `StoreSpectra=false` forwarding from Stage 4 [`PredictionController`](src/app/controllers/PredictionController.m) when only scalar variants (e.g., `EE_V_SF6`, `EE_V_SO2`, `EE_V_CO2`) are requested.
 
 ## What's New in Version 7.1.1
 

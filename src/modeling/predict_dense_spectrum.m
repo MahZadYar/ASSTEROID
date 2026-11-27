@@ -36,7 +36,8 @@ opts = struct('ChunkSize', 200000, 'Verbose', true, 'LaserWavelength', [], ...
     'RamanWindow', [100, 3500], 'MetricsRamanWindow', [], ...
     'AnalyteSpectrum', struct(), 'AnalyteLibrary', struct([]), ...
     'InterpResolution', 1, 'BatchSize', 2000, ...
-    'ProgressFcn', [], 'ExecutionEnvironment', "auto", 'MiniBatchSize', 32768);
+    'ProgressFcn', [], 'ExecutionEnvironment', "auto", 'MiniBatchSize', 32768, ...
+    'StoreSpectra', true);
 if mod(numel(varargin), 2) ~= 0
     error('predict_dense_spectrum:Args', 'Name-value pairs expected.');
 end
@@ -111,11 +112,76 @@ if ~isempty(opts.MetricsRamanWindow)
     predictions.MetricsRamanWindow = opts.MetricsRamanWindow(:)'; % [1×2] metrics window
 end
 
-for t = 1:numTargets
-    predictions.(targetNames{t}) = NaN(numValid, Nlambda);
+storeSpectra = logical(opts.StoreSpectra);
+
+%% Pre-compute spectral reduction masks & analyte weights before batch loop
+% Computing scalar reductions per-batch avoids allocating full [N x nStokes]
+% temporary copies (stokesMat, trapz diff) after the batch loop finishes.
+[~, laserIdx] = min(abs(ramanShiftRow));
+
+metricsWindow = opts.MetricsRamanWindow;
+if isempty(metricsWindow)
+    metricsWindow = opts.RamanWindow;
 end
 
-%% Geometry-batched DNN inference
+stokesMask    = (ramanShiftRow > 0) & ...
+                (ramanShiftRow >= metricsWindow(1)) & ...
+                (ramanShiftRow <= metricsWindow(2));
+shiftVec   = ramanShiftRow(stokesMask);   % [1×nStokes]
+canAvg     = numel(shiftVec) >= 2;
+shiftRange = 0;
+if canAvg
+    shiftRange = shiftVec(end) - shiftVec(1);
+end
+
+analyteSpec = opts.AnalyteSpectrum;
+hasAnalyte  = isstruct(analyteSpec) && isfield(analyteSpec, 'shift_cm') && ...
+              ~isempty(analyteSpec.shift_cm) && canAvg;
+analyteWeights = [];
+if hasAnalyte
+    analyteWeights = computeAnalyteGridWeights(shiftVec, analyteSpec, "makima");
+    if ~any(analyteWeights > 0)
+        hasAnalyte = false;
+    else
+        analyteWeights = analyteWeights(:);
+    end
+end
+
+analyteLib = opts.AnalyteLibrary;
+libKeys    = strings(1, 0);
+libWeights = zeros(numel(shiftVec), 0);
+if canAvg && isstruct(analyteLib) && ~isempty(analyteLib)
+    rawW = computeAnalyteGridWeights(shiftVec, analyteLib, "makima");
+    for li = 1:numel(analyteLib)
+        if isfield(analyteLib(li), 'key') && strlength(string(analyteLib(li).key)) > 0 ...
+                && size(rawW, 2) >= li && any(rawW(:, li) > 0)
+            libKeys(end+1) = string(analyteLib(li).key); %#ok<AGROW>
+            libWeights(:, end+1) = rawW(:, li); %#ok<AGROW>
+        end
+    end
+end
+hasLib = ~isempty(libKeys);
+useStokesAvg = canAvg && shiftRange > 0;
+
+for t = 1:numTargets
+    tName = targetNames{t};
+    if storeSpectra
+        predictions.(tName) = NaN(numValid, Nlambda);
+    end
+    predictions.([tName, '_laser']) = NaN(numValid, 1);
+    predictions.([tName, '_broad']) = NaN(numValid, 1);
+    predictions.([tName, '_avg'])   = NaN(numValid, 1);
+    if useStokesAvg && hasAnalyte
+        predictions.([tName, '_analyte']) = NaN(numValid, 1);
+    end
+    if useStokesAvg && hasLib
+        for li = 1:numel(libKeys)
+            predictions.([tName, '_', char(libKeys(li))]) = NaN(numValid, 1);
+        end
+    end
+end
+
+%% Geometry-batched DNN inference + per-batch scalar reduction
 numBatches = ceil(numValid / batchSize);
 for batchNum = 1:numBatches
     bStart   = (batchNum - 1) * batchSize + 1;
@@ -132,9 +198,33 @@ for batchNum = 1:numBatches
         MiniBatchSize=opts.MiniBatchSize);                     % [nInBatch x Nlambda x numTargets]
 
     for t = 1:numTargets
-        predictions.(targetNames{t})(bRange, :) = preds_b(:, :, t);
+        tName  = targetNames{t};
+        spec_b = preds_b(:, :, t);
+        if storeSpectra
+            predictions.(tName)(bRange, :) = spec_b;
+        end
+        predictions.([tName, '_laser'])(bRange) = spec_b(:, laserIdx);
+
+        if useStokesAvg
+            stokes_b = spec_b(:, stokesMask);
+            broad_b  = trapz(shiftVec, stokes_b, 2) ./ shiftRange;
+            predictions.([tName, '_broad'])(bRange) = broad_b;
+            predictions.([tName, '_avg'])(bRange)   = broad_b;
+            if hasAnalyte
+                predictions.([tName, '_analyte'])(bRange) = stokes_b * analyteWeights;
+            end
+            if hasLib
+                lib_b = stokes_b * libWeights;
+                for li = 1:numel(libKeys)
+                    predictions.([tName, '_', char(libKeys(li))])(bRange) = lib_b(:, li);
+                end
+            end
+        else
+            predictions.([tName, '_broad'])(bRange) = spec_b(:, laserIdx);
+            predictions.([tName, '_avg'])(bRange)   = spec_b(:, laserIdx);
+        end
     end
-    clear preds_b;
+    clear preds_b spec_b stokes_b broad_b lib_b;
 
     if ~isempty(progressFcn)
         progressFcn(bEnd / numValid, sprintf( ...
@@ -143,82 +233,6 @@ for batchNum = 1:numBatches
     elseif opts.Verbose
         fprintf("predict_dense_spectrum: batch %d/%d (%d–%d / %d geometries)\n", ...
             batchNum, numBatches, bStart, bEnd, numValid);
-    end
-end
-
-%% Vectorised scalar derivation (_laser, _broad / _avg, _analyte)
-[~, laserIdx] = min(abs(ramanShiftRow));
-
-% Use MetricsRamanWindow if provided; otherwise fall back to RamanWindow
-metricsWindow = opts.MetricsRamanWindow;
-if isempty(metricsWindow)
-    metricsWindow = opts.RamanWindow;
-end
-
-stokesMask    = (ramanShiftRow > 0) & ...
-                (ramanShiftRow >= metricsWindow(1)) & ...
-                (ramanShiftRow <= metricsWindow(2));
-shiftVec  = ramanShiftRow(stokesMask);   % [1×nStokes]
-canAvg    = numel(shiftVec) >= 2;
-shiftRange = 0;
-if canAvg
-    shiftRange = shiftVec(end) - shiftVec(1);
-end
-
-% Analyte weights (active single spectrum + optional multi-analyte library)
-analyteSpec = opts.AnalyteSpectrum;
-hasAnalyte  = isstruct(analyteSpec) && isfield(analyteSpec, 'shift_cm') && ...
-              ~isempty(analyteSpec.shift_cm) && canAvg;
-analyteWeights = [];
-if hasAnalyte
-    analyteWeights = computeAnalyteGridWeights(shiftVec, analyteSpec, "makima");
-    if ~any(analyteWeights > 0)
-        hasAnalyte = false;
-    end
-end
-
-analyteLib = opts.AnalyteLibrary;
-libKeys = strings(1, 0);
-libWeights = zeros(numel(shiftVec), 0);
-if canAvg && isstruct(analyteLib) && ~isempty(analyteLib)
-    rawW = computeAnalyteGridWeights(shiftVec, analyteLib, "makima");
-    for li = 1:numel(analyteLib)
-        if isfield(analyteLib(li), 'key') && strlength(string(analyteLib(li).key)) > 0 ...
-                && size(rawW, 2) >= li && any(rawW(:, li) > 0)
-            libKeys(end+1) = string(analyteLib(li).key); %#ok<AGROW>
-            libWeights(:, end+1) = rawW(:, li); %#ok<AGROW>
-        end
-    end
-end
-hasLib = ~isempty(libKeys);
-
-for t = 1:numTargets
-    tName   = targetNames{t};
-    specMat = predictions.(tName);          % [numValid×Nlambda]
-
-    % _laser: column at Raman shift ≈ 0
-    predictions.([tName, '_laser']) = specMat(:, laserIdx);
-
-    if canAvg && shiftRange > 0
-        stokesMat = specMat(:, stokesMask); % [numValid×nStokes]
-        broadVal = trapz(shiftVec, stokesMat, 2) ./ shiftRange;
-        % _broad (canonical) and _avg (backward-compatible alias)
-        predictions.([tName, '_broad']) = broadVal;
-        predictions.([tName, '_avg'])   = broadVal;
-        % _analyte: active analyte-spectrum-weighted average
-        if hasAnalyte
-            predictions.([tName, '_analyte']) = stokesMat * analyteWeights(:);
-        end
-        % _<KEY>: vectorized multi-analyte evaluation (e.g. EE_V_H2S, EE_S_CH4)
-        if hasLib
-            libVals = stokesMat * libWeights; % [numValid × K]
-            for li = 1:numel(libKeys)
-                predictions.([tName, '_', char(libKeys(li))]) = libVals(:, li);
-            end
-        end
-    else
-        predictions.([tName, '_broad']) = specMat(:, laserIdx);
-        predictions.([tName, '_avg'])   = specMat(:, laserIdx);
     end
 end
 
